@@ -1,0 +1,43 @@
+// Copyright 2026 Satoshi Ebisawa
+// SPDX-License-Identifier: Apache-2.0
+
+//! SSH public key parsing helpers (pure).
+
+use super::constants::KEY_TYPE_ED25519;
+use crate::io::ssh::SshError;
+use crate::Result;
+
+/// Decode the base64 key blob from an OpenSSH public key line.
+///
+/// Expected format: `ssh-ed25519 <base64_blob> [comment]`
+pub fn decode_ssh_public_key_blob(ssh_pubkey: &str) -> Result<Vec<u8>> {
+    use base64::{engine::general_purpose::STANDARD, Engine as _};
+
+    let line = ssh_pubkey.trim();
+    if line.is_empty() {
+        return Err(SshError::operation_failed("Public key line is empty").into());
+    }
+
+    let fields: Vec<&str> = line.split_whitespace().collect();
+    if fields.len() < 2 {
+        return Err(
+            SshError::operation_failed(format!("Invalid public key format: {}", line)).into(),
+        );
+    }
+
+    let key_type = fields[0];
+    if key_type != KEY_TYPE_ED25519 {
+        return Err(SshError::operation_failed(format!(
+            "Unsupported key type '{}': v1 only supports {}",
+            key_type, KEY_TYPE_ED25519
+        ))
+        .into());
+    }
+
+    STANDARD.decode(fields[1]).map_err(|e| {
+        crate::Error::from(SshError::operation_failed_with_source(
+            format!("Failed to decode base64: {}", e),
+            e,
+        ))
+    })
+}

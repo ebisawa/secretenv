@@ -1,0 +1,488 @@
+// Copyright 2026 Satoshi Ebisawa
+// SPDX-License-Identifier: Apache-2.0
+
+//! Unit tests for feature/encrypt/kv entry operations (set/unset) via KvDocumentBuilder
+
+use ed25519_dalek::SigningKey;
+use rand::rngs::OsRng;
+use secretenv::feature::encrypt::SigningContext;
+use secretenv::feature::kv::builder::KvDocumentBuilder;
+use secretenv::feature::kv::encrypt::encrypt_kv_document;
+use secretenv::format::kv::parse_kv_document;
+use secretenv::format::token::TokenCodec;
+use secretenv::model::kv_enc::{KvEncDocument, KvHeader};
+use secretenv::model::public_key::VerifiedPublicKeyAttested;
+use std::collections::HashMap;
+
+fn make_signing_ctx_for_test() -> (SigningKey, String) {
+    (
+        SigningKey::generate(&mut OsRng),
+        "01TESTK0D00000000000000000".to_string(),
+    )
+}
+
+fn make_verified_member_for_test(signing_key: &SigningKey, kid: &str) -> VerifiedPublicKeyAttested {
+    use base64::Engine;
+    use ed25519_dalek::Signer;
+    use secretenv::model::public_key::{
+        Attestation, AttestationProof, AttestedIdentity, Identity, IdentityKeys, JwkOkpPublicKey,
+        PublicKey, PublicKeyProtected,
+    };
+    use secretenv::model::verification::SelfSignatureProof;
+
+    let b64url = |b: &[u8]| base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(b);
+    let kem_sk = x25519_dalek::StaticSecret::random_from_rng(OsRng);
+    let kem_pk = x25519_dalek::PublicKey::from(&kem_sk);
+    let vk = signing_key.verifying_key();
+
+    let test_pk = PublicKey {
+        protected: PublicKeyProtected {
+            format: "secretenv.public.key@3".to_string(),
+            member_id: "test@example.com".to_string(),
+            kid: kid.to_string(),
+            identity: Identity {
+                keys: IdentityKeys {
+                    kem: JwkOkpPublicKey {
+                        kty: "OKP".to_string(),
+                        crv: "X25519".to_string(),
+                        x: b64url(kem_pk.as_bytes()),
+                    },
+                    sig: JwkOkpPublicKey {
+                        kty: "OKP".to_string(),
+                        crv: "Ed25519".to_string(),
+                        x: b64url(vk.as_bytes()),
+                    },
+                },
+                attestation: Attestation {
+                    method: "test".to_string(),
+                    pub_: "test".to_string(),
+                    sig: b64url(b"test"),
+                },
+            },
+            binding_claims: None,
+            expires_at: "2099-01-01T00:00:00Z".to_string(),
+            created_at: Some("2026-01-01T00:00:00Z".to_string()),
+        },
+        signature: b64url(signing_key.sign(b"test").to_bytes().as_ref()),
+    };
+
+    let proof = AttestationProof {
+        method: "test".to_string(),
+        ssh_pub: "test".to_string(),
+        verified_at: None,
+    };
+    let attested = AttestedIdentity::new(test_pk.protected.identity.clone(), proof);
+    let self_sig_proof = SelfSignatureProof::new();
+    VerifiedPublicKeyAttested::new(test_pk, self_sig_proof, attested)
+}
+
+fn make_kv_document(entries: &[(&str, &str)], signing_key: &SigningKey, kid: &str) -> String {
+    let verified_member = make_verified_member_for_test(signing_key, kid);
+
+    let mut kv_map = HashMap::new();
+    for (k, v) in entries {
+        kv_map.insert(k.to_string(), v.to_string());
+    }
+
+    let signing = SigningContext {
+        signing_key,
+        signer_kid: kid,
+        signer_pub: None,
+        debug: false,
+    };
+
+    encrypt_kv_document(
+        &kv_map,
+        &["test@example.com".to_string()],
+        &[verified_member],
+        &signing,
+        TokenCodec::JsonJcs,
+    )
+    .unwrap()
+}
+
+/// Build a test context for set/unset tests: (initial_content, doc, signing_key, kid)
+fn make_test_ctx(entries: &[(&str, &str)]) -> (String, KvEncDocument, SigningKey, String) {
+    let (signing_key, kid) = make_signing_ctx_for_test();
+    let initial = make_kv_document(entries, &signing_key, &kid);
+    let doc = parse_kv_document(&initial).unwrap();
+    (initial, doc, signing_key, kid)
+}
+
+fn wrap_token_from(content: &str) -> String {
+    content
+        .lines()
+        .find(|l: &&str| l.starts_with(":WRAP "))
+        .unwrap()
+        .strip_prefix(":WRAP ")
+        .unwrap()
+        .to_string()
+}
+
+fn kv_token_from(content: &str, key: &str) -> Option<String> {
+    content.lines().find_map(|l: &str| {
+        let prefix = format!("{} ", key);
+        l.strip_prefix(&prefix).map(|t| t.to_string())
+    })
+}
+
+fn decode_head_from(content: &str) -> KvHeader {
+    let head_token = content
+        .lines()
+        .find(|l: &&str| l.starts_with(":HEAD "))
+        .unwrap()
+        .strip_prefix(":HEAD ")
+        .unwrap();
+    TokenCodec::decode_auto(head_token).unwrap()
+}
+
+/// Helper: build a signed document with set_entries via KvDocumentBuilder
+fn builder_set_entries(
+    updated_head: &KvHeader,
+    doc: &KvEncDocument,
+    new_entries: &HashMap<&str, &str>,
+    signing: &SigningContext<'_>,
+) -> String {
+    let mut unsigned = KvDocumentBuilder::from_lines(
+        updated_head.clone(),
+        None,
+        &doc.lines,
+        TokenCodec::JsonJcs,
+        signing.debug,
+    )
+    .unwrap()
+    .build();
+    unsigned.set_entries(new_entries);
+    unsigned.sign(signing).unwrap()
+}
+
+/// Helper: build a signed document with set_entries for a single entry
+fn builder_set_entry(
+    updated_head: &KvHeader,
+    doc: &KvEncDocument,
+    target_key: &str,
+    new_entry_token: &str,
+    signing: &SigningContext<'_>,
+) -> String {
+    let entries = HashMap::from([(target_key, new_entry_token)]);
+    builder_set_entries(updated_head, doc, &entries, signing)
+}
+
+/// Helper: build a signed document with unset_entry via KvDocumentBuilder
+fn builder_unset_entry(
+    updated_head: &KvHeader,
+    doc: &KvEncDocument,
+    target_key: &str,
+    signing: &SigningContext<'_>,
+) -> String {
+    let mut unsigned = KvDocumentBuilder::from_lines(
+        updated_head.clone(),
+        None,
+        &doc.lines,
+        TokenCodec::JsonJcs,
+        signing.debug,
+    )
+    .unwrap()
+    .build();
+    unsigned.unset_entry(target_key);
+    unsigned.sign(signing).unwrap()
+}
+
+// --- set_entry テスト ---
+
+#[test]
+fn test_build_kv_set_entry_adds_new_key() {
+    let (initial, doc, signing_key, kid) = make_test_ctx(&[("KEY1", "val1")]);
+    let signing = SigningContext {
+        signing_key: &signing_key,
+        signer_kid: &kid,
+        signer_pub: None,
+        debug: false,
+    };
+    let updated_head = KvHeader {
+        sid: doc.head.sid,
+        created_at: doc.head.created_at.clone(),
+        updated_at: "2026-01-02T00:00:00Z".to_string(),
+    };
+
+    let result = builder_set_entry(&updated_head, &doc, "KEY2", "dummytoken123", &signing);
+
+    assert!(result.contains("KEY2 "), "KEY2 should be present");
+    let key1_before = kv_token_from(&initial, "KEY1").unwrap();
+    let key1_after = kv_token_from(&result, "KEY1").unwrap();
+    assert_eq!(key1_before, key1_after, "KEY1 token should be unchanged");
+}
+
+#[test]
+fn test_build_kv_set_entry_replaces_existing_key() {
+    let (initial, doc, signing_key, kid) = make_test_ctx(&[("KEY1", "val1"), ("KEY2", "val2")]);
+    let signing = SigningContext {
+        signing_key: &signing_key,
+        signer_kid: &kid,
+        signer_pub: None,
+        debug: false,
+    };
+    let new_token = "newtoken456";
+    let updated_head = KvHeader {
+        sid: doc.head.sid,
+        created_at: doc.head.created_at.clone(),
+        updated_at: "2026-01-02T00:00:00Z".to_string(),
+    };
+
+    let result = builder_set_entry(&updated_head, &doc, "KEY1", new_token, &signing);
+
+    let key1_after = kv_token_from(&result, "KEY1").unwrap();
+    assert_eq!(key1_after, new_token, "KEY1 should have new token");
+    let key2_before = kv_token_from(&initial, "KEY2").unwrap();
+    let key2_after = kv_token_from(&result, "KEY2").unwrap();
+    assert_eq!(key2_before, key2_after, "KEY2 token should be unchanged");
+}
+
+#[test]
+fn test_build_kv_set_entry_preserves_wrap_token() {
+    let (initial, doc, signing_key, kid) = make_test_ctx(&[("KEY1", "val1")]);
+    let signing = SigningContext {
+        signing_key: &signing_key,
+        signer_kid: &kid,
+        signer_pub: None,
+        debug: false,
+    };
+    let updated_head = KvHeader {
+        sid: doc.head.sid,
+        created_at: doc.head.created_at.clone(),
+        updated_at: "2026-01-02T00:00:00Z".to_string(),
+    };
+
+    let result = builder_set_entry(&updated_head, &doc, "NEW_KEY", "sometoken", &signing);
+
+    let wrap_before = wrap_token_from(&initial);
+    let wrap_after = wrap_token_from(&result);
+    assert_eq!(wrap_before, wrap_after, "WRAP token should be unchanged");
+}
+
+#[test]
+fn test_build_kv_set_entry_preserves_sid_and_created_at() {
+    let (initial, doc, signing_key, kid) = make_test_ctx(&[("KEY1", "val1")]);
+    let signing = SigningContext {
+        signing_key: &signing_key,
+        signer_kid: &kid,
+        signer_pub: None,
+        debug: false,
+    };
+    let updated_head = KvHeader {
+        sid: doc.head.sid,
+        created_at: doc.head.created_at.clone(),
+        updated_at: "2026-03-15T12:00:00Z".to_string(),
+    };
+
+    let result = builder_set_entry(&updated_head, &doc, "KEY2", "tokenxyz", &signing);
+
+    assert_eq!(
+        decode_head_from(&initial).sid,
+        decode_head_from(&result).sid,
+        "sid should be preserved"
+    );
+    assert_eq!(
+        decode_head_from(&initial).created_at,
+        decode_head_from(&result).created_at,
+        "created_at should be preserved"
+    );
+}
+
+// --- unset_entry テスト ---
+
+#[test]
+fn test_build_kv_unset_entry_removes_target_key() {
+    let (initial, doc, signing_key, kid) = make_test_ctx(&[("KEY1", "val1"), ("KEY2", "val2")]);
+    let signing = SigningContext {
+        signing_key: &signing_key,
+        signer_kid: &kid,
+        signer_pub: None,
+        debug: false,
+    };
+    let updated_head = KvHeader {
+        sid: doc.head.sid,
+        created_at: doc.head.created_at.clone(),
+        updated_at: "2026-01-02T00:00:00Z".to_string(),
+    };
+
+    let result = builder_unset_entry(&updated_head, &doc, "KEY1", &signing);
+
+    assert!(!result.contains("KEY1 "), "KEY1 should be removed");
+    let key2_before = kv_token_from(&initial, "KEY2").unwrap();
+    let key2_after = kv_token_from(&result, "KEY2").unwrap();
+    assert_eq!(key2_before, key2_after, "KEY2 token should be unchanged");
+}
+
+#[test]
+fn test_build_kv_unset_entry_preserves_wrap_token() {
+    let (initial, doc, signing_key, kid) = make_test_ctx(&[("KEY1", "val1"), ("KEY2", "val2")]);
+    let signing = SigningContext {
+        signing_key: &signing_key,
+        signer_kid: &kid,
+        signer_pub: None,
+        debug: false,
+    };
+    let updated_head = KvHeader {
+        sid: doc.head.sid,
+        created_at: doc.head.created_at.clone(),
+        updated_at: "2026-01-02T00:00:00Z".to_string(),
+    };
+
+    let result = builder_unset_entry(&updated_head, &doc, "KEY1", &signing);
+
+    let wrap_before = wrap_token_from(&initial);
+    let wrap_after = wrap_token_from(&result);
+    assert_eq!(wrap_before, wrap_after, "WRAP token should be unchanged");
+}
+
+#[test]
+fn test_build_kv_unset_entry_last_entry() {
+    let (_initial, doc, signing_key, kid) = make_test_ctx(&[("ONLY_KEY", "val")]);
+    let signing = SigningContext {
+        signing_key: &signing_key,
+        signer_kid: &kid,
+        signer_pub: None,
+        debug: false,
+    };
+    let updated_head = KvHeader {
+        sid: doc.head.sid,
+        created_at: doc.head.created_at.clone(),
+        updated_at: "2026-01-02T00:00:00Z".to_string(),
+    };
+
+    let result = builder_unset_entry(&updated_head, &doc, "ONLY_KEY", &signing);
+
+    use secretenv::format::kv::enc::parser::KvEncParser;
+    let lines = KvEncParser::new(&result).parse_all().unwrap();
+    assert!(!result.contains("ONLY_KEY"), "ONLY_KEY should be removed");
+    assert!(result.contains(":HEAD "), "HEAD line should exist");
+    assert!(result.contains(":SIG "), "SIG line should exist");
+    let _ = lines;
+}
+
+#[test]
+fn test_build_kv_unset_entry_preserves_sid_and_created_at() {
+    let (initial, doc, signing_key, kid) = make_test_ctx(&[("KEY1", "val1"), ("KEY2", "val2")]);
+    let signing = SigningContext {
+        signing_key: &signing_key,
+        signer_kid: &kid,
+        signer_pub: None,
+        debug: false,
+    };
+    let updated_head = KvHeader {
+        sid: doc.head.sid,
+        created_at: doc.head.created_at.clone(),
+        updated_at: "2026-03-15T12:00:00Z".to_string(),
+    };
+
+    let result = builder_unset_entry(&updated_head, &doc, "KEY1", &signing);
+
+    let head_before = decode_head_from(&initial);
+    let head_after = decode_head_from(&result);
+    assert_eq!(head_before.sid, head_after.sid);
+    assert_eq!(head_before.created_at, head_after.created_at);
+}
+
+// --- set_entries テスト ---
+
+#[test]
+fn test_build_kv_set_entries_updates_and_adds_multiple_keys() {
+    let (initial, doc, signing_key, kid) = make_test_ctx(&[("KEY1", "val1")]);
+    let signing = SigningContext {
+        signing_key: &signing_key,
+        signer_kid: &kid,
+        signer_pub: None,
+        debug: false,
+    };
+    let updated_head = KvHeader {
+        sid: doc.head.sid,
+        created_at: doc.head.created_at.clone(),
+        updated_at: "2026-01-02T00:00:00Z".to_string(),
+    };
+
+    let new_key1_token = "updated_token_key1";
+    let new_key2_token = "new_token_key2";
+    let entries = HashMap::from([("KEY1", new_key1_token), ("KEY2", new_key2_token)]);
+
+    let result = builder_set_entries(&updated_head, &doc, &entries, &signing);
+
+    let key1_before = kv_token_from(&initial, "KEY1").unwrap();
+    let key1_after = kv_token_from(&result, "KEY1").unwrap();
+    assert_ne!(key1_before, key1_after, "KEY1 should have been updated");
+    assert_eq!(key1_after, new_key1_token, "KEY1 should have the new token");
+
+    let key2_after = kv_token_from(&result, "KEY2").unwrap();
+    assert_eq!(key2_after, new_key2_token, "KEY2 should be present");
+
+    let key1_count = result
+        .lines()
+        .filter(|l: &&str| l.starts_with("KEY1 "))
+        .count();
+    assert_eq!(key1_count, 1, "KEY1 should appear exactly once");
+
+    let wrap_before = wrap_token_from(&initial);
+    let wrap_after = wrap_token_from(&result);
+    assert_eq!(wrap_before, wrap_after, "WRAP token should be unchanged");
+}
+
+#[test]
+fn test_build_kv_set_entries_preserves_existing_keys_not_in_map() {
+    let (initial, doc, signing_key, kid) =
+        make_test_ctx(&[("KEY1", "val1"), ("KEY2", "val2"), ("KEY3", "val3")]);
+    let signing = SigningContext {
+        signing_key: &signing_key,
+        signer_kid: &kid,
+        signer_pub: None,
+        debug: false,
+    };
+    let updated_head = KvHeader {
+        sid: doc.head.sid,
+        created_at: doc.head.created_at.clone(),
+        updated_at: "2026-01-02T00:00:00Z".to_string(),
+    };
+
+    let entries = HashMap::from([("KEY2", "replaced_token")]);
+
+    let result = builder_set_entries(&updated_head, &doc, &entries, &signing);
+
+    let key1_before = kv_token_from(&initial, "KEY1").unwrap();
+    let key1_after = kv_token_from(&result, "KEY1").unwrap();
+    assert_eq!(key1_before, key1_after, "KEY1 should be unchanged");
+
+    let key3_before = kv_token_from(&initial, "KEY3").unwrap();
+    let key3_after = kv_token_from(&result, "KEY3").unwrap();
+    assert_eq!(key3_before, key3_after, "KEY3 should be unchanged");
+
+    let key2_after = kv_token_from(&result, "KEY2").unwrap();
+    assert_eq!(key2_after, "replaced_token", "KEY2 should have new token");
+}
+
+#[test]
+fn test_build_kv_set_entries_new_keys_sorted_deterministically() {
+    let (_initial, doc, signing_key, kid) = make_test_ctx(&[("EXISTING", "val")]);
+    let signing = SigningContext {
+        signing_key: &signing_key,
+        signer_kid: &kid,
+        signer_pub: None,
+        debug: false,
+    };
+    let updated_head = KvHeader {
+        sid: doc.head.sid,
+        created_at: doc.head.created_at.clone(),
+        updated_at: "2026-01-02T00:00:00Z".to_string(),
+    };
+
+    let entries = HashMap::from([("ZEBRA", "zt"), ("ALPHA", "at"), ("MIDDLE", "mt")]);
+
+    let result = builder_set_entries(&updated_head, &doc, &entries, &signing);
+
+    let kv_keys: Vec<&str> = result
+        .lines()
+        .filter(|l: &&str| !l.starts_with(':') && !l.starts_with('#') && l.contains(' '))
+        .filter_map(|l: &str| l.split(' ').next())
+        .collect();
+
+    // EXISTING should come first (from original), then new keys in alphabetical order
+    assert_eq!(kv_keys, vec!["EXISTING", "ALPHA", "MIDDLE", "ZEBRA"]);
+}

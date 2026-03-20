@@ -1,0 +1,53 @@
+// Copyright 2026 Satoshi Ebisawa
+// SPDX-License-Identifier: Apache-2.0
+
+//! SecretEnv envelope binding bytes.
+
+use crate::crypto::types::data::{Aad, Info};
+use crate::format::jcs;
+use crate::model::file_enc::FilePayloadHeader;
+use crate::model::identifiers::context;
+use crate::Result;
+use serde_json::json;
+use uuid::Uuid;
+
+pub fn build_kv_entry_aad(sid: &Uuid, key: &str) -> Result<Aad> {
+    let bytes = jcs::normalize_to_bytes(&json!({
+        "p": context::PAYLOAD_KV_V3,
+        "sid": sid,
+        "k": key
+    }))?;
+    Ok(Aad::from(bytes))
+}
+
+pub fn build_file_payload_aad(protected: &FilePayloadHeader) -> Result<Aad> {
+    let value = serde_json::to_value(protected)?;
+    let bytes = jcs::normalize_to_bytes(&value)?;
+    Ok(Aad::from(bytes))
+}
+
+pub fn build_kv_wrap_info(sid: &Uuid, kid: &str) -> Result<Info> {
+    let bytes = jcs::normalize_to_bytes(&json!({
+        "p": context::HPKE_WRAP_KV_FILE_V3,
+        "sid": sid,
+        "kid": kid
+    }))?;
+    Ok(Info::from(bytes))
+}
+
+pub fn build_file_wrap_info(sid: &Uuid, kid: &str) -> Result<Info> {
+    let bytes = jcs::normalize_to_bytes(&json!({
+        "p": context::HPKE_WRAP_FILE_V3,
+        "sid": sid,
+        "kid": kid
+    }))?;
+    Ok(Info::from(bytes))
+}
+
+pub fn build_kv_cek_info(sid: &Uuid) -> Result<Info> {
+    let bytes = jcs::normalize_to_bytes(&json!({
+        "p": context::KV_CEK_INFO_PREFIX_V3,
+        "sid": sid
+    }))?;
+    Ok(Info::from(bytes))
+}

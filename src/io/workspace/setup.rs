@@ -1,0 +1,66 @@
+// Copyright 2026 Satoshi Ebisawa
+// SPDX-License-Identifier: Apache-2.0
+
+//! Workspace setup and validation helpers.
+
+use crate::model::public_key::PublicKey;
+use crate::support::fs::{atomic, ensure_dir};
+use crate::support::path::display_path_relative_to_cwd;
+use crate::{Error, Result};
+use std::path::Path;
+
+fn save_gitkeep(dir: &Path) -> Result<()> {
+    std::fs::write(dir.join(".gitkeep"), "").map_err(|e| Error::Io {
+        message: format!(
+            "Failed to create .gitkeep in {}: {}",
+            display_path_relative_to_cwd(dir),
+            e
+        ),
+        source: Some(e),
+    })
+}
+
+/// Ensure workspace structure exists - create if missing.
+pub fn ensure_workspace_structure(workspace_path: &Path) -> Result<bool> {
+    let active_dir = workspace_path.join("members").join("active");
+    let secrets_dir = workspace_path.join("secrets");
+
+    if active_dir.exists() && secrets_dir.exists() {
+        return Ok(false);
+    }
+
+    let incoming_dir = workspace_path.join("members").join("incoming");
+    for dir in [&active_dir, &incoming_dir, &secrets_dir] {
+        ensure_dir(dir)?;
+        save_gitkeep(dir)?;
+    }
+
+    Ok(true)
+}
+
+/// Verify that workspace structure already exists.
+pub fn validate_workspace_exists(workspace_path: &Path) -> Result<()> {
+    let members_dir = workspace_path.join("members");
+    let members_active_dir = members_dir.join("active");
+    let secrets_dir = workspace_path.join("secrets");
+
+    if !workspace_path.exists()
+        || !members_dir.exists()
+        || !members_active_dir.exists()
+        || !secrets_dir.exists()
+    {
+        return Err(Error::Config {
+            message: format!(
+                "Workspace not found or incomplete: {}. Run 'secretenv init' to create a new workspace.",
+                display_path_relative_to_cwd(workspace_path)
+            ),
+        });
+    }
+
+    Ok(())
+}
+
+/// Save a public key document into the workspace members directory.
+pub fn save_member_document(member_file: &Path, public_key: &PublicKey) -> Result<()> {
+    atomic::save_json(member_file, public_key)
+}

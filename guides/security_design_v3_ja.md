@@ -1,0 +1,1416 @@
+# SecretEnv v3 セキュリティ設計
+
+---
+
+## 0. 文書情報
+
+| 項目 | 値 |
+|------|-----|
+| バージョン | 1.3 |
+| 日付 | 2026-03-19 |
+
+### 本書の位置づけ
+
+本書は SecretEnv v3 のセキュリティ設計を説明する文書である。SecretEnv の設計における**設計判断の背景**と**セキュリティ上の考え方**を整理した文書である。
+
+---
+
+## 1. エグゼクティブサマリー
+
+SecretEnv は、チーム内で `.env` ファイルや証明書などの秘密情報を安全に共有するためのオフライン優先（offline-first）の暗号ファイル共有 CLI ツールである。Git リポジトリを配布媒体として利用可能だが、Git の存在に依存しない。
+
+### 設計上の要点
+
+1. **HPKE (RFC 9180) による multi-recipient key wrapping** — 各受信者の公開鍵で Content Key を個別に wrap し、payload の再暗号化なしに受信者を追加・削除できる
+2. **文脈束縛（Context Binding）による暗号文の対応付け** — `sid`（ファイル識別子）、`kid`（鍵世代）、`k`（エントリキー）を AAD および HPKE info に含め、暗号文が「何を暗号化したものか」を取り違えにくくする
+3. **Defence-in-Depth（多層防御）** — HPKE info と AAD の同一化、CEK 導出 info と AAD の二重束縛により、単一の実装ミスがそのまま深刻な問題になりにくいようにする
+4. **Ed25519 による署名と PublicKey attestation** — 暗号ファイルの改ざん検知、SSH 鍵との紐付け、オプションの GitHub online 検証
+5. **SSH 鍵再利用によるパスワードレス PrivateKey 保護** — Ed25519 の決定論的署名を IKM として HKDF で暗号化鍵を導出し、追加のパスワード管理を不要にする
+
+### 採用する暗号プリミティブと設計上の意図
+
+SecretEnv では、HPKE、Ed25519、HKDF-SHA256、XChaCha20-Poly1305 など、広く利用されている標準的な暗号プリミティブを採用している。これらは既知の安全性特性を前提に選定しているが、システム全体の安全性は、暗号プリミティブ自体だけでなく、実装、鍵管理、運用にも依存する。
+
+| 目的 | 主な手段 | 設計上の意図 |
+|------|---------|-------------|
+| **機密性** | HPKE wrap + XChaCha20-Poly1305 AEAD | 現在の共有相手だけが復号できるようにする |
+| **改ざん検知** | Ed25519 署名 | 暗号ファイルやメタデータの改ざんを検知できるようにする |
+| **文脈の固定** | AAD に `sid` / `k` を含める | 別の secret や別エントリへの流用や差し替えを防ぐ |
+| **鍵更新時の整合性** | HPKE info に `kid` を含める | 鍵世代の取り違えを防ぐ |
+| **鍵一貫性** | PublicKey 自己署名 | 同一の秘密鍵保持者がその PublicKey を作成したことを確認できるようにする |
+| **鍵の本人性補強** | SSH attestation + TOFU 確認 + online 検証 | 公開鍵のすり替えリスクを下げる |
+
+**注記:**
+- **鍵一貫性**は、同一の秘密鍵保持者がその PublicKey を作成したことを示すが、本人性そのものを示すものではない
+- **鍵の本人性補強**は、複数の信頼層を組み合わせて公開鍵の信頼判断を助けるための運用上の仕組みである。TOFU 確認が正しく実行されることが前提条件であり、`--force` 使用時は効果が弱まる。詳細は §2.5 を参照
+
+---
+
+## 2. 脅威モデルとセキュリティ目標
+
+### 2.1 攻撃者モデル
+
+| 攻撃者 | 能力 | 想定シナリオ |
+|--------|------|-------------|
+| **リポジトリ改ざん者** | `.secretenv/` 配下のファイルを任意に改ざん可能 | 悪意ある CI、侵害された Git サーバ、不正な push |
+| **公開鍵すり替え者** | `members/active/<id>.json` を偽造した公開鍵に置き換え可能 | 新メンバー追加時の MITM、リポジトリへの不正コミット |
+| **鍵ローテーション攻撃者** | 古い鍵世代の wrap を保持し、新しい鍵での復号を試行 | 鍵更新プロセスの不備を突く |
+| **コンテキスト混同攻撃者** | 異なる secret の暗号文コンポーネントを入れ替え | 暗号ファイル間でのコピー & ペースト |
+
+**前提: リポジトリへの書き込みアクセス制御**
+
+上記の攻撃者モデルは、リポジトリへの書き込みアクセスが適切に管理されていることを前提とする。主なターゲット環境である Git + GitHub 運用では、`members/active/` への変更は PR レビューを通じて検証される。リポジトリへの無制限な書き込みアクセスを持つ攻撃者（例: リポジトリ管理者権限の侵害）は、本モデルの対象外である。この前提が満たされない環境では、incoming → active の昇格プロセスに加え、リポジトリ層でのアクセス制御を別途実施する必要がある。
+
+### 2.2 信頼境界
+
+```mermaid
+graph TB
+    subgraph trusted["信頼境界内"]
+        LocalTerminal[ローカル端末]
+        LocalKeystore["ローカル鍵ストレージ<br/>~/.config/secretenv/keys/"]
+        SSHKey[SSH Ed25519 秘密鍵]
+    end
+
+    subgraph untrusted["信頼境界外（改ざんの可能性あり）"]
+        MembersDir[".secretenv/members/<br/>PublicKey ファイル"]
+        SecretsDir[".secretenv/secrets/<br/>暗号ファイル"]
+    end
+
+    subgraph external["外部システム（オプション）"]
+        GitHub["GitHub API<br/>online 検証用"]
+    end
+
+    LocalTerminal -->|鍵生成・復号| LocalKeystore
+    LocalTerminal -->|attestation| SSHKey
+    LocalTerminal -->|暗号化・検証| MembersDir
+    LocalTerminal -->|暗号化・復号| SecretsDir
+    LocalTerminal -.->|online 検証| GitHub
+
+    style trusted fill:#90EE90
+    style untrusted fill:#FFE4B5
+    style external fill:#E0E0E0
+```
+
+**信頼する要素:**
+- ローカル端末とローカル鍵ストレージ（`~/.config/secretenv/keys/`）
+- ユーザーの SSH Ed25519 秘密鍵
+- GitHub API（online 検証時のみ、オプション）
+
+**信頼しない要素:**
+- Workspace の `members/` ディレクトリ — 署名と attestation で検証
+- Workspace の `secrets/` ディレクトリ — 署名で検証
+
+### 2.3 セキュリティ目標
+
+**目標:**
+- 暗号化されたファイルの機密性（現行の recipients 以外は復号不能）
+- 暗号ファイルの真正性（改ざん検知）
+- 暗号文とコンテキストの束縛（入れ替え防止）
+- 鍵世代の暗号学的束縛（wrap 流用防止）
+- 署名者と公開鍵の対応関係の確認材料
+
+**非目標:**
+- Forward Secrecy のような強い性質をシステム全体として提供すること（§12 で詳述）
+- 過去に開示された内容の回収（暗号学的に不可能）— file-enc では recipient 削除時にコンテンツが変更されない場合 DEK は維持される。同一 DEK = 同一コンテンツであり、旧 recipient にはかつて正規に開示された内容である。真の失効が必要な場合は `--rotate-key` で DEK を再生成する。kv-enc では recipient 削除時に自動で DEK が再生成される
+- 内部者による正当な復号内容の悪用防止
+- 中央ポリシーによるアクセス制御（policy-less 設計）
+
+### 2.4 防御マトリクス
+
+| セキュリティ目標 | 防御手段 | 対応セクション |
+|----------------|---------|--------------|
+| 機密性 | HPKE wrap + AEAD (XChaCha20-Poly1305) | §5, §6 |
+| 真正性 | Ed25519 署名 (PureEdDSA) | §8 |
+| 文脈束縛（ファイル間） | `sid` を AAD に含める | §9 |
+| 文脈束縛（エントリ間） | `k` を AAD に含める | §9 |
+| 鍵世代束縛 | `kid` を HPKE info に含める | §9 |
+| 公開鍵の本人性 | SSH attestation + TOFU 確認 + online 検証 | §2.5, §8 |
+| wrap 完全性 | Ed25519 署名で `protected`（wrap 含む）を保護 | §8 |
+| PrivateKey 保護 | SSH 署名ベース鍵導出 + AEAD | §7 |
+| DoS 耐性 | 入力サイズ上限 | §11 |
+
+### 2.5 信頼モデル
+
+SecretEnv における「鍵の本人性」は、単一の機構ではなく以下の層を組み合わせて判断材料を増やす考え方である。各層が単独で本人性を確定するものではない。
+
+**層1: 自己署名（鍵一貫性）**
+
+PublicKey に含まれる自己署名は、「この PublicKey を作成した主体が、対応する秘密鍵を保持している」ことを示す。これは鍵の**一貫性**を確認する材料であり、**本人性**までは示さない。攻撃者が自分の SecretEnv 鍵ペアを新規作成すれば、有効な自己署名を持つ PublicKey を生成できる。
+
+自己署名の役割は、既存の PublicKey の**改竄防止**に限定される。`members/active/` にある PublicKey のフィールドを書き換えると自己署名検証が失敗する。
+
+**層2: SSH attestation（鍵紐付け）**
+
+SSH attestation は、SecretEnv 鍵ペアと SSH 鍵の紐付けを確認するための仕組みである。ただし、SSH 鍵自体の所有者が誰であるかは、この層だけでは特定できない。攻撃者が自分の SSH 鍵で自分の SecretEnv 鍵を attestation すれば、有効な attestation を生成可能である。
+
+**層3: TOFU 確認（鍵→人物の紐付け）**
+
+`rewrap` を実行するユーザーが、incoming メンバーの SSH fingerprint と GitHub アカウント情報を目視で確認する。SSH の `known_hosts` における初回接続確認と同等の信頼モデルである。**ここで初めて、workspace を利用するための鍵→人物の紐付け（判断材料）が成立する。**
+
+TOFU 確認が省略された場合（`--force` 使用時）、対話的な確認をスキップして昇格が行われるため、本人性判断の材料は減る。ただし、online 検証が実施され明示的に失敗したメンバーは `--force` 使用時であっても昇格対象から除外される。
+
+**層4: Online verify（補助的証拠）**
+
+GitHub API で SSH 公開鍵の登録を自動確認する。GitHub アカウントの侵害がない限り有効な補助材料だが、単独で本人性を確定するものではない。
+
+**署名検証で参照される公開鍵**
+
+署名検証時に参照される公開鍵（verification key）は、次のいずれかで決まる。`signature.kid` によって workspace `members/active/` から特定される PublicKey、または `signature.signer_pub` が埋め込まれている場合にその PublicKey である。`signer_pub` が埋め込まれている場合、その PublicKey は自己署名・有効期限・`kid` 一致に加えて attestation（`attestation.method`）の検証により確認される。ローカル keystore は秘密鍵の保管に使用されるが、署名検証の公開鍵ソースとしては使用しない。また、workspace の `active` は「承認済み trust anchor」として他ユーザーへ信頼を提供するものではない。鍵の信頼性判断（どの人物に紐付く鍵として受け入れるか）は各ユーザーが自己の責任で行う。判断に必要な情報支援は SSH attestation と GitHub の binding_claims（online verify）などを通じて提供される。
+
+**`--force` のリスクと推奨運用**: `--force` は TOFU の対話的確認をスキップするため、公開鍵すり替え攻撃に対する最終防御層を弱める。ただし online 検証が利用可能な環境では、検証に失敗したメンバーの昇格は `--force` 使用時でも拒否される。CI/CD パイプラインなど非対話環境では `--force` 使用が誘導されるが、この場合は以下の運用を推奨する:
+- CI/CD 環境では事前に対話環境で `rewrap` を実行し、メンバー昇格を完了させてから CI/CD で `--force` を使用する
+- `--force` 使用後は `member verify` で online 検証を実施し、昇格されたメンバーの正当性を事後確認する
+- `--force` の使用はチーム内で運用ポリシーとして管理し、無制限な使用を避ける
+
+**複合信頼**
+
+鍵の本人性判断を強めるには、上記の層が適切に機能することが望ましい。ただし、攻撃シナリオによって弱くなる条件は異なる:
+
+- **既存鍵の改竄**: SSH 秘密鍵漏洩が必要。自己署名と SSH attestation を偽造できないため、元の鍵保持者の SSH 秘密鍵なしには改竄は成功しない
+- **新規鍵挿入**: TOFU 誤承認（または `--force` による省略）のみで成立する。攻撃者は自分の鍵で有効な自己署名・attestation を生成できるため、被害者の SSH 鍵漏洩は不要
+
+上記の整理で挙げた「弱くなる条件」は、これら複数の攻撃シナリオを総合したものである。
+
+---
+
+## 3. 暗号プリミティブの選択
+
+### 3.1 アルゴリズム一覧
+
+| アルゴリズム | パラメータ | RFC | 用途 |
+|------------|----------|-----|------|
+| HPKE Base mode | suite `hpke-32-1-3` | RFC 9180 | Content Key の wrap/unwrap |
+| DHKEM(X25519, HKDF-SHA256) | kem_id=32 (0x0020) | RFC 9180 | KEM（鍵カプセル化） |
+| HKDF-SHA256 | kdf_id=1 (0x0001) | RFC 5869 | KDF（鍵導出） |
+| ChaCha20-Poly1305 | aead_id=3 (0x0003) | RFC 8439 | HPKE 内部 AEAD |
+| XChaCha20-Poly1305 | nonce 24 bytes, key 32 bytes | — | payload / entry / PrivateKey 暗号化 |
+| Ed25519 (PureEdDSA) | — | RFC 8032 | 署名・検証 |
+| HKDF-SHA256 | — | RFC 5869 | CEK 導出、PrivateKey enc_key 導出 |
+| JCS | — | RFC 8785 | JSON の決定的正規化 |
+| base64url (no padding) | — | RFC 4648 §5 | バイナリエンコード |
+
+### 3.2 HPKE (RFC 9180)
+
+**選択理由:**
+- 標準化されたハイブリッド公開鍵暗号化スキームであり、KEM + KDF + AEAD の組み合わせが一貫して定義されている
+- Base mode で wrap ごとの ephemeral key isolation を提供（ただし recipient 長期鍵漏洩時は既存 wrap が復号可能、詳細は本書 §12.1）
+- IANA Registry による suite ID の明確な識別
+
+**suite 構成:**
+```
+hpke-32-1-3
+├── kem_id  = 32 (0x0020) DHKEM(X25519, HKDF-SHA256)
+├── kdf_id  = 1  (0x0001) HKDF-SHA256
+└── aead_id = 3  (0x0003) ChaCha20-Poly1305
+```
+
+**代替案との比較:**
+
+| 代替案 | 不採用理由 |
+|--------|----------|
+| RSA-OAEP | 鍵サイズが大きく、Forward Secrecy を自然に実現できない |
+| ECIES (自作構成) | 標準化されておらず、構成ミスのリスクが高い |
+| Age (X25519-ChaChaPoly) | HPKE ほど仕様上の整理が進んでおらず、info/AAD の柔軟性が不足 |
+
+**既知の制約:**
+- Base mode は送信者認証を提供しない（署名で補完）
+- X25519 は 128-bit セキュリティレベル
+
+### 3.3 XChaCha20-Poly1305
+
+**選択理由:**
+- 24-byte nonce により、ランダム nonce の衝突リスクが実用上無視できる（birthday bound が 2^96）
+- AES-NI 非搭載環境でも一定のパフォーマンスを発揮
+- misuse resistance は提供しないが、nonce 空間の広さで実質的な安全性を確保
+
+**代替案との比較:**
+
+| 代替案 | 不採用理由 |
+|--------|----------|
+| AES-256-GCM | 12-byte nonce では multi-key 使用時に衝突リスクが高い |
+| AES-256-GCM-SIV | nonce misuse resistance は魅力的だが、実装の複雑さと普及度を考慮 |
+
+**既知の制約:**
+- nonce reuse は壊滅的（同一鍵・同一 nonce での暗号化は禁止）
+- payload の圧縮は禁止（圧縮オラクル攻撃 CRIME/BREACH の回避）
+
+### 3.4 Ed25519 (RFC 8032 PureEdDSA)
+
+**選択理由:**
+- **決定論的署名**: 同一入力に対して常に同一の署名を生成。PrivateKey 保護で IKM として署名を使用するため必須の性質
+- 高速な署名・検証
+- SSH エコシステムとの親和性（ssh-ed25519）
+
+**代替案との比較:**
+
+| 代替案 | 不採用理由 |
+|--------|----------|
+| ECDSA (P-256) | 非決定論的署名（RFC 6979 で緩和可能だが、SSH 実装での扱いにばらつきがある） |
+| Ed448 | SSH エコシステムでの普及が不十分 |
+
+**既知の制約:**
+- 128-bit セキュリティレベル
+- コンテキスト分離は PureEdDSA 自体では提供されない（JCS 正規化 + プロトコル識別子で対応）
+
+### 3.5 HKDF-SHA256 (RFC 5869)
+
+**選択理由:**
+- 標準化された鍵導出関数
+- `info` パラメータにより、同一 IKM から用途別の鍵を安全に導出可能
+- `salt` パラメータにより、同一 IKM・同一 info でも異なる鍵を導出可能
+
+**用途:**
+- kv-enc の CEK 導出（MK + salt + sid → CEK）
+- PrivateKey 保護の enc_key 導出（SSH 署名 + salt + kid → enc_key）
+
+### 3.6 JCS (RFC 8785)
+
+**選択理由:**
+- JSON オブジェクトの決定論的正規化を提供
+- 鍵の順序や数値表現の揺れを排除し、署名・AAD・HPKE info の一貫性を保ちやすくする
+- `sid` 等の文字列フィールドに任意の文字が含まれても曖昧性が発生しない
+
+### 3.7 標準的な暗号プリミティブの既知の性質
+
+SecretEnv が各プリミティブに依拠する安全性特性を以下に整理する。
+
+| プリミティブ | 安全性定義 | 根拠 |
+|------------|-----------|------|
+| HPKE Base mode (RFC 9180) | 受信者ごとの安全な鍵配送を想定した標準 | Base mode は送信者認証を提供しないため、insider 攻撃への対策は Ed25519 署名で補う |
+| XChaCha20-Poly1305 | 改ざん検知付き暗号として広く使われる構成 | nonce 一意性が前提条件（§3.8 参照） |
+| Ed25519 (PureEdDSA) | 広く使われている標準的な署名方式 | SecretEnv では暗号ファイルや PublicKey の署名に利用する |
+| HKDF-SHA256 | PRF 安全性 | RFC 5869 による。IKM が十分なエントロピーを持つ場合、出力は擬似ランダム。CEK 導出の IKM（MK）は 32 bytes CSPRNG |
+
+**安全性の依存関係:**
+
+```
+機密性 ── HPKE IND-CCA2 ─┐
+                          ├─ 全体の機密性
+payload AEAD IND-CCA2 ────┘
+
+署名 ── Ed25519 ── 改ざん検知
+
+CEK 独立性 ── HKDF PRF 安全性 ── entry 間の暗号学的独立
+```
+
+**前提条件と限界:**
+- HPKE Base mode は recipient 長期秘密鍵の秘匿を前提とする。長期鍵漏洩時は当該 recipient 向けの全 wrap が復号可能（§12.1 参照）
+- XChaCha20-Poly1305 の利用では nonce 一意性が重要であり、nonce reuse は深刻な問題につながる
+- Ed25519 署名の前提は秘密鍵の秘匿である。SecretEnv では署名秘密鍵は PrivateKey 保護（§7）で暗号化保存される
+
+### 3.8 nonce 安全性マージン
+
+XChaCha20-Poly1305 は 24-byte (192-bit) nonce を使用する。ランダム nonce の衝突確率を birthday bound で評価する。
+
+**衝突確率の計算:**
+
+同一鍵で `q` 回の暗号化を行った場合の衝突確率:
+
+```
+P(collision) ≈ q² / (2 × 2¹⁹²) = q² / 2¹⁹³
+```
+
+SecretEnv の使用パターンにおける安全性マージン:
+
+| シナリオ | 同一鍵での暗号化回数 `q` | 衝突確率 | 安全性マージン |
+|---------|------------------------|---------|-------------|
+| file-enc（DEK はファイルごとに一意） | 1 | 0 | ∞（nonce reuse なし） |
+| kv-enc entry（CEK は entry ごとに一意） | 1 | 0 | ∞（nonce reuse なし） |
+| PrivateKey 保護（enc_key は salt ごとに一意） | 1 | 0 | ∞（nonce reuse なし） |
+
+**結論:** SecretEnv の設計では、同一の対称鍵で複数回の暗号化を行うケースが存在しない。DEK / CEK / enc_key はそれぞれ一意に生成または導出されるため、nonce 衝突のリスクは構造的に排除されている。24-byte nonce の選択は、将来の設計変更で同一鍵の再利用が発生した場合の安全弁として機能する。
+
+---
+
+## 4. 鍵階層と鍵ライフサイクル
+
+### 4.1 鍵の種類と関係
+
+```mermaid
+graph TB
+    SSHKey["SSH Ed25519 鍵<br/>(ユーザー所有)"]
+    SecretEnvKP["SecretEnv 鍵ペア<br/>kid: ULID"]
+    KEM_PK["X25519 公開鍵<br/>(KEM)"]
+    KEM_SK["X25519 秘密鍵<br/>(KEM)"]
+    SIG_PK["Ed25519 公開鍵<br/>(署名)"]
+    SIG_SK["Ed25519 秘密鍵<br/>(署名)"]
+    DEK["DEK<br/>32 bytes"]
+    MK["MK<br/>32 bytes"]
+    CEK["CEK<br/>32 bytes"]
+
+    SSHKey -->|"attestation<br/>(本人性確認の補助)"| SecretEnvKP
+    SSHKey -->|"PrivateKey 保護<br/>(IKM 導出)"| SIG_SK
+    SecretEnvKP --> KEM_PK
+    SecretEnvKP --> KEM_SK
+    SecretEnvKP --> SIG_PK
+    SecretEnvKP --> SIG_SK
+    KEM_PK -->|"HPKE wrap"| DEK
+    KEM_PK -->|"HPKE wrap"| MK
+    SIG_SK -->|"Ed25519 署名"| DEK
+    SIG_SK -->|"Ed25519 署名"| MK
+    MK -->|"HKDF-SHA256"| CEK
+
+    style SSHKey fill:#FFB6C1
+    style DEK fill:#FFE4B5
+    style MK fill:#FFE4B5
+    style CEK fill:#90EE90
+```
+
+### 4.2 鍵パラメータ一覧
+
+| 鍵の種類 | サイズ | 生成方法 | 用途 | ゼロ化要否 |
+|---------|--------|---------|------|-----------|
+| SSH Ed25519 秘密鍵 | 32 bytes | ユーザーが管理 | attestation、PrivateKey 保護 | N/A（OS 管理） |
+| X25519 秘密鍵 (KEM) | 32 bytes | CSPRNG | HPKE unwrap | MUST |
+| X25519 公開鍵 (KEM) | 32 bytes | X25519 秘密鍵から導出 | HPKE wrap | — |
+| Ed25519 秘密鍵 (署名) | 32 bytes | CSPRNG | 署名生成 | MUST |
+| Ed25519 公開鍵 (署名) | 32 bytes | Ed25519 秘密鍵から導出 | 署名検証 | — |
+| DEK (Data Encryption Key) | 32 bytes | CSPRNG | file-enc payload 暗号化 | MUST |
+| MK (Master Key) | 32 bytes | CSPRNG | kv-enc の CEK 導出元 | MUST |
+| CEK (Content Encryption Key) | 32 bytes | HKDF-SHA256 導出 | kv-enc entry 暗号化 | MUST |
+| enc_key (PrivateKey 保護用) | 32 bytes | HKDF-SHA256 導出 | PrivateKey AEAD 暗号化 | MUST |
+
+### 4.3 鍵ライフサイクル
+
+各 SecretEnv 鍵ペアは ULID で識別される `kid`（鍵世代 ID）を持ち、以下のライフサイクルに従う:
+
+```
+生成 → active → expired
+         │
+         └── rotate (新 kid で新鍵ペア生成)
+```
+
+- **生成**: `key new` コマンドで鍵ペアを生成。`kid` として ULID が割り当てられる
+- **active**: 暗号化・署名に使用可能な状態。`expires_at` が未到来
+- **expired**: `expires_at` を過ぎた状態。暗号化（wrap）操作では拒否される。署名検証は警告付きで許可される（過去に正当に署名されたデータの検証を可能にするため）
+
+### 4.4 鍵ローテーション
+
+鍵ローテーションには 2 つのレベルがある:
+
+**1. rewrap（Content Key 維持）**
+- DEK/MK は変更しない
+- recipients の変更（メンバー追加・鍵更新）のために wrap のみを更新
+- payload の再暗号化は不要
+
+**2. rewrap --rotate-key（Content Key 再生成）**
+- DEK/MK を新規に生成
+- payload を再暗号化
+- 鍵漏洩時や定期ローテーション用
+
+### 4.5 鍵関係図
+
+#### file-enc の鍵関係
+
+```mermaid
+graph TB
+    subgraph recipients["Recipients（PublicKey）"]
+        PK1["PublicKey 1<br/>kid: 01H..."]
+        PK2["PublicKey 2<br/>kid: 01H..."]
+    end
+
+    subgraph wrap["HPKE Wrap"]
+        W1["wrap_item 1<br/>kid: 01H..."]
+        W2["wrap_item 2<br/>kid: 01H..."]
+    end
+
+    DEK["DEK<br/>32 bytes<br/>CSPRNG"]
+
+    subgraph payload["Payload"]
+        PT[平文ファイル]
+        CT["暗号文<br/>XChaCha20-Poly1305"]
+    end
+
+    PK1 -->|HPKE Encaps| W1
+    PK2 -->|HPKE Encaps| W2
+    DEK -->|HPKE wrap| W1
+    DEK -->|HPKE wrap| W2
+    DEK -->|AEAD 暗号化| CT
+    PT -->|AEAD 暗号化| CT
+
+    style DEK fill:#FFE4B5
+    style CT fill:#FFB6C1
+```
+
+#### kv-enc の鍵関係
+
+```mermaid
+graph TB
+    subgraph recipients["Recipients（PublicKey）"]
+        PK1["PublicKey 1<br/>kid: 01H..."]
+        PK2["PublicKey 2<br/>kid: 01H..."]
+    end
+
+    subgraph wrap["HPKE Wrap"]
+        W1["wrap_item 1<br/>kid: 01H..."]
+        W2["wrap_item 2<br/>kid: 01H..."]
+    end
+
+    MK["MK<br/>32 bytes<br/>CSPRNG"]
+
+    subgraph cek["CEK 導出"]
+        CEK1["CEK1<br/>HKDF(MK, salt1, sid)"]
+        CEK2["CEK2<br/>HKDF(MK, salt2, sid)"]
+    end
+
+    subgraph entries["暗号化 Entries"]
+        E1["Entry 1: DATABASE_URL"]
+        E2["Entry 2: API_KEY"]
+    end
+
+    PK1 -->|HPKE Encaps| W1
+    PK2 -->|HPKE Encaps| W2
+    MK -->|HPKE wrap| W1
+    MK -->|HPKE wrap| W2
+    MK -->|HKDF-SHA256| CEK1
+    MK -->|HKDF-SHA256| CEK2
+    CEK1 -->|AEAD 暗号化| E1
+    CEK2 -->|AEAD 暗号化| E2
+
+    style MK fill:#FFE4B5
+    style CEK1 fill:#90EE90
+    style CEK2 fill:#90EE90
+```
+
+---
+
+## 5. file-enc プロトコル
+
+### 5.0 データ構造の概観
+
+file-enc は JSON 形式のファイルであり、署名対象データ（`protected`）と署名（`signature`）の二層構造を持つ。
+
+**セキュリティ上重要な構造的性質:**
+
+1. **署名包含性**: `wrap` 配列と `payload` は `protected` 内に格納される。したがって `protected` 全体への Ed25519 署名は、wrap（鍵配布）と payload（暗号文）の両方の完全性を保護する
+2. **sid の二重存在**: `sid` は `protected` 直下と `payload.protected` 内の両方に存在する。復号時に両者の一致を検証することで、payload のすり替えを検知する
+3. **payload envelope**: payload 自身が保護ヘッダ（`payload.protected`）を持ち、その JCS 正規化が AEAD の AAD となる。これにより payload の暗号学的束縛が外側の署名とは独立して成立する
+
+#### ファイル全体構造（JSON レイアウト）
+
+file-enc の全体構造は、トップレベル（署名つきコンテナ）→ `protected`（署名対象）→ `wrap`（DEK 配布）/ `payload`（暗号文）の順にネストする。
+
+```
+{
+  "protected": {
+    "format": "secretenv.file@3",    // フォーマット識別子
+    "sid": "<UUID>",                 // ファイルを一意に識別（wrap/payload の束縛に使用）
+    "wrap": [
+      {
+        "rid": "<member_id>",        // recipient の member_id（informational のみ）
+        "kid": "<ULID>",             // recipient 鍵 ID（keystore 検索キー・HPKE info に含む）
+        "alg": "hpke-32-1-3",        // HPKE アルゴリズム識別子
+        "enc": "<b64url>",           // HPKE encapsulated key（base mode の enc）
+        "ct": "<b64url>"             // HPKE ciphertext（DEK を wrap した ct）
+      }
+      // ... recipients 分だけ要素が並ぶ ...
+    ],
+    "payload": {
+      "protected": {
+        "format": "secretenv.file.payload@3",
+        "sid": "<UUID>",             // protected.sid と同一（復号前に一致検証）
+        "alg": { "aead": "xchacha20-poly1305" }
+      },
+      "encrypted": {
+        "nonce": "<b64url>",         // 24 bytes
+        "ct": "<b64url>"             // AEAD ciphertext（平文ファイル全体）
+      }
+    },
+    "created_at": "<RFC3339>",       // ファイル作成日時
+    "updated_at": "<RFC3339>"        // ファイル更新日時
+  },
+  "signature": {
+    // signature_v3（§8.2）: protected を JCS 正規化して署名した値など
+  }
+}
+```
+
+このレイアウトにより、(1) 署名で `protected` 全体（= wrap と payload）を改ざん検知しつつ、(2) payload は `payload.protected` を AAD とすることで暗号化レイヤ単体でもヘッダ束縛を持つ。
+
+### 5.1 暗号化フロー
+
+```
+1. DEK 生成        — 32 bytes, CSPRNG
+2. HPKE wrap       — 各 recipient の公開鍵で DEK を wrap
+3. AEAD 暗号化     — DEK で平文ファイルを XChaCha20-Poly1305 で暗号化
+4. Ed25519 署名    — protected オブジェクト全体を JCS 正規化して署名
+```
+
+### 5.2 DEK 生成
+
+- 32 bytes の暗号学的乱数（`OsRng`）
+- 各 file-enc ファイルごとに一意
+- 使用後はゼロ化
+
+### 5.3 HPKE wrap
+
+各 recipient について:
+
+```
+info_bytes = jcs({
+    "kid": <wrap_item.kid>,
+    "p": "secretenv:file:hpke-wrap@3",
+    "sid": <protected.sid>
+})
+
+aad_bytes = info_bytes   // defence-in-depth
+
+(enc, ct) = HPKE.SealBase(pk_recip, info_bytes, aad_bytes, DEK)
+```
+
+**設計判断: HPKE info と AAD を同一にする理由**
+
+HPKE は内部で info を KDF に、AAD を AEAD に渡す。両者を同一にすることで:
+- KDF 段階のバイパス攻撃に対して AAD 層が防御
+- AEAD 段階のバイパス攻撃に対して info 層が防御
+- Defence-in-depth を実現
+
+実装: `src/feature/envelope/wrap.rs:62` — `Aad::from(info.as_bytes())`
+
+### 5.4 payload 暗号化
+
+```
+payload.protected = {
+    "format": "secretenv.file.payload@3",
+    "sid": <protected.sid>,          // 外側の sid と同一値
+    "alg": { "aead": "xchacha20-poly1305" }
+}
+
+aad = jcs(payload.protected)
+nonce = random(24 bytes)
+ct = XChaCha20Poly1305.Encrypt(DEK, nonce, aad, plaintext)
+
+// payload.encrypted に nonce と ct を格納
+payload.encrypted = { "nonce": b64url(nonce), "ct": b64url(ct) }
+```
+
+実装: `src/format/context/aad.rs:42-46` — `file_payload` 関数
+
+### 5.5 復号フロー
+
+```
+1. 署名検証        — 失敗時は即エラー（復号処理に進まない）
+2. 鍵特定          — keystore から秘密鍵を kid で特定
+3. wrap_item 検索   — kid（rid ではない）で対応する wrap_item を探す
+4. HPKE unwrap     — info/AAD を再構築し DEK を復元
+5. sid 検証        — payload.protected.sid == protected.sid を確認
+6. AEAD 復号       — DEK で payload を復号
+```
+
+**重要: 署名検証は復号に先行する。** 署名が無効な暗号文を復号すると、悪意ある入力に対して暗号プリミティブを動作させることになり、サイドチャネル攻撃の表面が広がる。
+
+### 5.6 rewrap と rotate-key の違い
+
+| 操作 | DEK | wrap | payload | 用途 |
+|------|-----|------|---------|------|
+| `rewrap`（file-enc） | 維持 | 更新 | 維持 | recipient の追加・削除・鍵更新 |
+| `rewrap`（kv-enc、recipient 削除時） | 再生成 | 更新 | 再暗号化 | recipient 削除時は自動で Content Key を再生成 |
+| `rewrap --rotate-key` | 再生成 | 更新 | 再暗号化 | Content Key のローテーション |
+
+---
+
+## 6. kv-enc プロトコル
+
+### 6.0 データ構造の概観
+
+kv-enc は行ベースのテキスト形式であり、以下の行種別から構成される:
+
+```
+:SECRETENV_KV 3          ← バージョン識別（署名対象に含む）
+:HEAD <token>             ← ファイルメタデータ（sid, タイムスタンプ）
+:WRAP <token>             ← MK の HPKE wrap 配列 + removed_recipients
+<KEY> <token>             ← 暗号化された entry（salt, nonce, ct を含む）
+:SIG <token>              ← Ed25519 署名
+```
+
+各トークンは JSON を JCS 正規化した後 base64url エンコードしたものである。
+
+**セキュリティ上重要な構造的性質:**
+
+1. **署名の包含範囲**: `:SIG` 行を除くすべての行（`:SECRETENV_KV 3`、`:HEAD`、`:WRAP`、全 KEY 行）が署名対象。バージョン行を含むことで、バージョンダウングレード攻撃を防御する
+2. **wrap と entry の分離**: file-enc とは異なり、wrap（`:WRAP` 行）と暗号化 entry（KEY 行）が独立した行として存在する。これにより `set` での部分更新時に wrap の再生成が不要となる
+3. **entry の自己完結性**: 各 entry トークンは自身の `salt`、`k`（KEY）、`aead`、`nonce`、`ct` を含む。`sid` は `:HEAD` から取得し、CEK 導出と AAD 構築に使用する
+4. **canonical_bytes の構築**: 署名対象は全行を LF (0x0A) 終端で連結したバイト列。CRLF は LF に正規化する。フィールド区切りはスペース (0x20)
+
+### 6.1 二層鍵構造の設計根拠
+
+kv-enc は MK → CEK の二層鍵構造を採用している:
+
+```
+MK (1 per file) ─── HPKE wrap ──→ 各 recipient
+  │
+  ├── HKDF(MK, salt1, sid) ──→ CEK1 ──→ entry1 暗号化
+  ├── HKDF(MK, salt2, sid) ──→ CEK2 ──→ entry2 暗号化
+  └── HKDF(MK, saltN, sid) ──→ CEKN ──→ entryN 暗号化
+```
+
+**なぜ二層か:**
+- `set` で特定エントリを更新する際、他エントリの再暗号化が不要
+- `get` で特定エントリのみを部分復号可能
+- 全 recipient 分の HPKE wrap を毎回再実行する必要がない
+
+### 6.1.1 暗号化・復号フローの概要
+
+**暗号化フロー:**
+
+```
+1. MK 生成         — 32 bytes, CSPRNG
+2. HPKE wrap       — 各 recipient の公開鍵で MK を wrap（info = AAD）
+3. 各 entry について:
+   a. salt 生成    — 16 bytes, CSPRNG
+   b. CEK 導出     — HKDF-SHA256(MK, salt, sid)
+   c. AEAD 暗号化  — CEK で VALUE を XChaCha20-Poly1305 で暗号化
+4. Ed25519 署名    — 全行の canonical_bytes を署名（§8.3 参照）
+```
+
+**復号フロー:**
+
+```
+1. SIG 行検証      — 失敗時は即エラー（復号処理に進まない）
+2. 鍵特定          — keystore から秘密鍵を kid で特定
+3. HPKE unwrap     — info/AAD を再構築し MK を復元
+4. 各 entry について:
+   a. CEK 導出     — HKDF-SHA256(MK, salt, sid)
+   b. AAD 構築     — jcs({"k", "p", "sid"})
+   c. AEAD 復号    — CEK で暗号文を復号
+```
+
+file-enc（§5.5）と同様、**署名検証は復号に先行する**。
+
+### 6.2 CEK 導出
+
+```
+salt_bytes = base64url_decode(entry.salt)   // 16 bytes
+
+CEK = HKDF-SHA256(
+    ikm    = MK,                            // 32 bytes
+    salt   = salt_bytes,                    // 16 bytes
+    info   = jcs({
+        "p":   "secretenv:kv:cek@3",
+        "sid": <HEAD.sid>
+    }),
+    length = 32
+)
+```
+
+実装: `src/feature/envelope/cek.rs:27` — `derive_cek` 関数
+
+`sid` を info に含めることで、異なるファイル間で entry をコピーしても異なる CEK が導出され、復号に失敗する。
+
+### 6.3 entry AAD
+
+```
+aad = jcs({
+    "k":   <entry.k>,                      // dotenv KEY
+    "p":   "secretenv:kv:payload@3",
+    "sid": <HEAD.sid>
+})
+```
+
+実装: `src/format/context/aad.rs:28-35` — `kv_payload` 関数
+
+**設計判断:**
+- `k` を含める → 同一ファイル内での entry 入れ替え防止
+- `sid` を含める → CEK 導出の info と二重束縛（defence-in-depth）
+- `salt` は含めない → HKDF の salt 引数として使用済み
+- `recipients` は含めない → rewrap で payload 固定のまま wrap 差し替えを可能にするため
+
+### 6.4 HPKE wrap (kv)
+
+```
+info_bytes = jcs({
+    "kid": <wrap_item.kid>,
+    "p":   "secretenv:kv:hpke-wrap@3",
+    "sid": <HEAD.sid>
+})
+
+aad_bytes = info_bytes   // defence-in-depth: file-enc と同一方針
+```
+
+file-enc（§5.3）と同様に、HPKE の info と AAD に同一の bytes を使用する。これにより kv-enc の wrap においても KDF 段階と AEAD 段階の両方で束縛を確保し、defence-in-depth を実現する。
+
+実装: `src/feature/envelope/wrap.rs:61-62` — `build_wrap_item` 関数（file-enc / kv-enc 共通）
+
+### 6.5 部分復号（get / set）
+
+kv-enc の設計により、全エントリの復号を行わずに特定エントリのみを操作できる:
+
+- **get**: SIG 検証 → MK unwrap → 指定 KEY の CEK 導出 → 当該 entry のみ復号
+- **set**: SIG 検証 → MK unwrap → 新規 salt 生成 → CEK 導出 → VALUE 暗号化 → entry 追加/置換 → SIG 再生成
+
+### 6.6 recipient 削除時の挙動
+
+kv-enc で recipient が削除された場合:
+
+1. MK を新規生成
+2. 全 entry を新 MK から導出した CEK で再暗号化
+3. `removed_recipients` に削除メンバーを記録
+4. 全 entry に `disclosed: true` を付与
+5. WRAP 行を更新
+
+`disclosed` フラグにより、削除された recipient に開示された可能性がある entry を可視化し、シークレットの更新判断を支援する。
+
+---
+
+## 7. PrivateKey 保護
+
+### 7.1 SSH 鍵再利用によるパスワードレス設計
+
+SecretEnv の PrivateKey（KEM 秘密鍵 + 署名秘密鍵）は、ユーザーの既存 SSH Ed25519 鍵を利用して暗号化保護される。これにより SecretEnv 固有のパスワード管理が不要になる。
+
+### 7.2 鍵導出パイプライン
+
+```mermaid
+graph LR
+    Msg["署名メッセージ<br/>(kid + salt)"] -->|SSHSIG 署名| SSHSign["SSH Ed25519 署名"]
+    SSHKey["SSH 秘密鍵<br/>(alg.fpr で特定)"] --> SSHSign
+    SSHSign -->|"raw signature<br/>64 bytes"| IKM["IKM"]
+    IKM --> HKDF["HKDF-SHA256"]
+    Salt["alg.salt<br/>(16 bytes)"] --> HKDF
+    HKDF -->|32 bytes| EncKey["enc_key"]
+    EncKey --> AEAD["XChaCha20-Poly1305"]
+    Plaintext["秘密鍵材料<br/>(keys JSON)"] --> AEAD
+    AAD["AAD = jcs(protected)"] --> AEAD
+    AEAD --> CT["encrypted.ct"]
+```
+
+### 7.3 署名メッセージ
+
+```
+secretenv:key-protection@3
+{kid}
+{hex(salt)}
+```
+
+各行は LF (`0x0A`) で区切る。`member_id` は任意文字列のため暗号学的用途には使用せず、`kid`（ULID）のみを使用する。
+
+実装: `src/feature/key/protection/key_derivation.rs:22-29` — `build_sign_message` 関数
+
+### 7.4 SSHSIG signed_data
+
+SSH 署名は SSHSIG 形式に従う:
+
+```
+byte[6]      "SSHSIG"
+SSH_STRING   namespace = "secretenv"
+SSH_STRING   reserved = ""
+SSH_STRING   hash_algorithm = "sha256"
+SSH_STRING   SHA256(sign_message)
+```
+
+### 7.5 暗号化鍵の導出
+
+```
+enc_key = HKDF-SHA256(
+    ikm    = ed25519_raw_signature_bytes,    // 64 bytes
+    salt   = protected.alg.salt,             // 16 bytes
+    info   = "secretenv:private-key-enc@3:{kid}",
+    length = 32
+)
+```
+
+実装: `src/feature/key/protection/key_derivation.rs`（`info` 組み立て）と `src/crypto/kdf.rs` の `expand_to_array`
+
+### 7.6 決定論性チェック
+
+Ed25519 (RFC 8032 PureEdDSA) は仕様上決定論的署名を生成するが、実装の不備により非決定論的な署名が生成される可能性を排除するため、暗号化・復号のたびに:
+
+1. 同一の signed_data に対して SSH 鍵で **2 回署名**を実行
+2. 抽出した Ed25519 raw signature bytes（64 bytes）が一致することを確認
+3. 不一致の場合は `W_SSH_NONDETERMINISTIC` を出力して処理を中止
+
+**理由:** 非決定論的署名では暗号化時と復号時で異なる IKM が導出され、**復号が不可能になる**。
+
+### 7.7 AAD
+
+```
+aad = jcs(protected)
+```
+
+`protected` オブジェクト全体を JCS 正規化した bytes を AAD とすることで、`format`, `member_id`, `kid`, `alg`, `created_at`, `expires_at` のすべてが改ざん検知の対象となる。特に `expires_at` を AAD に含めることで、有効期限の改ざんを検知する。
+
+実装: `src/format/context/aad.rs:52-56` — `private_key` 関数
+
+### 7.8 信頼仮定
+
+PrivateKey 保護は SSH 署名から IKM を導出する設計のため、**`sign_for_ikm` を実行できる主体は、PrivateKey の暗号化鍵を導出・復号できる**。この同値性は設計上意図されたものだが、信頼境界を明確にするために以下を記載する。
+
+| エンティティ | 復号可能性 | 備考 |
+|-------------|-----------|------|
+| ローカルユーザー（鍵ファイル直接アクセス） | **可能** | 正規の使用 |
+| ssh-agent（ローカル） | **可能** | 鍵ロード済みなら署名要求可能 |
+| ssh-agent forwarding | **可能** | リモートホストから署名要求可能。保護を弱める |
+| ローカルマルウェア | **可能** | 鍵ファイルまたは agent ソケットにアクセス可能な場合 |
+| CI/CD 環境 | **可能** | SSH 鍵デプロイ済みの場合。専用鍵の使用を推奨 |
+| ハードウェアトークン（FIDO2） | **不可能** | Ed25519-SK は非決定論的署名のため IKM 導出不可。§7.6 の決定論性チェックで検出される |
+
+**ssh-agent forwarding に関する注意**: agent forwarding が有効な環境では、リモートホスト上のプロセスがローカルの ssh-agent に署名要求を送信できる。これにより、リモートホストの管理者やマルウェアが PrivateKey を復号可能になる。SecretEnv を使用する環境では agent forwarding の無効化を推奨する。
+
+**設計意図の明確化**: SSH 署名能力と PrivateKey 復号能力の同値性は、意図的な設計判断である。SecretEnv は既存の SSH 認証基盤を暗号鍵保護の信頼アンカーとして活用することで、追加のパスワードやマスターキーの管理を不要にしている。このトレードオフにより、SSH 鍵の保護レベルが SecretEnv の秘密情報の保護レベルの上限となる。したがって、SSH 鍵の適切な管理（パスフレーズの設定、agent forwarding の制限、ハードウェアトークンの利用検討）が SecretEnv のセキュリティにとって不可欠である。
+
+---
+
+## 8. 署名と検証アーキテクチャ
+
+### 8.0 signature_v3 共通形式
+
+file-enc と kv-enc の両方で `signature_v3` と呼ばれる共通の署名構造を使用する。この構造は以下のセキュリティ上の性質を持つ:
+
+- **自己完結型検証**: 署名者の PublicKey（`signer_pub`）を署名内にオプションで埋め込むことが可能。これにより、外部の鍵ストアを参照せずに署名検証と署名者の特定が完了する
+- **鍵世代の明示**: `kid`（鍵世代 ID）を含むことで、どの世代の鍵で署名されたかが明確になる
+- **Ed25519 raw signature**: 署名値は Ed25519 raw signature bytes（64 bytes）を base64url エンコードしたもの（86 文字固定長）
+
+署名トークンは `signer_pub` を含む場合、PublicKey の自己署名と SSH attestation の検証も連鎖的に可能となり、オフラインでの信頼チェーンを構成する（`attestation.method == "test"` のようなダミー指定はリリース（非デバッグ）ビルドでは受理されない）。
+
+### 8.1 署名方式の比較
+
+| 項目 | file-enc | kv-enc |
+|------|----------|--------|
+| 署名対象 | `jcs(protected)` | canonical_bytes（テキスト行の連結） |
+| フォーマット | JSON 内 `signature` フィールド | `:SIG` 行（末尾 1 行） |
+| 改ざん検知範囲 | `protected` 内全体（sid, wrap, payload, timestamps） | HEAD / WRAP / 全 entry 行 |
+| 署名アルゴリズム | `eddsa-ed25519` (PureEdDSA) | `eddsa-ed25519` (PureEdDSA) |
+| 署名フォーマット | `signature_v3` 形式 | `signature_v3` 形式 |
+
+### 8.2 file-enc 署名
+
+```
+canonical_bytes = jcs(protected)
+signature = ed25519_sign(sig_priv, canonical_bytes)
+```
+
+- `protected` オブジェクトを JCS 正規化し、直接署名する（RFC 8032 PureEdDSA）
+- `wrap`、`payload`、`removed_recipients` はすべて `protected` 内に含まれるため、署名で保護される
+- `signature` フィールドは署名対象に含めない
+
+実装: `src/crypto/sign.rs:40-56` — `sign_bytes` 関数
+
+### 8.3 kv-enc 署名
+
+canonical_bytes の構築手順:
+
+1. 入力ファイルの改行を LF (0x0A) に正規化（CRLF → LF）
+2. 先頭行 `:SECRETENV_KV 3` を含む全行（`:SIG` 行を除く）を出現順に連結
+3. 各行末尾に **行終端子** LF (0x0A) を付与
+4. 各行内の **フィールド区切り文字** はスペース (0x20)（タブではない）
+
+バイトレベルの具体例:
+```
+:SECRETENV_KV 3\n      ← 行終端: LF (0x0A)
+:HEAD <token>\n         ← フィールド区切り: スペース (0x20), 行終端: LF
+:WRAP <token>\n         ← フィールド区切り: スペース (0x20), 行終端: LF
+DATABASE_URL <token>\n  ← フィールド区切り: スペース (0x20), 行終端: LF
+```
+
+**区別**: 手順3の LF は**行終端子**であり、手順4のスペースは行ヘッダとトークンの間の**フィールド区切り文字**である。これらは異なる役割を持つ。
+
+```
+canonical_bytes = concat_lines_with_lf(all_lines_except_SIG)
+signature = ed25519_sign(sig_priv, canonical_bytes)
+```
+
+実装: `src/format/kv/enc/canonical.rs` — `build_canonical_bytes` 関数、`src/crypto/sign.rs:126-133` — `sign_kv` 関数
+
+### 8.4 PublicKey 自己署名
+
+PublicKey は `protected` オブジェクトに対する自己署名を持つ:
+
+```
+canonical_bytes = jcs(protected)
+signature = ed25519_sign(identity.keys.sig の秘密鍵, canonical_bytes)
+```
+
+これにより「この公開鍵に対応する秘密鍵を保持する主体がこの PublicKey を作成した」ことを確認できる。
+
+### 8.5 SSH attestation
+
+PublicKey の `identity.keys` に対する SSH 鍵による attestation:
+
+1. `identity.keys` を JCS 正規化
+2. 正規化した bytes の SHA256 を計算
+3. SSH 鍵で署名（namespace: `secretenv`）
+4. Ed25519 raw signature bytes（64 bytes）を抽出して格納
+
+これにより、SecretEnv 鍵ペアと SSH 鍵の紐付けをオフラインで検証可能。
+
+### 8.6 Online 検証（GitHub）
+
+`binding_claims.github_account` が存在する場合、`attestation.pub` の fingerprint を GitHub API で取得した公開鍵と照合する。これにより、SSH 鍵が主張された GitHub アカウントに登録されていることを確認できる。
+
+---
+
+## 9. コンテキスト束縛の設計（Defence-in-Depth）
+
+本章は、SecretEnv の暗号設計における束縛（binding）の考え方を説明する中心的な章である。
+
+### 9.1 束縛要素の体系
+
+| 束縛要素 | 説明 | 防御する攻撃 |
+|---------|------|-------------|
+| `sid` | ファイル識別子（UUID） | 異なるファイル間での暗号文コンポーネント入れ替え |
+| `kid` | 鍵世代 ID（ULID） | 異なる鍵世代への wrap 流用 |
+| `k` | dotenv KEY | 同一 kv-enc 内での entry 入れ替え |
+| `p` | プロトコル識別子 | 異なるプロトコル間でのデータ流用 |
+
+### 9.2 二重束縛の根拠
+
+`sid` が info と AAD の両方に含まれる理由:
+
+**kv-enc の場合:**
+- CEK 導出の info に `sid` を含める → HKDF の段階で `sid` が CEK に影響
+- payload AAD にも `sid` を含める → AEAD の段階でも `sid` を検証
+
+暗号学的には info のみで十分だが、AAD にも含めることで:
+1. **実装バグ耐性**: 誤った `sid` で CEK を導出しても AEAD 検証で失敗
+2. **将来の変更への安全弁**: CEK 導出ロジック変更時の検知層
+3. **誤配線検知**: 異なるファイルの `sid` を誤適用した場合の早期検出
+
+### 9.3 HPKE info = AAD の設計
+
+file-enc wrap では HPKE info と AAD に同一の bytes を使用する:
+
+```
+info_bytes = jcs({"kid": ..., "p": "secretenv:file:hpke-wrap@3", "sid": ...})
+aad_bytes  = info_bytes
+```
+
+これにより KDF 段階と AEAD 段階の両方で同一の束縛を適用し、一方の段階のバイパスがもう一方で検知される。
+
+### 9.4 recipients を payload AAD に含めない設計判断
+
+recipients（wrap 配列の rid 一覧）は payload AAD に**含めない**。
+
+**理由:** `rewrap` で payload を固定したまま wrap のみを差し替え可能にするため。もし recipients を AAD に含めると、recipient の変更のたびに payload 全体の再暗号化が必要になる。
+
+recipients の完全性は **Ed25519 署名**で保護される（wrap は `protected` 内に含まれ、署名対象）。
+
+### 9.5 束縛マトリクス（最重要テーブル）
+
+| 束縛要素 | プロトコル | HPKE info | HPKE AAD | CEK info | payload AAD | 署名 | 防御する攻撃 |
+|---------|----------|-----------|----------|----------|-------------|------|-------------|
+| `sid` | file-enc wrap | **含む** | **= info** | — | — | **含む** | 異なるファイル間の wrap 流用 |
+| `sid` | file-enc payload | — | — | — | **含む** | **含む** | 異なるファイル間の payload 入れ替え |
+| `sid` | kv-enc wrap | **含む** | **= info** | — | — | **含む** | 異なるファイル間の wrap 流用 |
+| `sid` | kv-enc CEK 導出 | — | — | **含む** | — | — | 異なるファイル間の entry コピー |
+| `sid` | kv-enc payload | — | — | — | **含む** | **含む** | defence-in-depth（CEK info との二重化） |
+| `kid` | file-enc wrap | **含む** | **= info** | — | — | **含む** | 古い鍵世代の wrap 流用 |
+| `kid` | kv-enc wrap | **含む** | **= info** | — | — | **含む** | 古い鍵世代の wrap 流用 |
+| `k` | kv-enc payload | — | — | — | **含む** | **含む** | 同一ファイル内の entry 入れ替え |
+| `p` | 全プロトコル | **含む** | **含む** | **含む** | **含む** | — | 異なるプロトコル間のデータ流用 |
+
+**注: HPKE AAD 列について** — file-enc / kv-enc ともに HPKE AAD = HPKE info（同一 bytes）である。これにより KDF 段階と AEAD 段階の両方で同一の束縛が適用される（§9.3 参照）。
+
+### 9.6 実装の対応
+
+| 束縛の構築 | ソースファイル | 関数 |
+|-----------|--------------|------|
+| file-enc HPKE info | `src/format/context/hpke_info.rs` | `file()` |
+| kv-enc HPKE info | `src/format/context/hpke_info.rs` | `kv_file()` |
+| HPKE AAD = info（共通） | `src/feature/envelope/wrap.rs` | `build_wrap_item()` |
+| file-enc payload AAD | `src/format/context/aad.rs` | `file_payload()` |
+| kv-enc payload AAD | `src/format/context/aad.rs` | `kv_payload()` |
+| CEK 導出 info | `src/feature/envelope/cek.rs` | `derive_cek()` |
+| PrivateKey AAD | `src/format/context/aad.rs` | `private_key()` |
+| 識別子定数 | `src/support/wire.rs` | `context` モジュール |
+
+---
+
+## 10. 攻撃シナリオ分析
+
+### 10.1 リポジトリ改ざん
+
+| 項目 | 内容 |
+|------|------|
+| **攻撃** | 攻撃者が `.secretenv/secrets/` 内の暗号ファイルを改ざん |
+| **能力** | リポジトリへの書き込みアクセス |
+| **防御** | Ed25519 署名検証が `protected`（file-enc）またはファイル全体（kv-enc）の改ざんを検知 |
+| **結果** | `E_SIGNATURE_INVALID` で復号拒否 |
+
+### 10.2 公開鍵すり替え
+
+**10.2.1 既存 PublicKey の改竄**
+
+| 項目 | 内容 |
+|------|------|
+| **攻撃** | 攻撃者が `members/active/<id>.json` のフィールドを改竄 |
+| **能力** | リポジトリへの書き込みアクセス |
+| **防御** | (1) 自己署名検証 — 偽の鍵では元の `protected` に対する署名を生成できない (2) SSH attestation 検証 — 元の SSH 鍵による attestation を偽造できない |
+| **結果** | `E_SELF_SIG_INVALID` または `E_ATTESTATION_INVALID` で拒否 |
+
+**10.2.2 攻撃者による新規鍵挿入**
+
+| 項目 | 内容 |
+|------|------|
+| **攻撃** | 攻撃者が自分の SecretEnv 鍵 + SSH 鍵を新規作成し、`members/incoming/` に配置 |
+| **能力** | リポジトリへの書き込みアクセス + 自身の SSH Ed25519 鍵 |
+| **自己署名・attestation** | 攻撃者は自分の鍵で有効な自己署名と attestation を生成可能。これらの検証は成功する |
+| **防御** | (1) TOFU 確認 — `rewrap` 実行時にユーザーが SSH fingerprint と GitHub アカウントを目視確認し、不審な鍵を拒否 (2) Online 検証 — 攻撃者の GitHub アカウントに紐付いた SSH 鍵であることが表示されるため、なりすましを検知可能 |
+| **結果** | TOFU 確認で拒否（ユーザーが正しく判断した場合）。`--force` 使用時はこの防御が無効化されるため、信頼できない鍵による暗号文が受け入れられるリスクがある |
+
+**重要**: 自己署名は既存 PublicKey の改竄を防ぐが、攻撃者が自分の鍵で正規の手順に従って新規 PublicKey を作成することは防げない。新規鍵挿入に対する最終防御は TOFU 確認（§2.5 層3）である。`--force` による TOFU 省略は、この防御を意図的に無効化するものであり、使用には十分な注意が必要である。
+
+### 10.3 payload 入れ替え（異なる secret 間）
+
+| 項目 | 内容 |
+|------|------|
+| **攻撃** | 攻撃者が file-enc A の payload を file-enc B にコピー |
+| **能力** | リポジトリへの書き込みアクセス |
+| **防御** | (1) payload AAD に `sid` が含まれるため、`sid` 不一致で AEAD 復号失敗 (2) 署名検証により `protected` の改ざん（`sid` の書き換え含む）を検知 |
+| **結果** | AEAD 復号失敗または署名検証失敗 |
+
+### 10.4 entry 入れ替え（同一 kv-enc 内）
+
+| 項目 | 内容 |
+|------|------|
+| **攻撃** | 攻撃者が同一 kv-enc 内の entry A の暗号文を entry B にコピー |
+| **能力** | リポジトリへの書き込みアクセス |
+| **防御** | (1) AAD に `k`（KEY）が含まれるため、`k` 不一致で AEAD 復号失敗 (2) 署名検証により行の入れ替えを検知 |
+| **結果** | AEAD 復号失敗または署名検証失敗 |
+
+### 10.5 古い wrap の流用
+
+| 項目 | 内容 |
+|------|------|
+| **攻撃** | 攻撃者が古い鍵世代の wrap_item を新しい暗号ファイルにコピー |
+| **能力** | 古い暗号ファイルへのアクセス |
+| **防御** | HPKE info に `kid` が含まれるため、鍵世代不一致で unwrap 失敗 |
+| **結果** | HPKE unwrap 失敗 |
+
+### 10.6 PrivateKey メタデータ改ざん
+
+| 項目 | 内容 |
+|------|------|
+| **攻撃** | 攻撃者が PrivateKey の `protected` 内のフィールド（例: `expires_at`）を改ざん |
+| **能力** | ローカルファイルシステムへのアクセス |
+| **防御** | AAD が `jcs(protected)` から構築されるため、`protected` の任意のフィールド変更で AEAD 復号失敗 |
+| **結果** | XChaCha20-Poly1305 復号失敗 |
+
+### 10.7 kv-enc 間の entry コピー
+
+| 項目 | 内容 |
+|------|------|
+| **攻撃** | 攻撃者が kv-enc ファイル A の entry を kv-enc ファイル B にコピー |
+| **能力** | リポジトリへの書き込みアクセス |
+| **防御** | (1) ファイル間で MK が異なるため、MK 不一致で CEK 導出が異なり復号失敗 (2) CEK 導出 info に `sid` が含まれるため、仮に同一 MK でも異なる CEK が導出 (3) AAD に `sid` が含まれるため、AEAD 復号も失敗（defence-in-depth） |
+| **結果** | CEK 不一致による AEAD 復号失敗 |
+
+---
+
+## 11. 実装セキュリティ要件
+
+### 11.1 メモリ安全性（Zeroizing）
+
+| 対象 | 要件 | 実装手段 |
+|------|------|---------|
+| KEM 秘密鍵 | 使用後ゼロ化（MUST） | `Zeroizing<[u8; 32]>` |
+| 署名秘密鍵 | 使用後ゼロ化（MUST） | `Zeroizing` wrapper |
+| DEK / MK / CEK | 使用後ゼロ化（MUST） | `Zeroizing` wrapper / `Cek::new` |
+| 復号後の平文 | 使用後ゼロ化（SHOULD） | `Zeroizing<Plaintext>` |
+
+実装例: `src/crypto/kem.rs:21` — `X25519SecretKey(Zeroizing<[u8; 32]>)`
+
+### 11.2 DoS 上限値
+
+| 対象 | 上限値 | 目的 |
+|------|--------|------|
+| wrap 配列の要素数 | 1,000 件 | メモリ枯渇防止 |
+| kv-enc ファイルサイズ | 16 MiB | メモリ枯渇防止 |
+| kv-enc KEY 行数 | 10,000 行 | 計算量爆発防止 |
+| base64url トークン長 | 1 MiB | パース時間制限 |
+| base64url 暗号文長 | 16 MiB | メモリ枯渇防止 |
+| JSON パース深さ | 32 レベル | 計算量爆発防止 |
+| JSON 要素数 | 10,000 要素 | 計算量爆発防止 |
+
+### 11.3 base64url 厳格バリデーション
+
+- 無効文字（`A-Za-z0-9_-` 以外）の拒否
+- padding (`=`) の拒否
+- 空白・改行の拒否
+- 固定長フィールドの検証:
+
+| フィールド | base64url 文字列長 | デコード後バイト長 |
+|-----------|-------------------|------------------|
+| `attestation.sig` | 86 文字 | 64 bytes |
+| `signature_v3.sig` | 86 文字 | 64 bytes |
+| XChaCha20-Poly1305 `nonce` | 32 文字 | 24 bytes |
+| kv-enc entry `salt` | 22 文字 | 16 bytes |
+
+### 11.4 処理順序
+
+復号処理は以下の順序を厳守する:
+
+```
+1. 形式検証（スキーマ適合性）
+2. 署名検証（改ざん検知）
+3. 参照整合性検査（警告のみ）
+4. 復号処理（署名検証成功後のみ）
+```
+
+署名検証をバイパスして復号を実行することは禁止（MUST NOT）。
+
+### 11.5 使用ライブラリ（Rust crate）
+
+| 用途 | crate | 備考 |
+|------|-------|------|
+| HPKE | `hpke` | X25519-HKDF-SHA256 + ChaCha20-Poly1305 |
+| XChaCha20-Poly1305 | `chacha20poly1305` | AEAD |
+| Ed25519 | `ed25519-dalek` | 署名・検証 |
+| HKDF | `hkdf` + `sha2` | 鍵導出 |
+| Zeroizing | `zeroize` | メモリゼロ化 |
+| CSPRNG | `rand` (`OsRng`) | 暗号学的乱数 |
+| base64url | `base64` (`URL_SAFE_NO_PAD`) | エンコード・デコード |
+
+---
+
+## 12. 制限事項と非目標
+
+### 12.1 Forward Secrecy の範囲
+
+HPKE Base mode は ephemeral key により wrap 単位の ephemeral key isolation を提供する。ただし:
+- recipient の長期秘密鍵が漏洩した場合、当該 recipient 向けの**すべての既存 wrap** を unwrap 可能
+- `rewrap --rotate-key` で Content Key を再生成することで、漏洩後に鍵ローテーションを行えば以降の新規暗号化データへの被害拡大を防止できる
+
+**注記:** これは通常の Forward Secrecy（セッション終了後に過去のセッションを復号できない性質）とは異なる。SecretEnv における `--rotate-key` は鍵漏洩後の**被害限定措置**であり、漏洩時点以前に暗号化されたデータの保護を遡及的に強化するものではない。
+
+### 12.2 過去開示の回収不能
+
+recipient を削除しても、過去に復号可能だった内容は暗号学的に回収不能である。`removed_recipients` と `disclosed` フラグにより開示履歴を追跡し、シークレットの更新判断を支援する運用を想定している。
+
+### 12.3 内部者の悪用
+
+workspace メンバーとして参加した者が正当に復号した内容を悪用することは防げない。アクセス制御は SecretEnv のスコープ外であり、別システムで実現する。
+
+### 12.4 policy-less 設計
+
+SecretEnv は「誰がどの secret を持つべきか」を定義する中央ポリシーを提供しない。recipients は暗号ファイル自身（wrap 配列）から導出され、各メンバーが適切に管理することを前提とする。
+
+### 12.5 圧縮の不使用
+
+暗号化前の圧縮は行わない。これは圧縮オラクル攻撃（CRIME/BREACH の系）を回避するための意図的な設計判断である。
+
+---
+
+## 13. 参照仕様・RFC 一覧
+
+| 仕様 | 用途 |
+|------|------|
+| RFC 9180 — Hybrid Public Key Encryption | HPKE (wrap/unwrap) |
+| RFC 8439 — ChaCha20 and Poly1305 | HPKE 内部 AEAD |
+| RFC 8032 — Edwards-Curve Digital Signature Algorithm (EdDSA) | Ed25519 署名 (PureEdDSA) |
+| RFC 8037 — CFRG Elliptic Curve Diffie-Hellman (ECDH) and Signatures in JOSE | JWK OKP 鍵表現 |
+| RFC 7517 — JSON Web Key (JWK) | 鍵表現形式 |
+| RFC 5869 — HMAC-based Extract-and-Expand Key Derivation Function (HKDF) | 鍵導出 |
+| RFC 8785 — JSON Canonicalization Scheme (JCS) | JSON の決定的正規化 |
+| RFC 4648 — The Base16, Base32, and Base64 Data Encodings | base64url エンコード |
+| RFC 2119 — Key words for use in RFCs to Indicate Requirement Levels | 要件レベルキーワード |
+| OpenSSH PROTOCOL.sshsig | SSHSIG 署名形式 |
+| IANA HPKE Registry | HPKE suite ID |
+
+---
+
+## 付録
+
+### 付録 A: 全暗号パラメータ一覧表
+
+| パラメータ | 値 | 用途 |
+|-----------|-----|------|
+| HPKE suite | `hpke-32-1-3` | wrap アルゴリズム識別子 |
+| kem_id | 32 (0x0020) DHKEM(X25519, HKDF-SHA256) | KEM |
+| kdf_id | 1 (0x0001) HKDF-SHA256 | HPKE 内部 KDF |
+| aead_id | 3 (0x0003) ChaCha20-Poly1305 | HPKE 内部 AEAD |
+| payload AEAD | `xchacha20-poly1305` | payload / entry 暗号化 |
+| payload nonce | 24 bytes | XChaCha20-Poly1305 nonce |
+| payload key | 32 bytes | DEK / CEK |
+| signature alg | `eddsa-ed25519` | 署名アルゴリズム |
+| signature size | 64 bytes | Ed25519 raw signature |
+| HKDF output | 32 bytes | CEK / enc_key |
+| salt (kv-enc entry) | 16 bytes | CEK 導出 |
+| salt (PrivateKey) | 16 bytes | enc_key 導出 |
+| AEAD tag | 16 bytes | Poly1305 認証タグ |
+| X25519 public key | 32 bytes | KEM 公開鍵 |
+| X25519 secret key | 32 bytes | KEM 秘密鍵 |
+| Ed25519 public key | 32 bytes | 署名公開鍵 |
+| Ed25519 secret key | 32 bytes | 署名秘密鍵 |
+| PrivateKey KDF | `sshsig-ed25519-hkdf-sha256` | 鍵導出方式識別子 |
+
+### 付録 B: info/AAD バイト列の構築手順と具体例
+
+#### B.1 file-enc HPKE info
+
+```
+入力:
+  sid = "550e8400-e29b-41d4-a716-446655440000"
+  kid = "01HY0G8N3P5X7QRSTV0WXYZ123"
+
+構築:
+  json = {"kid":"01HY0G8N3P5X7QRSTV0WXYZ123","p":"secretenv:file:hpke-wrap@3","sid":"550e8400-e29b-41d4-a716-446655440000"}
+  info_bytes = jcs(json)
+  aad_bytes = info_bytes
+
+定数: context::HPKE_WRAP_FILE_V3 = "secretenv:file:hpke-wrap@3"
+```
+
+#### B.2 kv-enc HPKE info
+
+```
+入力:
+  sid = "550e8400-e29b-41d4-a716-446655440000"
+  kid = "01HY0G8N3P5X7QRSTV0WXYZ123"
+
+構築:
+  json = {"kid":"01HY0G8N3P5X7QRSTV0WXYZ123","p":"secretenv:kv:hpke-wrap@3","sid":"550e8400-e29b-41d4-a716-446655440000"}
+  info_bytes = jcs(json)
+
+定数: context::HPKE_WRAP_KV_FILE_V3 = "secretenv:kv:hpke-wrap@3"
+```
+
+#### B.3 kv-enc CEK 導出 info
+
+```
+入力:
+  sid = "550e8400-e29b-41d4-a716-446655440000"
+
+構築:
+  json = {"p":"secretenv:kv:cek@3","sid":"550e8400-e29b-41d4-a716-446655440000"}
+  info_bytes = jcs(json)
+
+定数: context::KV_CEK_INFO_PREFIX_V3 = "secretenv:kv:cek@3"
+```
+
+#### B.4 kv-enc payload AAD
+
+```
+入力:
+  sid = "550e8400-e29b-41d4-a716-446655440000"
+  k   = "DATABASE_URL"
+
+構築:
+  json = {"k":"DATABASE_URL","p":"secretenv:kv:payload@3","sid":"550e8400-e29b-41d4-a716-446655440000"}
+  aad_bytes = jcs(json)
+
+定数: context::PAYLOAD_KV_V3 = "secretenv:kv:payload@3"
+```
+
+#### B.5 file-enc payload AAD
+
+```
+入力:
+  payload.protected = {
+    "format": "secretenv.file.payload@3",
+    "sid": "550e8400-e29b-41d4-a716-446655440000",
+    "alg": { "aead": "xchacha20-poly1305" }
+  }
+
+構築:
+  aad_bytes = jcs(payload.protected)
+```
+
+#### B.6 PrivateKey AAD
+
+```
+入力:
+  protected = {
+    "format": "secretenv.private.key@3",
+    "member_id": "alice@example.com",
+    "kid": "01HY0G8N3P5X7QRSTV0WXYZ123",
+    "alg": {
+      "kdf": "sshsig-ed25519-hkdf-sha256",
+      "fpr": "sha256:...",
+      "salt": "...",
+      "aead": "xchacha20-poly1305"
+    },
+    "created_at": "2026-01-14T00:00:00Z",
+    "expires_at": "2027-01-14T00:00:00Z"
+  }
+
+構築:
+  aad_bytes = jcs(protected)
+```
+
+#### B.7 PrivateKey 保護 enc_key 導出
+
+```
+入力:
+  kid  = "01HY0G8N3P5X7QRSTV0WXYZ123"
+  salt = <16 bytes from protected.alg.salt>
+
+署名メッセージ:
+  "secretenv:key-protection@3\n01HY0G8N3P5X7QRSTV0WXYZ123\n<hex(salt)>"
+
+IKM:
+  ed25519_raw_signature_bytes (64 bytes)
+
+enc_key:
+  HKDF-SHA256(
+    ikm  = IKM,
+    salt = salt,
+    info = "secretenv:private-key-enc@3:01HY0G8N3P5X7QRSTV0WXYZ123",
+    length = 32
+  )
+
+定数: context::SSH_KEY_PROTECTION_SIGN_MESSAGE_PREFIX_V3 = "secretenv:key-protection@3"
+定数: context::SSH_PRIVATE_KEY_ENC_INFO_PREFIX_V3 = "secretenv:private-key-enc@3"
+```
+
+### 付録 C: 鍵関係図（全体像）
+
+```mermaid
+graph TB
+    subgraph user["ユーザー"]
+        SSH["SSH Ed25519 鍵"]
+    end
+
+    subgraph secretenv_keys["SecretEnv 鍵ペア (kid: ULID)"]
+        KEM_PK["X25519 公開鍵"]
+        KEM_SK["X25519 秘密鍵"]
+        SIG_PK["Ed25519 公開鍵"]
+        SIG_SK["Ed25519 秘密鍵"]
+    end
+
+    subgraph public_key["PublicKey (workspace)"]
+        PK_DOC["secretenv.public.key@3<br/>自己署名 + SSH attestation"]
+    end
+
+    subgraph private_key["PrivateKey (local keystore)"]
+        PK_ENC["secretenv.private.key@3<br/>SSH 署名ベース暗号化"]
+    end
+
+    subgraph file_enc["file-enc"]
+        DEK["DEK (32 bytes)"]
+        FILE_WRAP["wrap (HPKE)"]
+        FILE_PAYLOAD["payload (XChaCha20-Poly1305)"]
+        FILE_SIG["signature (Ed25519)"]
+    end
+
+    subgraph kv_enc["kv-enc"]
+        MK["MK (32 bytes)"]
+        KV_WRAP["WRAP 行 (HPKE)"]
+        CEK["CEK (HKDF 導出)"]
+        ENTRY["entry (XChaCha20-Poly1305)"]
+        KV_SIG["SIG 行 (Ed25519)"]
+    end
+
+    SSH -->|attestation| PK_DOC
+    SSH -->|IKM 導出| PK_ENC
+    KEM_PK --> PK_DOC
+    SIG_PK --> PK_DOC
+    KEM_SK --> PK_ENC
+    SIG_SK --> PK_ENC
+
+    KEM_PK -->|HPKE Encaps| FILE_WRAP
+    KEM_PK -->|HPKE Encaps| KV_WRAP
+    DEK --> FILE_WRAP
+    DEK --> FILE_PAYLOAD
+    SIG_SK --> FILE_SIG
+
+    MK --> KV_WRAP
+    MK -->|HKDF| CEK
+    CEK --> ENTRY
+    SIG_SK --> KV_SIG
+
+    style SSH fill:#FFB6C1
+    style DEK fill:#FFE4B5
+    style MK fill:#FFE4B5
+    style CEK fill:#90EE90
+```
+

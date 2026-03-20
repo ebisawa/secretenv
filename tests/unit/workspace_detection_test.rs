@@ -1,0 +1,331 @@
+// Copyright 2026 Satoshi Ebisawa
+// SPDX-License-Identifier: Apache-2.0
+
+//! Unit tests for workspace detection (Phase 5.5 - TDD Red phase)
+
+use crate::test_utils::EnvGuard;
+use secretenv::io::workspace::detection::{detect_workspace_root, resolve_workspace};
+use std::env;
+use std::fs;
+use std::path::PathBuf;
+use tempfile::TempDir;
+
+/// Helper to create a workspace structure
+fn create_workspace(root: &TempDir) -> (PathBuf, PathBuf) {
+    let repo_root = root.path().canonicalize().unwrap();
+    fs::create_dir_all(repo_root.join(".git")).unwrap();
+
+    let workspace_root = repo_root.join(".secretenv");
+    fs::create_dir_all(workspace_root.join("members/active")).unwrap();
+    fs::create_dir_all(workspace_root.join("secrets")).unwrap();
+
+    (repo_root, workspace_root)
+}
+
+#[test]
+fn test_detect_workspace_in_current_directory() {
+    let temp = TempDir::new().unwrap();
+    let (repo_root, workspace_root) = create_workspace(&temp);
+
+    let result = detect_workspace_root(&repo_root);
+    assert!(result.is_ok());
+    let workspace = result.unwrap();
+    assert_eq!(workspace.root_path, workspace_root);
+}
+
+#[test]
+fn test_detect_workspace_in_parent_directory() {
+    let temp = TempDir::new().unwrap();
+    let (repo_root, workspace_root) = create_workspace(&temp);
+
+    // Create a subdirectory
+    let sub_dir = repo_root.join("subdir");
+    fs::create_dir(&sub_dir).unwrap();
+
+    let result = detect_workspace_root(&sub_dir);
+    assert!(result.is_ok());
+    let workspace = result.unwrap();
+    assert_eq!(workspace.root_path, workspace_root);
+}
+
+#[test]
+fn test_detect_workspace_with_marker_file() {
+    let temp = TempDir::new().unwrap();
+    let (repo_root, workspace_root) = create_workspace(&temp);
+
+    // Create .secretenv-root marker
+    fs::write(workspace_root.join(".secretenv-root"), "").unwrap();
+
+    let result = detect_workspace_root(&repo_root);
+    assert!(result.is_ok());
+    let workspace = result.unwrap();
+    assert_eq!(workspace.root_path, workspace_root);
+    assert!(workspace.has_marker_file);
+}
+
+#[test]
+fn test_detect_workspace_with_toml_config() {
+    let temp = TempDir::new().unwrap();
+    let (repo_root, workspace_root) = create_workspace(&temp);
+
+    // Create config.toml
+    fs::write(
+        workspace_root.join("config.toml"),
+        r#"
+[workspace]
+mode = "git"
+"#,
+    )
+    .unwrap();
+
+    let result = detect_workspace_root(&repo_root);
+    assert!(result.is_ok());
+    let workspace = result.unwrap();
+    assert_eq!(workspace.root_path, workspace_root);
+    assert!(workspace.has_config_file);
+}
+
+#[test]
+fn test_detect_workspace_fails_without_members_directory() {
+    let temp = TempDir::new().unwrap();
+    let root_path = temp.path();
+    fs::create_dir_all(root_path.join(".git")).unwrap();
+
+    // Only create secrets directory
+    fs::create_dir_all(root_path.join("secrets")).unwrap();
+
+    let result = detect_workspace_root(root_path);
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_detect_workspace_fails_without_secrets_directory() {
+    let temp = TempDir::new().unwrap();
+    let root_path = temp.path();
+    fs::create_dir_all(root_path.join(".git")).unwrap();
+
+    // Only create members directory (without active/ subdir and without secrets/)
+    fs::create_dir_all(root_path.join("members")).unwrap();
+
+    let result = detect_workspace_root(root_path);
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_detect_workspace_stops_at_marker() {
+    let temp = TempDir::new().unwrap();
+    let (outer_repo_root, _outer_workspace_root) = create_workspace(&temp);
+
+    // Create marker at outer root
+    fs::write(outer_repo_root.join(".secretenv-root"), "").unwrap();
+
+    // Create inner workspace
+    let inner_dir = outer_repo_root.join("inner");
+    fs::create_dir(&inner_dir).unwrap();
+    fs::create_dir_all(inner_dir.join(".secretenv/members/active")).unwrap();
+    fs::create_dir_all(inner_dir.join(".secretenv/secrets")).unwrap();
+
+    // Detection from inner should find inner workspace first
+    let result = detect_workspace_root(&inner_dir);
+    assert!(result.is_ok());
+    let workspace = result.unwrap();
+    assert_eq!(
+        workspace.root_path,
+        inner_dir.join(".secretenv").canonicalize().unwrap()
+    );
+}
+
+#[test]
+fn test_workspace_root_fields() {
+    let temp = TempDir::new().unwrap();
+    let (repo_root, workspace_root) = create_workspace(&temp);
+    fs::write(workspace_root.join(".secretenv-root"), "").unwrap();
+    fs::write(
+        workspace_root.join("config.toml"),
+        "[workspace]\nmode = \"auto\"",
+    )
+    .unwrap();
+
+    let result = detect_workspace_root(&repo_root);
+    assert!(result.is_ok());
+    let workspace = result.unwrap();
+
+    assert_eq!(workspace.root_path, workspace_root);
+    assert!(workspace.has_marker_file);
+    assert!(workspace.has_config_file);
+    assert_eq!(workspace.members_dir(), workspace_root.join("members"));
+    assert_eq!(workspace.secrets_dir(), workspace_root.join("secrets"));
+}
+
+// Phase 1.3 tests: Environment variable resolution
+
+#[test]
+fn test_resolve_workspace_with_explicit_option() {
+    let _guard = EnvGuard::new(&["SECRETENV_WORKSPACE"]);
+
+    let temp = TempDir::new().unwrap();
+    let (_repo_root, root_path) = create_workspace(&temp);
+
+    // Set environment variable to different path
+    let temp2 = TempDir::new().unwrap();
+    let (_repo_root2, env_path) = create_workspace(&temp2);
+    env::set_var("SECRETENV_WORKSPACE", &env_path);
+
+    // Explicit option should take priority over environment variable
+    let result = resolve_workspace(Some(root_path.clone()));
+    assert!(result.is_ok());
+    let workspace = result.unwrap();
+    assert_eq!(workspace.root_path, root_path);
+}
+
+#[test]
+fn test_resolve_workspace_from_environment_variable() {
+    let _guard = EnvGuard::new(&["SECRETENV_WORKSPACE"]);
+
+    let temp = TempDir::new().unwrap();
+    let (_repo_root, root_path) = create_workspace(&temp);
+
+    // Set environment variable
+    env::set_var("SECRETENV_WORKSPACE", &root_path);
+
+    // No explicit option, should use environment variable
+    let result = resolve_workspace(None);
+    assert!(result.is_ok());
+    let workspace = result.unwrap();
+    assert_eq!(workspace.root_path, root_path);
+}
+
+#[test]
+fn test_resolve_workspace_env_var_invalid_path() {
+    let _guard = EnvGuard::new(&["SECRETENV_WORKSPACE"]);
+
+    // Set environment variable to non-existent path
+    env::set_var("SECRETENV_WORKSPACE", "/nonexistent/path");
+
+    let result = resolve_workspace(None);
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_resolve_workspace_env_var_not_workspace() {
+    let _guard = EnvGuard::new(&["SECRETENV_WORKSPACE"]);
+
+    let temp = TempDir::new().unwrap();
+    let root_path = temp.path().canonicalize().unwrap();
+
+    // Create directory without members/secrets
+    env::set_var("SECRETENV_WORKSPACE", &root_path);
+
+    let result = resolve_workspace(None);
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_resolve_workspace_fallback_to_search() {
+    let _guard = EnvGuard::new(&["SECRETENV_WORKSPACE"]);
+
+    let temp = TempDir::new().unwrap();
+    let (repo_root, workspace_root) = create_workspace(&temp);
+
+    // Create subdirectory
+    let sub_dir = repo_root.join("subdir");
+    fs::create_dir(&sub_dir).unwrap();
+
+    // No option, no env var, should search from current directory
+    // We need to change directory for this test
+    let original_dir = env::current_dir().unwrap();
+    env::set_current_dir(&sub_dir).unwrap();
+
+    // Ensure no environment variable is set
+    env::remove_var("SECRETENV_WORKSPACE");
+
+    let result = resolve_workspace(None);
+    assert!(result.is_ok());
+    let workspace = result.unwrap();
+    assert_eq!(workspace.root_path, workspace_root);
+
+    // Restore original directory
+    env::set_current_dir(original_dir).unwrap();
+}
+
+#[test]
+fn test_resolve_workspace_priority_order() {
+    let _guard = EnvGuard::new(&["SECRETENV_WORKSPACE"]);
+
+    let temp1 = TempDir::new().unwrap();
+    let (_repo_root1, opt_path) = create_workspace(&temp1);
+
+    let temp2 = TempDir::new().unwrap();
+    let (_repo_root2, env_path) = create_workspace(&temp2);
+
+    let temp3 = TempDir::new().unwrap();
+    let (search_repo_root, search_workspace_root) = create_workspace(&temp3);
+    let sub_dir = search_repo_root.join("subdir");
+    fs::create_dir(&sub_dir).unwrap();
+
+    // Set environment variable
+    env::set_var("SECRETENV_WORKSPACE", &env_path);
+
+    // Change to subdirectory of search_path
+    let original_dir = env::current_dir().unwrap();
+    env::set_current_dir(&sub_dir).unwrap();
+
+    // Test priority: option > env > search
+    // 1. With option provided
+    let result = resolve_workspace(Some(opt_path.clone()));
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap().root_path, opt_path);
+
+    // 2. Without option (should use env)
+    let result = resolve_workspace(None);
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap().root_path, env_path);
+
+    // 3. Without option and without env (should use search)
+    env::remove_var("SECRETENV_WORKSPACE");
+    let result = resolve_workspace(None);
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap().root_path, search_workspace_root);
+
+    // Restore
+    env::set_current_dir(original_dir).unwrap();
+}
+
+#[test]
+fn test_check_workspace_requires_active_subdir() {
+    let tmp = TempDir::new().unwrap();
+    fs::create_dir_all(tmp.path().join(".git")).unwrap();
+
+    // members/ と secrets/ だけ → workspace と認識されない
+    fs::create_dir_all(tmp.path().join("members")).unwrap();
+    fs::create_dir_all(tmp.path().join("secrets")).unwrap();
+    let result = detect_workspace_root(tmp.path());
+    assert!(
+        result.is_err(),
+        "members/active/ がなければ workspace と認識しない"
+    );
+
+    // members/active/ も追加 → workspace と認識される
+    fs::create_dir_all(tmp.path().join("members/active")).unwrap();
+    let result = detect_workspace_root(tmp.path());
+    assert!(result.is_err(), "直置き workspace は探索では認識しない");
+}
+
+#[test]
+fn test_check_workspace_secretenv_subdir_requires_active() {
+    let tmp = TempDir::new().unwrap();
+    fs::create_dir_all(tmp.path().join(".git")).unwrap();
+
+    // .secretenv/ に members/ と secrets/ だけ → workspace と認識されない
+    fs::create_dir_all(tmp.path().join(".secretenv/members")).unwrap();
+    fs::create_dir_all(tmp.path().join(".secretenv/secrets")).unwrap();
+    let result = detect_workspace_root(tmp.path());
+    assert!(result.is_err());
+
+    // .secretenv/members/active/ も追加 → workspace と認識される
+    fs::create_dir_all(tmp.path().join(".secretenv/members/active")).unwrap();
+    let result = detect_workspace_root(tmp.path());
+    assert!(result.is_ok());
+    let expected = tmp.path().join(".secretenv").canonicalize().unwrap();
+    assert_eq!(result.unwrap().root_path, expected);
+}

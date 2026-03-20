@@ -1,0 +1,173 @@
+// Copyright 2026 Satoshi Ebisawa
+// SPDX-License-Identifier: Apache-2.0
+
+//! Tests for Verified document types
+
+use secretenv::model::file_enc::FileEncDocument;
+use secretenv::model::file_enc::VerifiedFileEncDocument;
+use secretenv::model::verification::{SignatureVerificationProof, VerifyingKeySource};
+
+#[test]
+fn test_verified_new() {
+    let file_enc_doc = FileEncDocument {
+        protected: secretenv::model::file_enc::FileEncDocumentProtected {
+            format: "secretenv.file@3".to_string(),
+            sid: uuid::Uuid::new_v4(),
+            wrap: vec![],
+            removed_recipients: None,
+            payload: secretenv::model::file_enc::FilePayload {
+                protected: secretenv::model::file_enc::FilePayloadHeader {
+                    format: "secretenv.file.payload@3".to_string(),
+                    sid: uuid::Uuid::new_v4(),
+                    alg: secretenv::model::file_enc::FileEncAlgorithm {
+                        aead: "xchacha20-poly1305".to_string(),
+                    },
+                },
+                encrypted: secretenv::model::file_enc::FilePayloadCiphertext {
+                    nonce: "test".to_string(),
+                    ct: "test".to_string(),
+                },
+            },
+            created_at: "2024-01-01T00:00:00Z".to_string(),
+            updated_at: "2024-01-01T00:00:00Z".to_string(),
+        },
+        signature: secretenv::model::signature::Signature {
+            alg: "eddsa-ed25519".to_string(),
+            kid: "01HY0G8N3P5X7QRSTV0WXYZ123".to_string(),
+            signer_pub: None,
+            sig: "test".to_string(),
+        },
+    };
+
+    let proof = SignatureVerificationProof::new(
+        "alice".to_string(),
+        "01HY0G8N3P5X7QRSTV0WXYZ123".to_string(),
+        VerifyingKeySource::SignerPubEmbedded,
+        Vec::new(),
+    );
+
+    let verified = VerifiedFileEncDocument::new(file_enc_doc.clone(), proof.clone());
+
+    assert_eq!(verified.document(), &file_enc_doc);
+    assert_eq!(verified.proof(), &proof);
+}
+
+#[test]
+fn test_verified_map() {
+    let file_enc_doc = FileEncDocument {
+        protected: secretenv::model::file_enc::FileEncDocumentProtected {
+            format: "secretenv.file@3".to_string(),
+            sid: uuid::Uuid::new_v4(),
+            wrap: vec![],
+            removed_recipients: None,
+            payload: secretenv::model::file_enc::FilePayload {
+                protected: secretenv::model::file_enc::FilePayloadHeader {
+                    format: "secretenv.file.payload@3".to_string(),
+                    sid: uuid::Uuid::new_v4(),
+                    alg: secretenv::model::file_enc::FileEncAlgorithm {
+                        aead: "xchacha20-poly1305".to_string(),
+                    },
+                },
+                encrypted: secretenv::model::file_enc::FilePayloadCiphertext {
+                    nonce: "test".to_string(),
+                    ct: "test".to_string(),
+                },
+            },
+            created_at: "2024-01-01T00:00:00Z".to_string(),
+            updated_at: "2024-01-01T00:00:00Z".to_string(),
+        },
+        signature: secretenv::model::signature::Signature {
+            alg: "eddsa-ed25519".to_string(),
+            kid: "01HY0G8N3P5X7QRSTV0WXYZ123".to_string(),
+            signer_pub: None,
+            sig: "test".to_string(),
+        },
+    };
+
+    let proof = SignatureVerificationProof::new(
+        "alice".to_string(),
+        "01HY0G8N3P5X7QRSTV0WXYZ123".to_string(),
+        VerifyingKeySource::SignerPubEmbedded,
+        Vec::new(),
+    );
+
+    let verified = VerifiedFileEncDocument::new(file_enc_doc, proof.clone());
+
+    // Note: map is not available for VerifiedFileEncDocument, so we test into_inner instead
+    let (_, extracted_proof) = verified.into_inner();
+
+    assert_eq!(extracted_proof, proof);
+}
+
+#[test]
+fn test_verified_into_inner() {
+    let file_enc_doc = FileEncDocument {
+        protected: secretenv::model::file_enc::FileEncDocumentProtected {
+            format: "secretenv.file@3".to_string(),
+            sid: uuid::Uuid::new_v4(),
+            wrap: vec![],
+            removed_recipients: None,
+            payload: secretenv::model::file_enc::FilePayload {
+                protected: secretenv::model::file_enc::FilePayloadHeader {
+                    format: "secretenv.file.payload@3".to_string(),
+                    sid: uuid::Uuid::new_v4(),
+                    alg: secretenv::model::file_enc::FileEncAlgorithm {
+                        aead: "xchacha20-poly1305".to_string(),
+                    },
+                },
+                encrypted: secretenv::model::file_enc::FilePayloadCiphertext {
+                    nonce: "test".to_string(),
+                    ct: "test".to_string(),
+                },
+            },
+            created_at: "2024-01-01T00:00:00Z".to_string(),
+            updated_at: "2024-01-01T00:00:00Z".to_string(),
+        },
+        signature: secretenv::model::signature::Signature {
+            alg: "eddsa-ed25519".to_string(),
+            kid: "01HY0G8N3P5X7QRSTV0WXYZ123".to_string(),
+            signer_pub: None,
+            sig: "test".to_string(),
+        },
+    };
+
+    let proof = SignatureVerificationProof::new(
+        "alice".to_string(),
+        "01HY0G8N3P5X7QRSTV0WXYZ123".to_string(),
+        VerifyingKeySource::SignerPubEmbedded,
+        Vec::new(),
+    );
+
+    let verified = VerifiedFileEncDocument::new(file_enc_doc.clone(), proof.clone());
+    let (document, extracted_proof) = verified.into_inner();
+
+    assert_eq!(document, file_enc_doc);
+    assert_eq!(extracted_proof, proof);
+}
+
+#[test]
+fn test_verified_binding_claims_new() {
+    use secretenv::model::public_key::VerifiedBindingClaims;
+    use secretenv::model::public_key::{BindingClaims, GithubAccount};
+    use secretenv::model::verification::BindingVerificationProof;
+
+    let claims = BindingClaims {
+        github_account: Some(GithubAccount {
+            id: 12345,
+            login: "alice".to_string(),
+        }),
+    };
+    let proof = BindingVerificationProof::new(
+        "github".to_string(),
+        Some("SHA256:abc123".to_string()),
+        Some(42),
+    );
+
+    let verified = VerifiedBindingClaims::new(claims.clone(), proof.clone());
+
+    assert_eq!(verified.claims(), &claims);
+    assert_eq!(verified.proof(), &proof);
+    assert_eq!(verified.claims().github_account.as_ref().unwrap().id, 12345);
+    assert_eq!(verified.proof().method, "github");
+    assert_eq!(verified.proof().matched_key_id, Some(42));
+}

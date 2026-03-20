@@ -1,0 +1,73 @@
+// Copyright 2026 Satoshi Ebisawa
+// SPDX-License-Identifier: Apache-2.0
+
+//! Atomic file write operations.
+
+use crate::support::path::display_path_relative_to_cwd;
+use crate::{Error, Result};
+use serde::Serialize;
+use std::fs;
+use std::io::Write;
+use std::path::Path;
+use tempfile::NamedTempFile;
+
+/// Ensure parent directory exists
+fn ensure_parent_dir(path: &Path) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|e| Error::Io {
+            message: format!(
+                "Failed to create directory {}: {}",
+                display_path_relative_to_cwd(parent),
+                e
+            ),
+            source: Some(e),
+        })?;
+    }
+    Ok(())
+}
+
+/// Save JSON data atomically (write-then-rename)
+pub fn save_json<T: Serialize>(path: &Path, data: &T) -> Result<()> {
+    ensure_parent_dir(path)?;
+    let json = serde_json::to_string_pretty(data).map_err(|e| Error::Parse {
+        message: format!("JSON serialization failed: {}", e),
+        source: Some(Box::new(e)),
+    })?;
+    save_bytes(path, json.as_bytes())
+}
+
+/// Save text content atomically
+pub fn save_text(path: &Path, content: &str) -> Result<()> {
+    ensure_parent_dir(path)?;
+    save_bytes(path, content.as_bytes())
+}
+
+/// Save bytes atomically
+pub fn save_bytes(path: &Path, data: &[u8]) -> Result<()> {
+    let parent = path.parent().unwrap_or_else(|| Path::new("."));
+    let mut temp = NamedTempFile::new_in(parent).map_err(|e| Error::Io {
+        message: format!("Failed to create temp file: {}", e),
+        source: Some(e),
+    })?;
+
+    temp.write_all(data).map_err(|e| Error::Io {
+        message: format!("Write failed: {}", e),
+        source: Some(e),
+    })?;
+
+    temp.flush().map_err(|e| Error::Io {
+        message: format!("Flush failed: {}", e),
+        source: Some(e),
+    })?;
+
+    temp.persist(path).map_err(|e| Error::Io {
+        message: format!(
+            "Persist to {} failed: {}",
+            display_path_relative_to_cwd(path),
+            e.error
+        ),
+        source: Some(e.error),
+    })?;
+
+    Ok(())
+}

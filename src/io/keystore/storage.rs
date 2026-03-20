@@ -1,0 +1,156 @@
+// Copyright 2026 Satoshi Ebisawa
+// SPDX-License-Identifier: Apache-2.0
+
+//! Keystore storage operations for v3
+//!
+//! Save and load PrivateKey and PublicKey.
+
+use crate::io::json::load_json_file;
+use crate::model::private_key::PrivateKey;
+use crate::model::public_key::PublicKey;
+use crate::support::fs::{atomic, ensure_dir, list_dir};
+use crate::support::path::display_path_relative_to_cwd;
+use crate::{Error, Result};
+use std::fs;
+use std::path::{Path, PathBuf};
+
+// ============================================================================
+// Path Helpers
+// ============================================================================
+
+/// Build the key directory path
+fn key_dir(keystore_root: &Path, member_id: &str, kid: &str) -> PathBuf {
+    keystore_root.join(member_id).join(kid)
+}
+
+/// Write key pair files to a temporary directory, cleaning up on failure.
+fn save_key_pair_to_tmp(
+    tmp_dir: &Path,
+    private_key: &PrivateKey,
+    public_key: &PublicKey,
+) -> Result<()> {
+    let result: Result<()> = (|| {
+        atomic::save_json(&tmp_dir.join("private.json"), private_key)?;
+        atomic::save_json(&tmp_dir.join("public.json"), public_key)?;
+        Ok(())
+    })();
+
+    if let Err(e) = result {
+        let _ = fs::remove_dir_all(tmp_dir);
+        return Err(e);
+    }
+
+    Ok(())
+}
+
+/// キーペアをアトミックに保存
+///
+/// 1. 一時ディレクトリ <member_id>/.tmp-<uuid>/ を作成
+/// 2. private.json, public.json を書き込み
+/// 3. rename で <member_id>/<kid>/ に移動
+///    → ディレクトリは完全か存在しないかのどちらか
+pub fn save_key_pair_atomic(
+    keystore_root: &Path,
+    member_id: &str,
+    kid: &str,
+    private_key: &PrivateKey,
+    public_key: &PublicKey,
+) -> Result<()> {
+    let member_dir = keystore_root.join(member_id);
+    ensure_dir(&member_dir)?;
+
+    let tmp_name = format!(".tmp-{}", uuid::Uuid::new_v4());
+    let tmp_dir = member_dir.join(&tmp_name);
+    ensure_dir(&tmp_dir)?;
+
+    save_key_pair_to_tmp(&tmp_dir, private_key, public_key)?;
+
+    let final_dir = member_dir.join(kid);
+    fs::rename(&tmp_dir, &final_dir).map_err(|e| Error::Io {
+        message: format!(
+            "Failed to rename {} to {}: {}",
+            display_path_relative_to_cwd(&tmp_dir),
+            display_path_relative_to_cwd(&final_dir),
+            e
+        ),
+        source: Some(e),
+    })?;
+
+    Ok(())
+}
+
+/// Load PrivateKey from keystore
+pub fn load_private_key(keystore_root: &Path, member_id: &str, kid: &str) -> Result<PrivateKey> {
+    let path = key_dir(keystore_root, member_id, kid).join("private.json");
+    load_json_file(&path, "private key")
+}
+
+/// Load PublicKey from keystore
+pub fn load_public_key(keystore_root: &Path, member_id: &str, kid: &str) -> Result<PublicKey> {
+    let path = key_dir(keystore_root, member_id, kid).join("public.json");
+    load_json_file(&path, "public key")
+}
+
+/// List directory names in a path, filtering by predicate
+///
+/// Returns sorted list of directory names that pass the filter.
+fn list_directories(path: &Path, filter: impl Fn(&str) -> bool) -> Result<Vec<String>> {
+    if !path.exists() {
+        return Ok(Vec::new());
+    }
+
+    let entries = list_dir(path)?;
+
+    let mut names: Vec<String> = entries
+        .filter_map(|entry| {
+            let entry = entry.ok()?;
+            let dir_path = entry.path();
+            if dir_path.is_dir() {
+                let name = dir_path.file_name()?.to_str()?;
+                if filter(name) {
+                    return Some(name.to_string());
+                }
+            }
+            None
+        })
+        .collect();
+
+    names.sort();
+    Ok(names)
+}
+
+/// List all key IDs for a member
+///
+/// Returns key IDs sorted lexicographically (chronologically for ULIDs).
+pub fn list_kids(keystore_root: &Path, member_id: &str) -> Result<Vec<String>> {
+    let member_path = keystore_root.join(member_id);
+    list_directories(
+        &member_path,
+        |name| name != "active", // Skip "active" file
+    )
+}
+
+/// List all member IDs in the keystore
+///
+/// Returns member IDs sorted lexicographically.
+pub fn list_member_ids(keystore_root: &Path) -> Result<Vec<String>> {
+    list_directories(keystore_root, |_| true)
+}
+
+/// Find member_id by kid (scanning all members in keystore)
+///
+/// Scans all members in the keystore and returns the member_id that owns
+/// the given kid directory. Since kid is a ULID (globally unique), at most
+/// one member will match.
+pub fn find_member_by_kid(keystore_root: &Path, kid: &str) -> Result<String> {
+    let member_ids = list_member_ids(keystore_root)?;
+    for member_id in member_ids {
+        let kid_dir = keystore_root.join(&member_id).join(kid);
+        if kid_dir.is_dir() {
+            return Ok(member_id);
+        }
+    }
+    Err(Error::NotFound {
+        message: format!("kid '{}' not found in keystore", kid),
+    })
+}

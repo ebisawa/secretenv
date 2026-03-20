@@ -1,0 +1,174 @@
+// Copyright 2026 Satoshi Ebisawa
+// SPDX-License-Identifier: Apache-2.0
+
+//! Configuration types (Phase 10 - TDD Refactor phase)
+//!
+//! Defines the data structures for secretenv configuration.
+
+use serde::{Deserialize, Serialize};
+
+/// Default ssh-add command path
+const DEFAULT_SSH_ADD_PATH: &str = "ssh-add";
+
+/// Default ssh-keygen command path
+const DEFAULT_SSH_KEYGEN_PATH: &str = "ssh-keygen";
+
+/// Signing method configuration value
+///
+/// Represents the user's configured preference for SSH signing.
+/// `Auto` selects ssh-agent if available, otherwise ssh-keygen.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "kebab-case")]
+pub enum SshSignerConfig {
+    /// Automatically select based on ssh-agent availability
+    #[default]
+    Auto,
+    /// Use ssh-agent protocol directly
+    SshAgent,
+    /// Use ssh-keygen -Y sign
+    SshKeygen,
+}
+
+/// Signing method for SSH signature operations
+///
+/// This enum determines how SSH signatures are obtained for
+/// LocalIdentityEncrypted operations (SA-SIG-KDF).
+/// This is the resolved (concrete) method, not the user's configuration.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SshSigner {
+    /// Use ssh-agent protocol directly (method A)
+    SshAgent,
+    /// Use ssh-keygen -Y sign with SSHSIG parsing (method B)
+    SshKeygen,
+}
+
+impl std::fmt::Display for SshSigner {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SshSigner::SshAgent => write!(f, "ssh-agent"),
+            SshSigner::SshKeygen => write!(f, "ssh-keygen"),
+        }
+    }
+}
+
+/// SSH-related configuration
+///
+/// Controls how secretenv interacts with SSH tooling for signature operations.
+/// All fields have sensible defaults and can be omitted in TOML.
+///
+/// # Default Values
+///
+/// - `ssh_add_path`: `"ssh-add"`
+/// - `ssh_keygen_path`: `"ssh-keygen"`
+/// - `ssh_signer`: `SshSignerConfig::Auto`
+///
+/// # TOML Example
+///
+/// ```toml
+/// [ssh]
+/// ssh_add_path = "/usr/local/bin/ssh-add"
+/// ssh_keygen_path = "/usr/local/bin/ssh-keygen"
+/// ssh_signer = "auto"
+/// ```
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SshConfig {
+    /// Path to ssh-add command
+    ///
+    /// Used for listing loaded SSH keys (`ssh-add -L`).
+    /// Default: `"ssh-add"`
+    #[serde(default = "default_ssh_add_path")]
+    pub ssh_add_path: String,
+
+    /// Path to ssh-keygen command
+    ///
+    /// Used for `ssh-keygen -Y sign` operations when `ssh_signer` is `SshKeygen`.
+    /// Default: `"ssh-keygen"`
+    #[serde(default = "default_ssh_keygen_path")]
+    pub ssh_keygen_path: String,
+
+    /// Signing method to use
+    ///
+    /// Determines how SSH signatures are obtained for LocalIdentityEncrypted.
+    /// Default: `SshSignerConfig::Auto`
+    #[serde(default, rename = "ssh_signer")]
+    pub signing_method: SshSignerConfig,
+}
+
+impl Default for SshConfig {
+    fn default() -> Self {
+        Self {
+            ssh_add_path: DEFAULT_SSH_ADD_PATH.to_string(),
+            ssh_keygen_path: DEFAULT_SSH_KEYGEN_PATH.to_string(),
+            signing_method: SshSignerConfig::default(),
+        }
+    }
+}
+
+fn default_ssh_add_path() -> String {
+    DEFAULT_SSH_ADD_PATH.to_string()
+}
+
+fn default_ssh_keygen_path() -> String {
+    DEFAULT_SSH_KEYGEN_PATH.to_string()
+}
+
+/// Identity-related configuration
+///
+/// Contains the local member identifier for this user.
+///
+/// # TOML Example
+///
+/// ```toml
+/// [identity]
+/// member_id = "alice"
+/// ```
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct IdentityConfig {
+    /// Member identifier
+    ///
+    /// Must match pattern: ^[a-z][a-z0-9-]{0,31}$
+    /// Empty string indicates not configured (will prompt on first use).
+    /// Default: `""`
+    #[serde(default)]
+    pub member_id: String,
+}
+
+/// Top-level configuration document
+///
+/// Root structure for `~/.config/secretenv/config.toml`.
+///
+/// # Format
+///
+/// Must include `format = "secretenv/config@1"` for version validation.
+/// The `ssh` section is optional and uses defaults if omitted.
+///
+/// # TOML Example
+///
+/// ```toml
+/// format = "secretenv/config@1"
+///
+/// [identity]
+/// member_id = "alice"
+///
+/// [ssh]
+/// ssh_signer = "auto"
+/// ```
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConfigDocument {
+    /// Format version (must be "secretenv/config@1")
+    ///
+    /// Used for forward compatibility. Loading will fail if format is unsupported.
+    pub format: String,
+
+    /// Identity configuration
+    ///
+    /// Contains the local member identifier. Defaults to empty if omitted.
+    #[serde(default)]
+    pub identity: IdentityConfig,
+
+    /// SSH configuration
+    ///
+    /// Controls SSH signing behavior. Defaults to `SshConfig::default()` if omitted.
+    #[serde(default)]
+    pub ssh: SshConfig,
+}

@@ -1,0 +1,170 @@
+// Copyright 2026 Satoshi Ebisawa
+// SPDX-License-Identifier: Apache-2.0
+
+use secretenv::crypto::kdf::expand_to_array;
+use secretenv::crypto::types::data::{Ikm, Info};
+use secretenv::crypto::types::keys::XChaChaKey;
+use secretenv::crypto::types::primitives::Salt;
+use secretenv::feature::key::protection::key_derivation::build_sign_message;
+use secretenv::feature::key::protection::{
+    decrypt_private_key, encrypt_private_key, PrivateKeyEncryptionParams,
+};
+use secretenv::io::ssh::backend::signature_backend::SignatureBackend;
+use secretenv::io::ssh::protocol::types::Ed25519RawSignature;
+use secretenv::model::identifiers::context::{
+    SSH_KEY_PROTECTION_SIGN_MESSAGE_PREFIX_V3, SSH_PRIVATE_KEY_ENC_INFO_PREFIX_V3,
+};
+
+fn derive_enc_key(raw_sig: &[u8], salt: &Salt, kid: &str) -> secretenv::Result<XChaChaKey> {
+    let ikm = Ikm::from(raw_sig);
+    let info = Info::from_string(&format!("{}:{}", SSH_PRIVATE_KEY_ENC_INFO_PREFIX_V3, kid));
+    let cek = expand_to_array(&ikm, Some(salt), &info)?;
+    XChaChaKey::from_slice(cek.as_bytes())
+}
+
+#[test]
+fn test_build_sign_message() {
+    let kid = "01HN8Z3Q4R5S6T7V8W9X0Y1Z2A";
+    let salt = Salt::new([0u8; 16]);
+
+    let message = build_sign_message(kid, &salt);
+
+    // Should start with protocol identifier
+    assert!(message.starts_with(&format!("{}\n", SSH_KEY_PROTECTION_SIGN_MESSAGE_PREFIX_V3)));
+
+    // Should contain kid
+    assert!(message.contains(kid));
+
+    // Should contain hex-encoded salt
+    let salt_hex = hex::encode(salt.as_bytes());
+    assert!(message.contains(&salt_hex));
+}
+
+#[test]
+fn test_build_sign_message_format() {
+    let kid = "01HXYZ1234ABCDEFGHJKMNPQRS";
+    let salt = Salt::new([0xAB; 16]);
+
+    let message = build_sign_message(kid, &salt);
+
+    // Format: "{prefix}\n{kid}\n{hex(salt)}"
+    let expected = format!(
+        "{}\n{}\n{}",
+        SSH_KEY_PROTECTION_SIGN_MESSAGE_PREFIX_V3,
+        kid,
+        hex::encode(salt.as_bytes())
+    );
+
+    assert_eq!(message, expected);
+}
+
+#[test]
+fn test_derive_enc_key() {
+    // Test key derivation from signature
+    let raw_sig = [0u8; 64]; // Simulated Ed25519 signature
+    let salt = Salt::new([1u8; 16]);
+    let kid = "01HN8Z3Q4R5S6T7V8W9X0Y1Z2A";
+
+    let enc_key = derive_enc_key(&raw_sig, &salt, kid).unwrap();
+
+    // Should be 32 bytes
+    assert_eq!(enc_key.as_bytes().len(), 32);
+
+    // Should be deterministic
+    let enc_key2 = derive_enc_key(&raw_sig, &salt, kid).unwrap();
+    assert_eq!(enc_key.as_bytes(), enc_key2.as_bytes());
+}
+
+#[test]
+fn test_derive_enc_key_different_inputs() {
+    // Different inputs should produce different keys
+    let raw_sig = [0u8; 64];
+    let salt = Salt::new([1u8; 16]);
+    let kid1 = "01HN8Z3Q4R5S6T7V8W9X0Y1Z2A";
+    let kid2 = "01HXYZ1234ABCDEFGHJKMNPQRS";
+
+    let key1 = derive_enc_key(&raw_sig, &salt, kid1).unwrap();
+    let key2 = derive_enc_key(&raw_sig, &salt, kid2).unwrap();
+
+    assert_ne!(key1.as_bytes(), key2.as_bytes());
+}
+
+#[test]
+fn test_derive_enc_key_info_format() {
+    // Verify the info string format
+    let raw_sig = [0u8; 64];
+    let salt = Salt::new([1u8; 16]);
+    let kid = "01HN8Z3Q4R5S6T7V8W9X0Y1Z2A";
+
+    // This should not panic
+    derive_enc_key(&raw_sig, &salt, kid).unwrap();
+
+    // The info should be "secretenv:private-key-enc@3:{kid}"
+    // We can't directly test the internal info, but we can verify it's consistent
+}
+
+#[test]
+fn test_encrypt_decrypt_private_key_roundtrip_with_deterministic_backend() {
+    use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+    use base64::Engine;
+    use secretenv::model::private_key::{
+        IdentityKeysPrivate, JwkOkpPrivateKey, PrivateKeyPlaintext,
+    };
+
+    // Deterministic backend avoids ssh-agent / ssh-keygen and user interaction.
+    struct DeterministicBackend;
+    impl SignatureBackend for DeterministicBackend {
+        fn sign_for_ikm(
+            &self,
+            _pubkey: &str,
+            _challenge: &[u8],
+        ) -> secretenv::Result<Ed25519RawSignature> {
+            Ok(Ed25519RawSignature::new([0xAB; 64]))
+        }
+    }
+
+    let b64 = |data: &[u8]| URL_SAFE_NO_PAD.encode(data);
+    let plaintext = PrivateKeyPlaintext {
+        keys: IdentityKeysPrivate {
+            kem: JwkOkpPrivateKey {
+                kty: "OKP".to_string(),
+                crv: secretenv::model::identifiers::jwk::CRV_X25519.to_string(),
+                x: b64(&[2u8; 32]),
+                d: b64(&[1u8; 32]),
+            },
+            sig: JwkOkpPrivateKey {
+                kty: "OKP".to_string(),
+                crv: secretenv::model::identifiers::jwk::CRV_ED25519.to_string(),
+                x: b64(&[4u8; 32]),
+                d: b64(&[3u8; 32]),
+            },
+        },
+    };
+
+    let member_id = "alice";
+    let kid = "01HXYZ1234ABCDEFGHJKMNPQRS";
+    let ssh_pubkey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFakeKeyForTestsOnly alice@test";
+    let ssh_fpr = "sha256:test-fpr";
+    let created_at = "2026-01-01T00:00:00Z";
+    let expires_at = "2027-01-01T00:00:00Z";
+
+    let backend = DeterministicBackend;
+
+    let encrypted = encrypt_private_key(&PrivateKeyEncryptionParams {
+        plaintext: &plaintext,
+        member_id: member_id.to_string(),
+        kid: kid.to_string(),
+        backend: &backend,
+        ssh_pubkey,
+        ssh_fpr: ssh_fpr.to_string(),
+        created_at: created_at.to_string(),
+        expires_at: expires_at.to_string(),
+        debug: false,
+    })
+    .expect("encrypt_private_key should succeed");
+
+    let decrypted = decrypt_private_key(&encrypted, &backend, ssh_pubkey, false)
+        .expect("decrypt_private_key should succeed");
+
+    assert_eq!(decrypted, plaintext);
+}

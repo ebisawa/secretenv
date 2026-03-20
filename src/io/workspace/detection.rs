@@ -1,0 +1,16 @@
+// Copyright 2026 Satoshi Ebisawa
+// SPDX-License-Identifier: Apache-2.0
+
+//! Workspace detection logic.
+
+mod resolution;
+mod search;
+
+pub use resolution::{
+    resolve_optional_workspace, resolve_workspace, resolve_workspace_creation_path,
+};
+pub use search::{detect_workspace_root, WorkspaceRoot};
+
+#[cfg(test)]
+#[path = "../../../tests/unit/workspace_detection_internal_test.rs"]
+mod tests;

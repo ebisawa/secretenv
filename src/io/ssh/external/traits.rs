@@ -1,0 +1,40 @@
+// Copyright 2026 Satoshi Ebisawa
+// SPDX-License-Identifier: Apache-2.0
+
+//! Traits for abstracting external SSH command execution.
+//!
+//! These traits enable dependency injection of ssh-keygen and ssh-add commands,
+//! allowing mock implementations for testing without `#[cfg(test)]` conditional compilation.
+
+use crate::Result;
+use std::path::Path;
+
+/// Abstraction over the `ssh-keygen` command.
+///
+/// Implementations handle temp file management internally.
+pub trait SshKeygen: Send + Sync {
+    /// `ssh-keygen -y -f <key_path>` — derive public key from private key.
+    fn derive_public_key(&self, key_path: &Path) -> Result<String>;
+
+    /// `ssh-keygen -Y sign` — produce an SSHSIG armored signature.
+    /// Temp file creation/deletion is managed internally.
+    fn sign(&self, key_path: &Path, namespace: &str, data: &[u8]) -> Result<String>;
+
+    /// `ssh-keygen -Y verify` — verify an SSHSIG armored signature.
+    /// Temp files (allowed_signers, signature) are managed internally.
+    fn verify(
+        &self,
+        ssh_pubkey: &str,
+        namespace: &str,
+        message: &[u8],
+        signature: &str,
+    ) -> Result<()>;
+}
+
+/// Abstraction over the `ssh-add` command.
+///
+/// Socket resolution (SSH_AUTH_SOCK / IdentityAgent) is handled internally.
+pub trait SshAdd: Send + Sync {
+    /// `ssh-add -L` — list public keys loaded in the agent.
+    fn list_keys(&self) -> Result<String>;
+}

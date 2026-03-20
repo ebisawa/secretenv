@@ -1,0 +1,98 @@
+// Copyright 2026 Satoshi Ebisawa
+// SPDX-License-Identifier: Apache-2.0
+
+//! Unit tests for core/services/enc/v3/wrap module
+//!
+//! Tests for wrap item creation.
+
+use crate::cli_common::ALICE_MEMBER_ID;
+use crate::keygen_helpers::make_attested_public_key;
+use crate::test_utils::keygen_test;
+use secretenv::crypto::types::keys::MasterKey;
+use secretenv::feature::envelope::wrap::WrapFormat;
+use secretenv::feature::envelope::wrap::{
+    build_wrap_item_for_file, build_wrap_item_for_kv, build_wraps_for_recipients,
+};
+use uuid::Uuid;
+
+fn create_test_master_key() -> MasterKey {
+    let key_bytes = [1u8; 32];
+    MasterKey::new(key_bytes)
+}
+
+#[test]
+fn test_build_wrap_item_for_file() {
+    let (_private_key, public_key) = keygen_test(ALICE_MEMBER_ID).unwrap();
+    let sid = Uuid::new_v4();
+    let master_key = create_test_master_key();
+    let kid = public_key.protected.kid.clone();
+    let attested_pubkey = make_attested_public_key(public_key);
+
+    let wrap_item = build_wrap_item_for_file(&attested_pubkey, &sid, &master_key, false).unwrap();
+
+    assert_eq!(wrap_item.rid, ALICE_MEMBER_ID);
+    assert_eq!(wrap_item.kid, kid);
+    assert!(!wrap_item.enc.is_empty());
+    assert!(!wrap_item.ct.is_empty());
+}
+
+#[test]
+fn test_build_wrap_item_for_kv() {
+    let (_private_key, public_key) = keygen_test(ALICE_MEMBER_ID).unwrap();
+    let sid = Uuid::new_v4();
+    let master_key = create_test_master_key();
+    let kid = public_key.protected.kid.clone();
+    let attested_pubkey = make_attested_public_key(public_key);
+
+    let wrap_item = build_wrap_item_for_kv(&sid, &attested_pubkey, &master_key, false).unwrap();
+
+    assert_eq!(wrap_item.rid, ALICE_MEMBER_ID);
+    assert_eq!(wrap_item.kid, kid);
+    assert!(!wrap_item.enc.is_empty());
+    assert!(!wrap_item.ct.is_empty());
+}
+
+#[test]
+fn test_build_wraps_for_recipients_file() {
+    let (_private_key1, public_key1) = keygen_test(ALICE_MEMBER_ID).unwrap();
+    let (_private_key2, public_key2) = keygen_test("bob@example.com").unwrap();
+    let sid = Uuid::new_v4();
+    let attested_members = vec![
+        make_attested_public_key(public_key1.clone()),
+        make_attested_public_key(public_key2.clone()),
+    ];
+    let master_key = create_test_master_key();
+
+    let wrap_items = build_wraps_for_recipients(
+        &attested_members,
+        &sid,
+        &master_key,
+        WrapFormat::File,
+        false,
+    )
+    .unwrap();
+
+    assert_eq!(wrap_items.len(), 2);
+    assert_eq!(wrap_items[0].rid, ALICE_MEMBER_ID);
+    assert_eq!(wrap_items[1].rid, "bob@example.com");
+}
+
+#[test]
+fn test_build_wraps_for_recipients_kv() {
+    let (_private_key1, public_key1) = keygen_test(ALICE_MEMBER_ID).unwrap();
+    let (_private_key2, public_key2) = keygen_test("bob@example.com").unwrap();
+    let sid = Uuid::new_v4();
+    let attested_members = vec![
+        make_attested_public_key(public_key1.clone()),
+        make_attested_public_key(public_key2.clone()),
+    ];
+    let master_key = create_test_master_key();
+
+    let wrap_items =
+        build_wraps_for_recipients(&attested_members, &sid, &master_key, WrapFormat::Kv, false)
+            .unwrap();
+
+    assert_eq!(wrap_items.len(), 2);
+    assert_eq!(wrap_items[0].rid, ALICE_MEMBER_ID);
+    assert_eq!(wrap_items[1].rid, "bob@example.com");
+}

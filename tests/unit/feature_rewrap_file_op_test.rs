@@ -1,0 +1,511 @@
+// Copyright 2026 Satoshi Ebisawa
+// SPDX-License-Identifier: Apache-2.0
+
+//! Unit tests for feature/rewrap/file_op module (file-enc rewrap operations).
+//!
+//! Tests rotate, add-recipient, and remove-recipient via the public
+//! `rewrap_file_document` API since `file_op` is `pub(crate)`.
+
+use crate::cli_common::{ALICE_MEMBER_ID, BOB_MEMBER_ID};
+use crate::keygen_helpers::make_verified_members;
+use crate::test_utils::{setup_test_keystore, stub_ssh_keygen};
+use secretenv::feature::context::crypto::CryptoContext;
+use secretenv::feature::decrypt::file::decrypt_file_document;
+use secretenv::feature::encrypt::file::encrypt_file_document;
+use secretenv::feature::encrypt::SigningContext;
+use secretenv::feature::rewrap::file::rewrap_file_document;
+use secretenv::feature::rewrap::RewrapOptions;
+use secretenv::feature::verify::file::verify_file_document;
+use secretenv::format::content::FileEncContent;
+use secretenv::io::keystore::storage::save_key_pair_atomic;
+use secretenv::io::keystore::storage::{list_kids, load_public_key};
+use secretenv::io::ssh::backend::signature_backend::SignatureBackend;
+use secretenv::io::ssh::backend::ssh_keygen::SshKeygenBackend;
+use secretenv::io::ssh::protocol::key_descriptor::SshKeyDescriptor;
+use secretenv::model::file_enc::FileEncDocument;
+use std::fs;
+use tempfile::TempDir;
+
+// ============================================================================
+// Helper functions
+// ============================================================================
+
+/// Build CryptoContext for a member in a test keystore.
+fn setup_member_key_context(temp_dir: &TempDir, member_id: &str, kid: &str) -> CryptoContext {
+    let keystore_root = temp_dir.path().join("keys");
+    let ssh_pub =
+        fs::read_to_string(temp_dir.path().join(".ssh").join("test_ed25519.pub")).unwrap();
+    let backend: Box<dyn SignatureBackend> = Box::new(SshKeygenBackend::new(
+        stub_ssh_keygen(),
+        SshKeyDescriptor::from_path(temp_dir.path().join(".ssh").join("test_ed25519")),
+    ));
+
+    CryptoContext::load(
+        member_id,
+        backend.as_ref(),
+        &ssh_pub,
+        Some(kid),
+        Some(&keystore_root),
+        Some(temp_dir.path().join("workspace")),
+        false,
+    )
+    .unwrap()
+}
+
+/// Create workspace members directory with the member's public key file.
+fn setup_workspace_members(temp_dir: &TempDir, member_id: &str, kid: &str) {
+    let keystore_root = temp_dir.path().join("keys");
+    let public_key = load_public_key(&keystore_root, member_id, kid).unwrap();
+    let members_dir = temp_dir.path().join("members/active");
+    fs::create_dir_all(&members_dir).unwrap();
+    fs::create_dir_all(temp_dir.path().join("members/incoming")).unwrap();
+    let member_file = members_dir.join(format!("{}.json", member_id));
+    fs::write(
+        &member_file,
+        serde_json::to_string_pretty(&public_key).unwrap(),
+    )
+    .unwrap();
+}
+
+/// Build default RewrapOptions.
+fn rewrap_options_default(debug: bool) -> RewrapOptions {
+    RewrapOptions {
+        rotate_key: false,
+        clear_disclosure_history: false,
+        token_codec: None,
+        no_signer_pub: false,
+        debug,
+    }
+}
+
+/// Setup a two-member keystore (alice + bob) in one TempDir.
+///
+/// Returns (temp_dir, alice_kid, bob_kid).
+fn setup_two_member_keystore() -> (TempDir, String, String) {
+    let temp_dir = setup_test_keystore(ALICE_MEMBER_ID);
+    let keystore_root = temp_dir.path().join("keys");
+
+    let alice_kids = list_kids(&keystore_root, ALICE_MEMBER_ID).unwrap();
+    let alice_kid = alice_kids.first().unwrap().clone();
+
+    // Generate bob's keys in the same keystore
+    let (bob_private, bob_public) = crate::keygen_helpers::keygen_test(BOB_MEMBER_ID).unwrap();
+    let bob_kid = bob_public.protected.kid.clone();
+    let bob_private_doc = crate::keygen_helpers::create_test_private_key(
+        &bob_private,
+        &bob_public.protected.member_id,
+        &bob_public.protected.kid,
+    )
+    .unwrap();
+    save_key_pair_atomic(
+        &keystore_root,
+        BOB_MEMBER_ID,
+        &bob_kid,
+        &bob_private_doc,
+        &bob_public,
+    )
+    .unwrap();
+
+    (temp_dir, alice_kid, bob_kid)
+}
+
+/// Encrypt file content for alice only.
+fn encrypt_file_for_alice(
+    temp_dir: &TempDir,
+    kid: &str,
+    key_ctx: &CryptoContext,
+) -> FileEncDocument {
+    let keystore_root = temp_dir.path().join("keys");
+    let public_key = load_public_key(&keystore_root, ALICE_MEMBER_ID, kid).unwrap();
+    let members = make_verified_members(&[public_key]);
+    let content = b"secret-file-content";
+    let recipients = vec![ALICE_MEMBER_ID.to_string()];
+
+    encrypt_file_document(
+        content,
+        &recipients,
+        &members,
+        &SigningContext {
+            signing_key: &key_ctx.signing_key,
+            signer_kid: kid,
+            signer_pub: None,
+            debug: false,
+        },
+    )
+    .unwrap()
+}
+
+/// Encrypt file content for alice and bob.
+fn encrypt_file_for_alice_and_bob(
+    temp_dir: &TempDir,
+    alice_kid: &str,
+    bob_kid: &str,
+    key_ctx: &CryptoContext,
+) -> FileEncDocument {
+    let keystore_root = temp_dir.path().join("keys");
+    let alice_pub = load_public_key(&keystore_root, ALICE_MEMBER_ID, alice_kid).unwrap();
+    let bob_pub = load_public_key(&keystore_root, BOB_MEMBER_ID, bob_kid).unwrap();
+    let members = make_verified_members(&[alice_pub, bob_pub]);
+    let content = b"secret-file-content";
+    let recipients = vec![ALICE_MEMBER_ID.to_string(), BOB_MEMBER_ID.to_string()];
+
+    encrypt_file_document(
+        content,
+        &recipients,
+        &members,
+        &SigningContext {
+            signing_key: &key_ctx.signing_key,
+            signer_kid: alice_kid,
+            signer_pub: None,
+            debug: false,
+        },
+    )
+    .unwrap()
+}
+
+// ============================================================================
+// Tests: Key rotation via rewrap_file_document
+// ============================================================================
+
+#[test]
+fn test_rotate_file_key_changes_content() {
+    let temp_dir = setup_test_keystore(ALICE_MEMBER_ID);
+    let keystore_root = temp_dir.path().join("keys");
+
+    let kids = list_kids(&keystore_root, ALICE_MEMBER_ID).unwrap();
+    let kid = kids.first().unwrap();
+    let key_ctx = setup_member_key_context(&temp_dir, ALICE_MEMBER_ID, kid);
+    setup_workspace_members(&temp_dir, ALICE_MEMBER_ID, kid);
+
+    let doc = encrypt_file_for_alice(&temp_dir, kid, &key_ctx);
+    let original_json = serde_json::to_string_pretty(&doc).unwrap();
+
+    let options = RewrapOptions {
+        rotate_key: true,
+        clear_disclosure_history: false,
+        token_codec: None,
+        no_signer_pub: false,
+        debug: false,
+    };
+    let rewrapped_json = rewrap_file_document(
+        &options,
+        &FileEncContent::new_unchecked(original_json.clone()),
+        ALICE_MEMBER_ID,
+        &key_ctx,
+        Some(temp_dir.path()),
+    )
+    .unwrap();
+
+    // Parse both documents to compare encrypted content
+    let original_doc: FileEncDocument = serde_json::from_str(&original_json).unwrap();
+    let rewrapped_doc: FileEncDocument = serde_json::from_str(&rewrapped_json).unwrap();
+
+    assert_ne!(
+        original_doc.protected.payload.encrypted.ct, rewrapped_doc.protected.payload.encrypted.ct,
+        "ciphertext must change after key rotation"
+    );
+}
+
+#[test]
+fn test_rotate_file_key_preserves_decryptability() {
+    let temp_dir = setup_test_keystore(ALICE_MEMBER_ID);
+    let keystore_root = temp_dir.path().join("keys");
+
+    let kids = list_kids(&keystore_root, ALICE_MEMBER_ID).unwrap();
+    let kid = kids.first().unwrap();
+    let key_ctx = setup_member_key_context(&temp_dir, ALICE_MEMBER_ID, kid);
+    setup_workspace_members(&temp_dir, ALICE_MEMBER_ID, kid);
+
+    let doc = encrypt_file_for_alice(&temp_dir, kid, &key_ctx);
+    let original_json = serde_json::to_string_pretty(&doc).unwrap();
+
+    // Rewrap with rotation
+    let options = RewrapOptions {
+        rotate_key: true,
+        clear_disclosure_history: false,
+        token_codec: None,
+        no_signer_pub: false,
+        debug: false,
+    };
+    let rewrapped_json = rewrap_file_document(
+        &options,
+        &FileEncContent::new_unchecked(original_json.clone()),
+        ALICE_MEMBER_ID,
+        &key_ctx,
+        Some(temp_dir.path()),
+    )
+    .unwrap();
+
+    // Verify and decrypt the rewrapped document
+    let rewrapped_doc: FileEncDocument = serde_json::from_str(&rewrapped_json).unwrap();
+    let verified = verify_file_document(&rewrapped_doc, Some(temp_dir.path()), false).unwrap();
+    let decrypted =
+        decrypt_file_document(&verified, ALICE_MEMBER_ID, kid, &key_ctx.private_key, false)
+            .unwrap();
+
+    assert_eq!(
+        decrypted.as_slice(),
+        b"secret-file-content",
+        "decrypted content must match original after key rotation"
+    );
+}
+
+#[test]
+fn test_rotate_file_key_updates_wrap() {
+    let temp_dir = setup_test_keystore(ALICE_MEMBER_ID);
+    let keystore_root = temp_dir.path().join("keys");
+
+    let kids = list_kids(&keystore_root, ALICE_MEMBER_ID).unwrap();
+    let kid = kids.first().unwrap();
+    let key_ctx = setup_member_key_context(&temp_dir, ALICE_MEMBER_ID, kid);
+    setup_workspace_members(&temp_dir, ALICE_MEMBER_ID, kid);
+
+    let doc = encrypt_file_for_alice(&temp_dir, kid, &key_ctx);
+    let original_json = serde_json::to_string_pretty(&doc).unwrap();
+
+    let options = RewrapOptions {
+        rotate_key: true,
+        clear_disclosure_history: false,
+        token_codec: None,
+        no_signer_pub: false,
+        debug: false,
+    };
+    let rewrapped_json = rewrap_file_document(
+        &options,
+        &FileEncContent::new_unchecked(original_json.clone()),
+        ALICE_MEMBER_ID,
+        &key_ctx,
+        Some(temp_dir.path()),
+    )
+    .unwrap();
+
+    let original_doc: FileEncDocument = serde_json::from_str(&original_json).unwrap();
+    let rewrapped_doc: FileEncDocument = serde_json::from_str(&rewrapped_json).unwrap();
+
+    // WRAP data (ct field) must change because a new content key was generated
+    let original_ct = &original_doc.protected.wrap[0].ct;
+    let rewrapped_ct = &rewrapped_doc.protected.wrap[0].ct;
+    assert_ne!(
+        original_ct, rewrapped_ct,
+        "wrap ct must change after key rotation"
+    );
+}
+
+// ============================================================================
+// Tests: Recipient management via rewrap_file_document
+// ============================================================================
+
+#[test]
+fn test_add_file_recipient_via_rewrap() {
+    let (temp_dir, alice_kid, bob_kid) = setup_two_member_keystore();
+    let key_ctx = setup_member_key_context(&temp_dir, ALICE_MEMBER_ID, &alice_kid);
+
+    // Encrypt for alice only
+    let doc = encrypt_file_for_alice(&temp_dir, &alice_kid, &key_ctx);
+    let json = serde_json::to_string_pretty(&doc).unwrap();
+
+    // Setup workspace with both alice and bob as active members
+    setup_workspace_members(&temp_dir, ALICE_MEMBER_ID, &alice_kid);
+    setup_workspace_members(&temp_dir, BOB_MEMBER_ID, &bob_kid);
+
+    let options = rewrap_options_default(false);
+    let rewrapped_json = rewrap_file_document(
+        &options,
+        &FileEncContent::new_unchecked(json),
+        ALICE_MEMBER_ID,
+        &key_ctx,
+        Some(temp_dir.path()),
+    )
+    .unwrap();
+
+    let rewrapped_doc: FileEncDocument = serde_json::from_str(&rewrapped_json).unwrap();
+    let recipient_ids: Vec<&str> = rewrapped_doc
+        .protected
+        .wrap
+        .iter()
+        .map(|w| w.rid.as_str())
+        .collect();
+
+    assert!(
+        recipient_ids.contains(&ALICE_MEMBER_ID),
+        "rewrapped file must still include alice, got: {:?}",
+        recipient_ids
+    );
+    assert!(
+        recipient_ids.contains(&BOB_MEMBER_ID),
+        "rewrapped file must include bob after adding, got: {:?}",
+        recipient_ids
+    );
+}
+
+#[test]
+fn test_add_file_recipient_already_exists_noop() {
+    let temp_dir = setup_test_keystore(ALICE_MEMBER_ID);
+    let keystore_root = temp_dir.path().join("keys");
+
+    let kids = list_kids(&keystore_root, ALICE_MEMBER_ID).unwrap();
+    let kid = kids.first().unwrap();
+    let key_ctx = setup_member_key_context(&temp_dir, ALICE_MEMBER_ID, kid);
+    setup_workspace_members(&temp_dir, ALICE_MEMBER_ID, kid);
+
+    let doc = encrypt_file_for_alice(&temp_dir, kid, &key_ctx);
+    let json = serde_json::to_string_pretty(&doc).unwrap();
+
+    // Rewrap when all recipients already present (alice is both in doc and workspace)
+    let options = rewrap_options_default(false);
+    let result = rewrap_file_document(
+        &options,
+        &FileEncContent::new_unchecked(json),
+        ALICE_MEMBER_ID,
+        &key_ctx,
+        Some(temp_dir.path()),
+    );
+
+    assert!(
+        result.is_ok(),
+        "rewrap with no recipient changes must succeed: {:?}",
+        result.err()
+    );
+
+    let rewrapped_doc: FileEncDocument = serde_json::from_str(&result.unwrap()).unwrap();
+    assert_eq!(
+        rewrapped_doc.protected.wrap.len(),
+        1,
+        "wrap count must remain 1 when no recipients added or removed"
+    );
+}
+
+#[test]
+fn test_remove_file_recipient_via_rewrap() {
+    let (temp_dir, alice_kid, bob_kid) = setup_two_member_keystore();
+    let key_ctx = setup_member_key_context(&temp_dir, ALICE_MEMBER_ID, &alice_kid);
+
+    // Encrypt for alice and bob
+    let doc = encrypt_file_for_alice_and_bob(&temp_dir, &alice_kid, &bob_kid, &key_ctx);
+    let json = serde_json::to_string_pretty(&doc).unwrap();
+
+    // Setup workspace with only alice (bob removed from workspace)
+    setup_workspace_members(&temp_dir, ALICE_MEMBER_ID, &alice_kid);
+
+    let options = rewrap_options_default(false);
+    let rewrapped_json = rewrap_file_document(
+        &options,
+        &FileEncContent::new_unchecked(json),
+        ALICE_MEMBER_ID,
+        &key_ctx,
+        Some(temp_dir.path()),
+    )
+    .unwrap();
+
+    let rewrapped_doc: FileEncDocument = serde_json::from_str(&rewrapped_json).unwrap();
+    let recipient_ids: Vec<&str> = rewrapped_doc
+        .protected
+        .wrap
+        .iter()
+        .map(|w| w.rid.as_str())
+        .collect();
+
+    assert!(
+        recipient_ids.contains(&ALICE_MEMBER_ID),
+        "alice must remain after bob's removal, got: {:?}",
+        recipient_ids
+    );
+    assert!(
+        !recipient_ids.contains(&BOB_MEMBER_ID),
+        "bob must be removed from recipients, got: {:?}",
+        recipient_ids
+    );
+}
+
+#[test]
+fn test_remove_file_recipient_adds_disclosure() {
+    let (temp_dir, alice_kid, bob_kid) = setup_two_member_keystore();
+    let key_ctx = setup_member_key_context(&temp_dir, ALICE_MEMBER_ID, &alice_kid);
+
+    // Encrypt for alice and bob
+    let doc = encrypt_file_for_alice_and_bob(&temp_dir, &alice_kid, &bob_kid, &key_ctx);
+    let json = serde_json::to_string_pretty(&doc).unwrap();
+
+    // Setup workspace with only alice (bob removed)
+    setup_workspace_members(&temp_dir, ALICE_MEMBER_ID, &alice_kid);
+
+    let options = rewrap_options_default(false);
+    let rewrapped_json = rewrap_file_document(
+        &options,
+        &FileEncContent::new_unchecked(json),
+        ALICE_MEMBER_ID,
+        &key_ctx,
+        Some(temp_dir.path()),
+    )
+    .unwrap();
+
+    // The output JSON must contain removed_recipients disclosure history
+    assert!(
+        rewrapped_json.contains("removed_recipients"),
+        "rewrapped output must contain removed_recipients disclosure history"
+    );
+
+    let rewrapped_doc: FileEncDocument = serde_json::from_str(&rewrapped_json).unwrap();
+    let removed = rewrapped_doc.protected.removed_recipients.as_ref();
+    assert!(
+        removed.is_some(),
+        "removed_recipients field must be present after removal"
+    );
+
+    let removed = removed.unwrap();
+    let removed_ids: Vec<&str> = removed.iter().map(|r| r.rid.as_str()).collect();
+    assert!(
+        removed_ids.contains(&BOB_MEMBER_ID),
+        "bob must appear in removed_recipients, got: {:?}",
+        removed_ids
+    );
+}
+
+#[test]
+fn test_rewrap_file_roundtrip_with_rotation() {
+    let temp_dir = setup_test_keystore(ALICE_MEMBER_ID);
+    let keystore_root = temp_dir.path().join("keys");
+
+    let kids = list_kids(&keystore_root, ALICE_MEMBER_ID).unwrap();
+    let kid = kids.first().unwrap();
+    let key_ctx = setup_member_key_context(&temp_dir, ALICE_MEMBER_ID, kid);
+    setup_workspace_members(&temp_dir, ALICE_MEMBER_ID, kid);
+
+    // Encrypt
+    let doc = encrypt_file_for_alice(&temp_dir, kid, &key_ctx);
+    let original_json = serde_json::to_string_pretty(&doc).unwrap();
+
+    // Rewrap with rotation
+    let options = RewrapOptions {
+        rotate_key: true,
+        clear_disclosure_history: false,
+        token_codec: None,
+        no_signer_pub: false,
+        debug: false,
+    };
+    let rewrapped_json = rewrap_file_document(
+        &options,
+        &FileEncContent::new_unchecked(original_json),
+        ALICE_MEMBER_ID,
+        &key_ctx,
+        Some(temp_dir.path()),
+    )
+    .unwrap();
+
+    // Output must be valid JSON parseable as FileEncDocument
+    let parsed: Result<FileEncDocument, _> = serde_json::from_str(&rewrapped_json);
+    assert!(
+        parsed.is_ok(),
+        "rewrapped output must be valid FileEncDocument JSON: {:?}",
+        parsed.err()
+    );
+
+    // Verify signature on rewrapped document
+    let rewrapped_doc = parsed.unwrap();
+    let verified = verify_file_document(&rewrapped_doc, Some(temp_dir.path()), false);
+    assert!(
+        verified.is_ok(),
+        "rewrapped document must pass signature verification: {:?}",
+        verified.err()
+    );
+}

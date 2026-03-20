@@ -1,0 +1,86 @@
+// Copyright 2026 Satoshi Ebisawa
+// SPDX-License-Identifier: Apache-2.0
+
+//! Recipient operations for file-enc content (add, remove).
+
+use crate::feature::context::crypto::CryptoContext;
+use crate::feature::envelope::unwrap::unwrap_master_key_for_file;
+use crate::feature::envelope::wrap::build_wrap_item_for_file;
+use crate::feature::rewrap::common::{
+    add_to_removed_history, check_recipient_exists, resolve_attested_recipients,
+    validate_not_empty_recipients, warn_recipient_not_found,
+};
+use crate::model::file_enc::FileEncDocumentProtected;
+use crate::model::file_enc::VerifiedFileEncDocument;
+use crate::Result;
+
+/// Remove recipients from file-enc content.
+///
+/// Note: For file-enc, recipients can be removed by directly filtering the wrap items.
+/// Each recipient is processed individually to update the removal history.
+pub fn remove_file_recipients(
+    protected: &mut FileEncDocumentProtected,
+    recipients_to_remove: &[String],
+) -> Result<()> {
+    let current_recipients = protected.recipients();
+
+    // Collect wrap items to remove (with their kids) before removing them
+    let mut to_remove: Vec<(String, String)> = Vec::new();
+    for rid in recipients_to_remove {
+        if !check_recipient_exists(&current_recipients, rid) {
+            warn_recipient_not_found(rid);
+            continue;
+        }
+
+        // Find the wrap item to get its kid
+        if let Some(wrap_item) = protected.wrap.iter().find(|w| w.rid == *rid) {
+            to_remove.push((rid.clone(), wrap_item.kid.clone()));
+        }
+    }
+
+    // Record removals in history
+    for (rid, kid) in &to_remove {
+        add_to_removed_history(&mut protected.removed_recipients, rid, kid)?;
+    }
+
+    // Remove wrap items
+    for (rid, _kid) in &to_remove {
+        protected.wrap.retain(|w| w.rid != *rid);
+    }
+
+    // Validate that at least one recipient remains
+    let remaining_recipients: Vec<String> = protected.wrap.iter().map(|w| w.rid.clone()).collect();
+    validate_not_empty_recipients(&remaining_recipients)?;
+
+    Ok(())
+}
+
+/// Add recipients to file-enc content.
+///
+/// Note: For file-enc, all wrap items use the same recipients list (existing recipients
+/// at the time of addition). This is why we normalize recipients once before the loop.
+pub fn add_file_recipients(
+    protected: &mut FileEncDocumentProtected,
+    verified: &VerifiedFileEncDocument,
+    new_recipients: &[String],
+    key_ctx: &CryptoContext,
+    debug: bool,
+) -> Result<()> {
+    let content_key = unwrap_master_key_for_file(
+        verified,
+        &key_ctx.member_id,
+        &key_ctx.kid,
+        &key_ctx.private_key,
+        debug,
+    )?;
+    let current_recipients = protected.recipients();
+    let attested_pubkeys =
+        resolve_attested_recipients(key_ctx, new_recipients, &current_recipients, debug)?;
+
+    for attested in &attested_pubkeys {
+        let wrap_item = build_wrap_item_for_file(attested, &protected.sid, &content_key, debug)?;
+        protected.wrap.push(wrap_item);
+    }
+
+    Ok(())
+}

@@ -1,0 +1,66 @@
+// Copyright 2026 Satoshi Ebisawa
+// SPDX-License-Identifier: Apache-2.0
+
+//! Unit tests for kv-enc canonical format
+
+use secretenv::format::kv::enc::canonical::{build_canonical_bytes, extract_recipients_from_wrap};
+use secretenv::format::kv::enc::parser::KvEncParser;
+use secretenv::model::common::WrapItem;
+use secretenv::model::identifiers::hpke;
+use secretenv::model::kv_enc::KvWrap;
+
+#[test]
+fn test_build_canonical_bytes() {
+    let content =
+        ":SECRETENV_KV 3\n:HEAD token0\n:WRAP token1\nKEY1 value1\nKEY2 value2\n:SIG sig_token\n";
+    let parser = KvEncParser::new(content);
+    let lines = parser.parse_all().unwrap();
+
+    let canonical = build_canonical_bytes(&lines);
+    let canonical = std::str::from_utf8(&canonical).unwrap();
+    assert!(canonical.contains(":SECRETENV_KV 3"));
+    assert!(canonical.contains(":HEAD token0"));
+    assert!(canonical.contains(":WRAP token1"));
+    assert!(canonical.contains("KEY1 value1"));
+    assert!(canonical.contains("KEY2 value2"));
+    assert!(!canonical.contains(":SIG"));
+}
+
+#[test]
+fn test_build_canonical_bytes_excludes_sig() {
+    let content = ":SECRETENV_KV 3\n:HEAD token0\n:WRAP token1\nKEY1 value1\n:SIG sig_token\n";
+    let parser = KvEncParser::new(content);
+    let lines = parser.parse_all().unwrap();
+
+    let canonical = build_canonical_bytes(&lines);
+    let canonical = std::str::from_utf8(&canonical).unwrap();
+    assert!(!canonical.contains(":SIG"));
+}
+
+#[test]
+fn test_extract_recipients_from_wrap() {
+    let wrap = KvWrap {
+        wrap: vec![
+            WrapItem {
+                rid: "alice@example.com".to_string(),
+                kid: "01HY0G8N3P5X7QRSTV0WXYZ123".to_string(),
+                alg: hpke::ALG_HPKE_32_1_3.to_string(),
+                enc: "dummy".to_string(),
+                ct: "dummy".to_string(),
+            },
+            WrapItem {
+                rid: "bob@example.com".to_string(),
+                kid: "01HY0G8N3P5X7QRSTV0WXYZ456".to_string(),
+                alg: hpke::ALG_HPKE_32_1_3.to_string(),
+                enc: "dummy".to_string(),
+                ct: "dummy".to_string(),
+            },
+        ],
+        removed_recipients: None,
+    };
+
+    let recipients = extract_recipients_from_wrap(&wrap);
+    assert_eq!(recipients.len(), 2);
+    assert_eq!(recipients[0], "alice@example.com");
+    assert_eq!(recipients[1], "bob@example.com");
+}

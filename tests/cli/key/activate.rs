@@ -1,0 +1,124 @@
+// Copyright 2026 Satoshi Ebisawa
+// SPDX-License-Identifier: Apache-2.0
+
+//! Integration tests for `key activate` command
+
+use crate::cli::common::{cmd, create_temp_ssh_keypair, TEST_MEMBER_ID};
+use secretenv::io::keystore::active::load_active_kid;
+use std::fs;
+use tempfile::TempDir;
+
+#[test]
+fn test_key_activate_explicit_kid() {
+    let temp_dir = TempDir::new().unwrap();
+    let (ssh_temp, ssh_priv, _ssh_pub, _ssh_pub_content) = create_temp_ssh_keypair();
+
+    let member_id = TEST_MEMBER_ID;
+
+    // Generate 2 keys
+    cmd()
+        .arg("key")
+        .arg("new")
+        .arg("--member-id")
+        .arg(member_id)
+        .arg("-i")
+        .arg(ssh_priv.to_str().unwrap())
+        .env("SECRETENV_HOME", temp_dir.path())
+        .assert()
+        .success();
+
+    cmd()
+        .arg("key")
+        .arg("new")
+        .arg("--member-id")
+        .arg(member_id)
+        .arg("-i")
+        .arg(ssh_priv.to_str().unwrap())
+        .env("SECRETENV_HOME", temp_dir.path())
+        .assert()
+        .success();
+
+    // Get the kids
+    let keystore_root = temp_dir.path().join("keys");
+    let member_dir = keystore_root.join(member_id);
+    let kids: Vec<_> = fs::read_dir(&member_dir)
+        .unwrap()
+        .filter_map(|e| e.ok())
+        .filter(|e| e.path().is_dir())
+        .map(|e| e.file_name().to_str().unwrap().to_string())
+        .collect();
+
+    assert_eq!(kids.len(), 2, "Should have 2 kids");
+
+    // Activate the first kid
+    let first_kid = &kids[0];
+    cmd()
+        .arg("key")
+        .arg("activate")
+        .arg(first_kid)
+        .arg("--member-id")
+        .arg(member_id)
+        .env("SECRETENV_HOME", temp_dir.path())
+        .assert()
+        .success();
+
+    // Verify active kid
+    let active_kid = load_active_kid(member_id, &keystore_root).expect("Should get active kid");
+    assert_eq!(active_kid, Some(first_kid.clone()));
+
+    // Keep temp directories alive
+    drop(ssh_temp);
+}
+
+#[test]
+fn test_key_activate_latest() {
+    let temp_dir = TempDir::new().unwrap();
+    let (ssh_temp, ssh_priv, _ssh_pub, _ssh_pub_content) = create_temp_ssh_keypair();
+
+    let member_id = TEST_MEMBER_ID;
+
+    // Generate 2 keys (second one will be newer)
+    cmd()
+        .arg("key")
+        .arg("new")
+        .arg("--member-id")
+        .arg(member_id)
+        .arg("-i")
+        .arg(ssh_priv.to_str().unwrap())
+        .arg("--no-activate")
+        .env("SECRETENV_HOME", temp_dir.path())
+        .assert()
+        .success();
+
+    std::thread::sleep(std::time::Duration::from_millis(100));
+
+    cmd()
+        .arg("key")
+        .arg("new")
+        .arg("--member-id")
+        .arg(member_id)
+        .arg("-i")
+        .arg(ssh_priv.to_str().unwrap())
+        .arg("--no-activate")
+        .env("SECRETENV_HOME", temp_dir.path())
+        .assert()
+        .success();
+
+    // Activate latest
+    cmd()
+        .arg("key")
+        .arg("activate")
+        .arg("--member-id")
+        .arg(member_id)
+        .env("SECRETENV_HOME", temp_dir.path())
+        .assert()
+        .success();
+
+    // Verify active kid is set
+    let keystore_root = temp_dir.path().join("keys");
+    let active_kid = load_active_kid(member_id, &keystore_root).expect("Should get active kid");
+    assert!(active_kid.is_some(), "Should have an active kid");
+
+    // Keep temp directories alive
+    drop(ssh_temp);
+}

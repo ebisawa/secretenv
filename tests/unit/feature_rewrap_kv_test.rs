@@ -1,0 +1,777 @@
+// Copyright 2026 Satoshi Ebisawa
+// SPDX-License-Identifier: Apache-2.0
+
+//! Unit tests for feature/rewrap/kv module (KV document rewrap operations).
+
+use crate::cli_common::{ALICE_MEMBER_ID, BOB_MEMBER_ID};
+use crate::keygen_helpers::make_verified_members;
+use crate::test_utils::{setup_test_keystore, stub_ssh_keygen};
+use secretenv::feature::context::crypto::CryptoContext;
+use secretenv::feature::encrypt::SigningContext;
+use secretenv::feature::kv::encrypt::encrypt_kv_document;
+use secretenv::feature::rewrap::kv::rewrap_kv_document;
+use secretenv::feature::rewrap::RewrapOptions;
+use secretenv::format::content::KvEncContent;
+use secretenv::format::kv::dotenv::parse_dotenv;
+use secretenv::format::kv::enc::parser::KvEncLine;
+use secretenv::format::kv::parse_kv_document;
+use secretenv::format::token::TokenCodec;
+use secretenv::io::keystore::storage::{list_kids, load_public_key};
+use secretenv::io::ssh::backend::signature_backend::SignatureBackend;
+use secretenv::io::ssh::backend::ssh_keygen::SshKeygenBackend;
+use secretenv::io::ssh::protocol::key_descriptor::SshKeyDescriptor;
+use secretenv::model::kv_enc::{KvEntryValue, KvWrap};
+use std::fs;
+use tempfile::TempDir;
+
+/// Build CryptoContext for a member in a test keystore.
+fn setup_member_key_context(temp_dir: &TempDir, member_id: &str, kid: &str) -> CryptoContext {
+    let keystore_root = temp_dir.path().join("keys");
+    let ssh_pub =
+        fs::read_to_string(temp_dir.path().join(".ssh").join("test_ed25519.pub")).unwrap();
+    let backend: Box<dyn SignatureBackend> = Box::new(SshKeygenBackend::new(
+        stub_ssh_keygen(),
+        SshKeyDescriptor::from_path(temp_dir.path().join(".ssh").join("test_ed25519")),
+    ));
+
+    CryptoContext::load(
+        member_id,
+        backend.as_ref(),
+        &ssh_pub,
+        Some(kid),
+        Some(&keystore_root),
+        Some(temp_dir.path().join("workspace")),
+        false,
+    )
+    .unwrap()
+}
+
+/// Create workspace members directory with the member's public key file.
+fn setup_workspace_members(temp_dir: &TempDir, member_id: &str, kid: &str) {
+    let keystore_root = temp_dir.path().join("keys");
+    let public_key = load_public_key(&keystore_root, member_id, kid).unwrap();
+    let members_dir = temp_dir.path().join("members/active");
+    fs::create_dir_all(&members_dir).unwrap();
+    fs::create_dir_all(temp_dir.path().join("members/incoming")).unwrap();
+    let member_file = members_dir.join(format!("{}.json", member_id));
+    fs::write(
+        &member_file,
+        serde_json::to_string_pretty(&public_key).unwrap(),
+    )
+    .unwrap();
+}
+
+/// Build default RewrapOptions.
+fn rewrap_options_default(debug: bool) -> RewrapOptions {
+    RewrapOptions {
+        rotate_key: false,
+        clear_disclosure_history: false,
+        token_codec: None,
+        no_signer_pub: false,
+        debug,
+    }
+}
+
+/// Encrypt a simple KV document for alice (single recipient).
+fn encrypt_kv_for_alice(temp_dir: &TempDir, kid: &str, key_ctx: &CryptoContext) -> String {
+    let keystore_root = temp_dir.path().join("keys");
+    let public_key = load_public_key(&keystore_root, ALICE_MEMBER_ID, kid).unwrap();
+    let members = make_verified_members(&[public_key]);
+    let kv_map = parse_dotenv("DATABASE_URL=postgres://localhost\n").unwrap();
+    let recipients = vec![ALICE_MEMBER_ID.to_string()];
+
+    encrypt_kv_document(
+        &kv_map,
+        &recipients,
+        &members,
+        &SigningContext {
+            signing_key: &key_ctx.signing_key,
+            signer_kid: kid,
+            signer_pub: None,
+            debug: false,
+        },
+        TokenCodec::JsonJcs,
+    )
+    .unwrap()
+}
+
+/// Encrypt a KV document for alice and bob (two recipients).
+fn encrypt_kv_for_alice_and_bob(
+    temp_dir: &TempDir,
+    alice_kid: &str,
+    bob_kid: &str,
+    key_ctx: &CryptoContext,
+) -> String {
+    let keystore_root = temp_dir.path().join("keys");
+    let alice_pub = load_public_key(&keystore_root, ALICE_MEMBER_ID, alice_kid).unwrap();
+    let bob_pub = load_public_key(&keystore_root, BOB_MEMBER_ID, bob_kid).unwrap();
+    let members = make_verified_members(&[alice_pub, bob_pub]);
+    let kv_map = parse_dotenv("DATABASE_URL=postgres://localhost\n").unwrap();
+    let recipients = vec![ALICE_MEMBER_ID.to_string(), BOB_MEMBER_ID.to_string()];
+
+    encrypt_kv_document(
+        &kv_map,
+        &recipients,
+        &members,
+        &SigningContext {
+            signing_key: &key_ctx.signing_key,
+            signer_kid: alice_kid,
+            signer_pub: None,
+            debug: false,
+        },
+        TokenCodec::JsonJcs,
+    )
+    .unwrap()
+}
+
+/// Setup a two-member keystore (alice + bob) in one TempDir.
+///
+/// Returns (temp_dir, alice_kid, bob_kid).
+fn setup_two_member_keystore() -> (TempDir, String, String) {
+    // Start with alice keystore
+    let temp_dir = setup_test_keystore(ALICE_MEMBER_ID);
+    let keystore_root = temp_dir.path().join("keys");
+
+    let alice_kids = list_kids(&keystore_root, ALICE_MEMBER_ID).unwrap();
+    let alice_kid = alice_kids.first().unwrap().clone();
+
+    // Generate bob's keys in the same keystore
+    let (bob_private, bob_public) = crate::keygen_helpers::keygen_test(BOB_MEMBER_ID).unwrap();
+    let bob_kid = bob_public.protected.kid.clone();
+    let bob_private_doc = crate::keygen_helpers::create_test_private_key(
+        &bob_private,
+        &bob_public.protected.member_id,
+        &bob_public.protected.kid,
+    )
+    .unwrap();
+    secretenv::io::keystore::storage::save_key_pair_atomic(
+        &keystore_root,
+        BOB_MEMBER_ID,
+        &bob_kid,
+        &bob_private_doc,
+        &bob_public,
+    )
+    .unwrap();
+
+    (temp_dir, alice_kid, bob_kid)
+}
+
+#[test]
+fn test_rewrap_kv_document_succeeds() {
+    let temp_dir = setup_test_keystore(ALICE_MEMBER_ID);
+    let keystore_root = temp_dir.path().join("keys");
+
+    let kids = list_kids(&keystore_root, ALICE_MEMBER_ID).unwrap();
+    let kid = kids.first().unwrap();
+    let key_ctx = setup_member_key_context(&temp_dir, ALICE_MEMBER_ID, kid);
+    setup_workspace_members(&temp_dir, ALICE_MEMBER_ID, kid);
+
+    let encrypted = encrypt_kv_for_alice(&temp_dir, kid, &key_ctx);
+
+    let options = rewrap_options_default(false);
+    let encrypted = KvEncContent::new_unchecked(encrypted);
+    let result = rewrap_kv_document(
+        &options,
+        &encrypted,
+        ALICE_MEMBER_ID,
+        &key_ctx,
+        Some(temp_dir.path()),
+    );
+
+    assert!(
+        result.is_ok(),
+        "rewrap_kv_document must succeed: {:?}",
+        result.err()
+    );
+
+    // Rewrapped content must be parseable
+    let rewrapped = result.unwrap();
+    let doc = parse_kv_document(&rewrapped);
+    assert!(
+        doc.is_ok(),
+        "rewrapped content must be parseable: {:?}",
+        doc.err()
+    );
+}
+
+#[test]
+fn test_rewrap_kv_document_rotate_key() {
+    let temp_dir = setup_test_keystore(ALICE_MEMBER_ID);
+    let keystore_root = temp_dir.path().join("keys");
+
+    let kids = list_kids(&keystore_root, ALICE_MEMBER_ID).unwrap();
+    let kid = kids.first().unwrap();
+    let key_ctx = setup_member_key_context(&temp_dir, ALICE_MEMBER_ID, kid);
+    setup_workspace_members(&temp_dir, ALICE_MEMBER_ID, kid);
+
+    let encrypted = encrypt_kv_for_alice(&temp_dir, kid, &key_ctx);
+
+    let options = RewrapOptions {
+        rotate_key: true,
+        clear_disclosure_history: false,
+        token_codec: None,
+        no_signer_pub: false,
+        debug: false,
+    };
+    let encrypted = KvEncContent::new_unchecked(encrypted);
+    let result = rewrap_kv_document(
+        &options,
+        &encrypted,
+        ALICE_MEMBER_ID,
+        &key_ctx,
+        Some(temp_dir.path()),
+    );
+
+    assert!(
+        result.is_ok(),
+        "rewrap with rotate_key must succeed: {:?}",
+        result.err()
+    );
+
+    // Rotated content must be parseable and differ from original (new WRAP tokens)
+    let rewrapped = result.unwrap();
+    let doc = parse_kv_document(&rewrapped);
+    assert!(
+        doc.is_ok(),
+        "rotated content must be parseable: {:?}",
+        doc.err()
+    );
+
+    // WRAP tokens should differ because the master key was rotated
+    let original_wrap: String = encrypted
+        .as_str()
+        .lines()
+        .find(|l| l.starts_with(":WRAP "))
+        .unwrap()
+        .to_string();
+    let rotated_wrap: String = rewrapped
+        .lines()
+        .find(|l| l.starts_with(":WRAP "))
+        .unwrap()
+        .to_string();
+    assert_ne!(
+        original_wrap, rotated_wrap,
+        "WRAP token must change after key rotation"
+    );
+}
+
+#[test]
+fn test_rewrap_kv_add_recipient() {
+    let (temp_dir, alice_kid, bob_kid) = setup_two_member_keystore();
+    let key_ctx = setup_member_key_context(&temp_dir, ALICE_MEMBER_ID, &alice_kid);
+
+    // Encrypt for alice only
+    let encrypted = encrypt_kv_for_alice(&temp_dir, &alice_kid, &key_ctx);
+
+    // Setup workspace with both alice and bob as active members
+    setup_workspace_members(&temp_dir, ALICE_MEMBER_ID, &alice_kid);
+    setup_workspace_members(&temp_dir, BOB_MEMBER_ID, &bob_kid);
+
+    let options = rewrap_options_default(false);
+    let encrypted = KvEncContent::new_unchecked(encrypted);
+    let result = rewrap_kv_document(
+        &options,
+        &encrypted,
+        ALICE_MEMBER_ID,
+        &key_ctx,
+        Some(temp_dir.path()),
+    );
+
+    assert!(
+        result.is_ok(),
+        "rewrap adding recipient must succeed: {:?}",
+        result.err()
+    );
+
+    // Parse the rewrapped WRAP token to verify bob was added as a recipient
+    let rewrapped = result.unwrap();
+    let wrap_token = rewrapped
+        .lines()
+        .find(|l| l.starts_with(":WRAP "))
+        .unwrap()
+        .strip_prefix(":WRAP ")
+        .unwrap();
+    let wrap_data: secretenv::model::kv_enc::KvWrap = TokenCodec::decode_auto(wrap_token).unwrap();
+    let recipient_ids: Vec<&str> = wrap_data.wrap.iter().map(|w| w.rid.as_str()).collect();
+    assert!(
+        recipient_ids.contains(&BOB_MEMBER_ID),
+        "rewrapped WRAP must include bob as a recipient, got: {:?}",
+        recipient_ids
+    );
+    assert!(
+        recipient_ids.contains(&ALICE_MEMBER_ID),
+        "rewrapped WRAP must still include alice as a recipient, got: {:?}",
+        recipient_ids
+    );
+}
+
+#[test]
+fn test_rewrap_kv_remove_recipient() {
+    let (temp_dir, alice_kid, bob_kid) = setup_two_member_keystore();
+    let key_ctx = setup_member_key_context(&temp_dir, ALICE_MEMBER_ID, &alice_kid);
+
+    // Encrypt for alice and bob
+    let encrypted = encrypt_kv_for_alice_and_bob(&temp_dir, &alice_kid, &bob_kid, &key_ctx);
+
+    // Setup workspace with only alice as active member (bob removed)
+    setup_workspace_members(&temp_dir, ALICE_MEMBER_ID, &alice_kid);
+    // Do NOT add bob to workspace members => he will be removed during rewrap
+
+    let options = rewrap_options_default(false);
+    let encrypted = KvEncContent::new_unchecked(encrypted);
+    let result = rewrap_kv_document(
+        &options,
+        &encrypted,
+        ALICE_MEMBER_ID,
+        &key_ctx,
+        Some(temp_dir.path()),
+    );
+
+    assert!(
+        result.is_ok(),
+        "rewrap removing recipient must succeed: {:?}",
+        result.err()
+    );
+
+    // After removal, bob should not be in the WRAP recipients
+    // but may appear in removed_recipients disclosure history
+    let rewrapped = result.unwrap();
+    let doc = parse_kv_document(&rewrapped);
+    assert!(
+        doc.is_ok(),
+        "rewrapped content must be parseable: {:?}",
+        doc.err()
+    );
+}
+
+#[test]
+fn test_rewrap_kv_clear_disclosure_history() {
+    let (temp_dir, alice_kid, bob_kid) = setup_two_member_keystore();
+    let key_ctx = setup_member_key_context(&temp_dir, ALICE_MEMBER_ID, &alice_kid);
+
+    // Encrypt for alice and bob
+    let encrypted = encrypt_kv_for_alice_and_bob(&temp_dir, &alice_kid, &bob_kid, &key_ctx);
+
+    // Setup workspace with only alice (bob removed) => removal creates disclosure history
+    setup_workspace_members(&temp_dir, ALICE_MEMBER_ID, &alice_kid);
+
+    let remove_options = rewrap_options_default(false);
+    let encrypted = KvEncContent::new_unchecked(encrypted);
+    let after_remove = rewrap_kv_document(
+        &remove_options,
+        &encrypted,
+        ALICE_MEMBER_ID,
+        &key_ctx,
+        Some(temp_dir.path()),
+    )
+    .unwrap();
+
+    // Now rewrap again with clear_disclosure_history
+    let clear_options = RewrapOptions {
+        rotate_key: false,
+        clear_disclosure_history: true,
+        token_codec: None,
+        no_signer_pub: false,
+        debug: false,
+    };
+    let after_remove = KvEncContent::new_unchecked(after_remove);
+    let result = rewrap_kv_document(
+        &clear_options,
+        &after_remove,
+        ALICE_MEMBER_ID,
+        &key_ctx,
+        Some(temp_dir.path()),
+    );
+
+    assert!(
+        result.is_ok(),
+        "rewrap with clear_disclosure_history must succeed: {:?}",
+        result.err()
+    );
+
+    // The cleared content should not contain removed_recipients
+    let cleared = result.unwrap();
+    assert!(
+        !cleared.contains("removed_recipients"),
+        "cleared content must not contain removed_recipients disclosure history"
+    );
+}
+
+#[test]
+fn test_rewrap_kv_invalid_signature_error() {
+    let temp_dir = setup_test_keystore(ALICE_MEMBER_ID);
+    let keystore_root = temp_dir.path().join("keys");
+
+    let kids = list_kids(&keystore_root, ALICE_MEMBER_ID).unwrap();
+    let kid = kids.first().unwrap();
+    let key_ctx = setup_member_key_context(&temp_dir, ALICE_MEMBER_ID, kid);
+    setup_workspace_members(&temp_dir, ALICE_MEMBER_ID, kid);
+
+    let encrypted = encrypt_kv_for_alice(&temp_dir, kid, &key_ctx);
+
+    // Tamper the :SIG line
+    let tampered = encrypted
+        .lines()
+        .map(|line| {
+            if line.starts_with(":SIG ") {
+                ":SIG TAMPERED_INVALID_SIGNATURE_DATA".to_string()
+            } else {
+                line.to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+        + "\n";
+
+    let options = rewrap_options_default(false);
+    let tampered = KvEncContent::new_unchecked(tampered);
+    let result = rewrap_kv_document(
+        &options,
+        &tampered,
+        ALICE_MEMBER_ID,
+        &key_ctx,
+        Some(temp_dir.path()),
+    );
+
+    assert!(
+        result.is_err(),
+        "rewrap_kv_document must fail on tampered signature"
+    );
+}
+
+/// Extract disclosed flags from all KV entries in kv-enc content.
+fn extract_disclosed_flags(content: &str) -> Vec<(String, bool)> {
+    let doc = parse_kv_document(content).unwrap();
+    doc.lines()
+        .iter()
+        .filter_map(|line| {
+            if let KvEncLine::KV { key, token } = line {
+                let entry: KvEntryValue = TokenCodec::decode_auto(token).unwrap();
+                Some((key.clone(), entry.disclosed))
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
+#[test]
+fn test_rewrap_kv_remove_recipient_sets_disclosed_true() {
+    let (temp_dir, alice_kid, bob_kid) = setup_two_member_keystore();
+    let key_ctx = setup_member_key_context(&temp_dir, ALICE_MEMBER_ID, &alice_kid);
+
+    // Encrypt for alice and bob
+    let encrypted = encrypt_kv_for_alice_and_bob(&temp_dir, &alice_kid, &bob_kid, &key_ctx);
+
+    // Verify original entries have disclosed: false
+    let original_flags = extract_disclosed_flags(&encrypted);
+    assert!(
+        original_flags.iter().all(|(_, d)| !d),
+        "original entries must have disclosed: false"
+    );
+
+    // Setup workspace with only alice (bob removed)
+    setup_workspace_members(&temp_dir, ALICE_MEMBER_ID, &alice_kid);
+
+    let options = rewrap_options_default(false);
+    let encrypted = KvEncContent::new_unchecked(encrypted);
+    let rewrapped = rewrap_kv_document(
+        &options,
+        &encrypted,
+        ALICE_MEMBER_ID,
+        &key_ctx,
+        Some(temp_dir.path()),
+    )
+    .unwrap();
+
+    // After removing bob, all entries must have disclosed: true
+    let flags = extract_disclosed_flags(&rewrapped);
+    assert!(
+        !flags.is_empty(),
+        "rewrapped content must contain KV entries"
+    );
+    for (key, disclosed) in &flags {
+        assert!(
+            *disclosed,
+            "entry '{}' must have disclosed: true after recipient removal",
+            key
+        );
+    }
+}
+
+#[test]
+fn test_rewrap_kv_add_recipient_preserves_disclosed() {
+    let (temp_dir, alice_kid, bob_kid) = setup_two_member_keystore();
+    let key_ctx = setup_member_key_context(&temp_dir, ALICE_MEMBER_ID, &alice_kid);
+
+    // Encrypt for alice only
+    let encrypted = encrypt_kv_for_alice(&temp_dir, &alice_kid, &key_ctx);
+
+    // Verify original entries have disclosed: false
+    let original_flags = extract_disclosed_flags(&encrypted);
+    assert!(
+        original_flags.iter().all(|(_, d)| !d),
+        "original entries must have disclosed: false"
+    );
+
+    // Setup workspace with both alice and bob as active members (adding bob)
+    setup_workspace_members(&temp_dir, ALICE_MEMBER_ID, &alice_kid);
+    setup_workspace_members(&temp_dir, BOB_MEMBER_ID, &bob_kid);
+
+    let options = rewrap_options_default(false);
+    let encrypted = KvEncContent::new_unchecked(encrypted);
+    let rewrapped = rewrap_kv_document(
+        &options,
+        &encrypted,
+        ALICE_MEMBER_ID,
+        &key_ctx,
+        Some(temp_dir.path()),
+    )
+    .unwrap();
+
+    // After adding bob (no removal), entries must preserve disclosed: false
+    let flags = extract_disclosed_flags(&rewrapped);
+    assert!(
+        !flags.is_empty(),
+        "rewrapped content must contain KV entries"
+    );
+    for (key, disclosed) in &flags {
+        assert!(
+            !*disclosed,
+            "entry '{}' must have disclosed: false after add-only rewrap",
+            key
+        );
+    }
+}
+
+#[test]
+fn test_rewrap_kv_rotate_key_preserves_disclosed() {
+    let temp_dir = setup_test_keystore(ALICE_MEMBER_ID);
+    let keystore_root = temp_dir.path().join("keys");
+
+    let kids = list_kids(&keystore_root, ALICE_MEMBER_ID).unwrap();
+    let kid = kids.first().unwrap();
+    let key_ctx = setup_member_key_context(&temp_dir, ALICE_MEMBER_ID, kid);
+    setup_workspace_members(&temp_dir, ALICE_MEMBER_ID, kid);
+
+    let encrypted = encrypt_kv_for_alice(&temp_dir, kid, &key_ctx);
+
+    // Verify original entries have disclosed: false
+    let original_flags = extract_disclosed_flags(&encrypted);
+    assert!(
+        original_flags.iter().all(|(_, d)| !d),
+        "original entries must have disclosed: false"
+    );
+
+    let options = RewrapOptions {
+        rotate_key: true,
+        clear_disclosure_history: false,
+        token_codec: None,
+        no_signer_pub: false,
+        debug: false,
+    };
+    let encrypted = KvEncContent::new_unchecked(encrypted);
+    let rewrapped = rewrap_kv_document(
+        &options,
+        &encrypted,
+        ALICE_MEMBER_ID,
+        &key_ctx,
+        Some(temp_dir.path()),
+    )
+    .unwrap();
+
+    // After rotate-key without removal, entries must preserve disclosed: false
+    let flags = extract_disclosed_flags(&rewrapped);
+    assert!(!flags.is_empty(), "rotated content must contain KV entries");
+    for (key, disclosed) in &flags {
+        assert!(
+            !*disclosed,
+            "entry '{}' must have disclosed: false after rotate-key without removal",
+            key
+        );
+    }
+}
+
+#[test]
+fn test_rewrap_kv_remove_then_rotate_preserves_disclosed_true() {
+    let (temp_dir, alice_kid, bob_kid) = setup_two_member_keystore();
+    let key_ctx = setup_member_key_context(&temp_dir, ALICE_MEMBER_ID, &alice_kid);
+
+    // Encrypt for alice and bob with two entries
+    let keystore_root = temp_dir.path().join("keys");
+    let alice_pub = load_public_key(&keystore_root, ALICE_MEMBER_ID, &alice_kid).unwrap();
+    let bob_pub = load_public_key(&keystore_root, BOB_MEMBER_ID, &bob_kid).unwrap();
+    let members = make_verified_members(&[alice_pub, bob_pub]);
+    let kv_map = parse_dotenv("DATABASE_URL=postgres://localhost\nAPI_KEY=secret123\n").unwrap();
+    let recipients = vec![ALICE_MEMBER_ID.to_string(), BOB_MEMBER_ID.to_string()];
+    let encrypted = encrypt_kv_document(
+        &kv_map,
+        &recipients,
+        &members,
+        &SigningContext {
+            signing_key: &key_ctx.signing_key,
+            signer_kid: &alice_kid,
+            signer_pub: None,
+            debug: false,
+        },
+        TokenCodec::JsonJcs,
+    )
+    .unwrap();
+
+    // Setup workspace with only alice (bob removed)
+    setup_workspace_members(&temp_dir, ALICE_MEMBER_ID, &alice_kid);
+
+    // Step 1: Remove bob (sets disclosed: true on all entries) + rotate key
+    let options = RewrapOptions {
+        rotate_key: true,
+        clear_disclosure_history: false,
+        token_codec: None,
+        no_signer_pub: false,
+        debug: false,
+    };
+    let encrypted = KvEncContent::new_unchecked(encrypted);
+    let rewrapped = rewrap_kv_document(
+        &options,
+        &encrypted,
+        ALICE_MEMBER_ID,
+        &key_ctx,
+        Some(temp_dir.path()),
+    )
+    .unwrap();
+
+    // After remove + rotate, all entries must still have disclosed: true
+    let flags = extract_disclosed_flags(&rewrapped);
+    assert!(
+        flags.len() >= 2,
+        "rewrapped content must contain at least 2 KV entries, got {}",
+        flags.len()
+    );
+    for (key, disclosed) in &flags {
+        assert!(
+            *disclosed,
+            "entry '{}' must have disclosed: true after remove + rotate, but got false",
+            key
+        );
+    }
+}
+
+#[test]
+fn test_rewrap_kv_clear_disclosure_history_resets_disclosed_flags() {
+    let (temp_dir, alice_kid, bob_kid) = setup_two_member_keystore();
+    let key_ctx = setup_member_key_context(&temp_dir, ALICE_MEMBER_ID, &alice_kid);
+
+    // Encrypt for alice and bob with two entries
+    let keystore_root = temp_dir.path().join("keys");
+    let alice_pub = load_public_key(&keystore_root, ALICE_MEMBER_ID, &alice_kid).unwrap();
+    let bob_pub = load_public_key(&keystore_root, BOB_MEMBER_ID, &bob_kid).unwrap();
+    let members = make_verified_members(&[alice_pub, bob_pub]);
+    let kv_map = parse_dotenv("DATABASE_URL=postgres://localhost\nAPI_KEY=secret123\n").unwrap();
+    let recipients = vec![ALICE_MEMBER_ID.to_string(), BOB_MEMBER_ID.to_string()];
+    let encrypted = encrypt_kv_document(
+        &kv_map,
+        &recipients,
+        &members,
+        &SigningContext {
+            signing_key: &key_ctx.signing_key,
+            signer_kid: &alice_kid,
+            signer_pub: None,
+            debug: false,
+        },
+        TokenCodec::JsonJcs,
+    )
+    .unwrap();
+
+    // Setup workspace with only alice (bob removed)
+    setup_workspace_members(&temp_dir, ALICE_MEMBER_ID, &alice_kid);
+
+    // Step 1: Remove bob => disclosed: true on all entries, removed_recipients populated
+    let remove_options = rewrap_options_default(false);
+    let encrypted = KvEncContent::new_unchecked(encrypted);
+    let after_remove = rewrap_kv_document(
+        &remove_options,
+        &encrypted,
+        ALICE_MEMBER_ID,
+        &key_ctx,
+        Some(temp_dir.path()),
+    )
+    .unwrap();
+
+    // Verify disclosed: true after removal
+    let flags_after_remove = extract_disclosed_flags(&after_remove);
+    assert!(
+        flags_after_remove.len() >= 2,
+        "must have at least 2 entries"
+    );
+    for (key, disclosed) in &flags_after_remove {
+        assert!(
+            *disclosed,
+            "entry '{}' must have disclosed: true after removal",
+            key
+        );
+    }
+    // Verify removed_recipients present by parsing the WRAP token
+    let wrap_token_after_remove = after_remove
+        .lines()
+        .find(|l| l.starts_with(":WRAP "))
+        .unwrap()
+        .strip_prefix(":WRAP ")
+        .unwrap();
+    let wrap_after_remove: KvWrap = TokenCodec::decode_auto(wrap_token_after_remove).unwrap();
+    assert!(
+        wrap_after_remove.removed_recipients.is_some(),
+        "removed_recipients must be present after removal"
+    );
+
+    // Step 2: Clear disclosure history => disclosed: false, removed_recipients gone
+    let clear_options = RewrapOptions {
+        rotate_key: false,
+        clear_disclosure_history: true,
+        token_codec: None,
+        no_signer_pub: false,
+        debug: false,
+    };
+    let after_remove = KvEncContent::new_unchecked(after_remove);
+    let after_clear = rewrap_kv_document(
+        &clear_options,
+        &after_remove,
+        ALICE_MEMBER_ID,
+        &key_ctx,
+        Some(temp_dir.path()),
+    )
+    .unwrap();
+
+    // Verify all entries have disclosed: false (field omitted)
+    let flags_after_clear = extract_disclosed_flags(&after_clear);
+    assert!(
+        flags_after_clear.len() >= 2,
+        "must have at least 2 entries after clear"
+    );
+    for (key, disclosed) in &flags_after_clear {
+        assert!(
+            !*disclosed,
+            "entry '{}' must have disclosed: false after clear_disclosure_history",
+            key
+        );
+    }
+
+    // Verify removed_recipients is gone by parsing the WRAP token
+    let wrap_token_after_clear = after_clear
+        .lines()
+        .find(|l| l.starts_with(":WRAP "))
+        .unwrap()
+        .strip_prefix(":WRAP ")
+        .unwrap();
+    let wrap_after_clear: KvWrap = TokenCodec::decode_auto(wrap_token_after_clear).unwrap();
+    assert!(
+        wrap_after_clear.removed_recipients.is_none(),
+        "removed_recipients must be None after clear_disclosure_history"
+    );
+
+    // Verify the cleared content is still valid (parseable and verifiable)
+    let doc = parse_kv_document(&after_clear);
+    assert!(
+        doc.is_ok(),
+        "cleared content must be parseable: {:?}",
+        doc.err()
+    );
+}

@@ -1,0 +1,6 @@
+.claude
+.secretenv
+.worktrees
+docs
+target
+*.tmp

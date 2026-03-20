@@ -1,0 +1,58 @@
+// Copyright 2026 Satoshi Ebisawa
+// SPDX-License-Identifier: Apache-2.0
+
+//! unset command - remove a key from default kv-enc file
+
+use clap::Args;
+
+use crate::app::context::CommonCommandOptions;
+use crate::app::kv::unset_kv_command;
+use crate::cli::common::options::CommonOptions;
+use crate::Result;
+
+#[derive(Args)]
+pub struct UnsetArgs {
+    /// Common options shared across commands
+    #[command(flatten)]
+    pub common: CommonOptions,
+
+    /// Do not embed signer's PublicKey in signature
+    #[arg(long)]
+    pub no_signer_pub: bool,
+
+    /// Force removal without confirmation
+    #[arg(long, short = 'f')]
+    pub force: bool,
+
+    /// Member ID to use
+    #[arg(long, short = 'm')]
+    pub member_id: Option<String>,
+
+    /// Secret store name; defaults to "default"
+    #[arg(long, short = 'n')]
+    pub name: Option<String>,
+
+    /// Key name to remove
+    pub key: String,
+}
+
+pub fn run(args: UnsetArgs) -> Result<()> {
+    let outcome = unset_kv_command(
+        CommonCommandOptions::from(&args.common),
+        args.member_id.clone(),
+        args.name.as_deref(),
+        &args.key,
+        args.no_signer_pub,
+        Some(&format!(
+            "Removed key '{}' from '{}'",
+            args.key,
+            args.name.as_deref().unwrap_or("default")
+        )),
+    )?;
+    if let Some(message) = outcome.message {
+        if !args.common.quiet {
+            eprintln!("{}", message);
+        }
+    }
+    Ok(())
+}

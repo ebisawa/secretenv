@@ -1,0 +1,189 @@
+// Copyright 2026 Satoshi Ebisawa
+// SPDX-License-Identifier: Apache-2.0
+
+//! Integration tests for `config` command
+//!
+//! Tests the config command subcommands: get, set, unset, list.
+
+use crate::cli::common::cmd;
+use predicates::prelude::*;
+use tempfile::TempDir;
+
+// ============================================================================
+// Help
+// ============================================================================
+
+#[test]
+fn test_config_help() {
+    cmd()
+        .arg("config")
+        .arg("--help")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("config"));
+}
+
+// ============================================================================
+// Set and Get
+// ============================================================================
+
+#[test]
+fn test_config_set_and_get() {
+    let home_dir = TempDir::new().unwrap();
+
+    // Set a value
+    cmd()
+        .arg("config")
+        .arg("set")
+        .arg("member_id")
+        .arg("test@example.com")
+        .env("SECRETENV_HOME", home_dir.path())
+        .assert()
+        .success();
+
+    // Get the value
+    cmd()
+        .arg("config")
+        .arg("get")
+        .arg("member_id")
+        .env("SECRETENV_HOME", home_dir.path())
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("test@example.com"));
+}
+
+// ============================================================================
+// Set and List
+// ============================================================================
+
+#[test]
+fn test_config_set_and_list() {
+    let home_dir = TempDir::new().unwrap();
+
+    // Set a value
+    cmd()
+        .arg("config")
+        .arg("set")
+        .arg("member_id")
+        .arg("test@example.com")
+        .env("SECRETENV_HOME", home_dir.path())
+        .assert()
+        .success();
+
+    // List all configurations
+    cmd()
+        .arg("config")
+        .arg("list")
+        .env("SECRETENV_HOME", home_dir.path())
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("member_id"));
+}
+
+#[test]
+fn test_config_set_creates_home_dir_if_missing() {
+    let base_dir = TempDir::new().unwrap();
+    let home_dir = base_dir.path().join("missing_home_dir");
+
+    assert!(
+        !home_dir.exists(),
+        "Precondition: SECRETENV_HOME directory must not exist"
+    );
+
+    cmd()
+        .arg("config")
+        .arg("set")
+        .arg("github_user")
+        .arg("ebisawa")
+        .env("SECRETENV_HOME", &home_dir)
+        .assert()
+        .success();
+
+    assert!(home_dir.exists(), "Expected SECRETENV_HOME to be created");
+    assert!(
+        home_dir.join("config.toml").exists(),
+        "Expected config.toml to be written"
+    );
+}
+
+// ============================================================================
+// Get nonexistent key
+// ============================================================================
+
+#[test]
+fn test_config_get_nonexistent_key() {
+    let home_dir = TempDir::new().unwrap();
+
+    cmd()
+        .arg("config")
+        .arg("get")
+        .arg("member_id")
+        .env("SECRETENV_HOME", home_dir.path())
+        .assert()
+        .failure();
+}
+
+// ============================================================================
+// Invalid key
+// ============================================================================
+
+#[test]
+fn test_config_invalid_key_fails() {
+    let home_dir = TempDir::new().unwrap();
+
+    cmd()
+        .arg("config")
+        .arg("get")
+        .arg("invalid_key")
+        .env("SECRETENV_HOME", home_dir.path())
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("invalid key").or(predicate::str::contains("Invalid")));
+}
+
+// ============================================================================
+// Unset removes value
+// ============================================================================
+
+#[test]
+fn test_config_unset_removes_value() {
+    let home_dir = TempDir::new().unwrap();
+
+    // Set a value
+    cmd()
+        .arg("config")
+        .arg("set")
+        .arg("member_id")
+        .arg("test@example.com")
+        .env("SECRETENV_HOME", home_dir.path())
+        .assert()
+        .success();
+
+    // Verify it exists
+    cmd()
+        .arg("config")
+        .arg("get")
+        .arg("member_id")
+        .env("SECRETENV_HOME", home_dir.path())
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("test@example.com"));
+
+    // Unset the value
+    cmd()
+        .arg("config")
+        .arg("unset")
+        .arg("member_id")
+        .env("SECRETENV_HOME", home_dir.path())
+        .assert()
+        .success();
+
+    // Verify it no longer exists
+    cmd()
+        .arg("config")
+        .arg("get")
+        .arg("member_id")
+        .env("SECRETENV_HOME", home_dir.path())
+        .assert()
+        .failure();
+}

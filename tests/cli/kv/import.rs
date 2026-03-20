@@ -1,0 +1,168 @@
+// Copyright 2026 Satoshi Ebisawa
+// SPDX-License-Identifier: Apache-2.0
+
+//! Integration tests for `import` command
+
+use crate::cli::common::{cmd, setup_workspace};
+use predicates::prelude::*;
+use std::fs;
+
+#[test]
+fn test_import_dotenv_file() {
+    let (workspace_dir, home_dir, _ssh_temp, ssh_priv) = setup_workspace();
+
+    // Create .env file
+    let env_file = workspace_dir.path().join("test.env");
+    fs::write(
+        &env_file,
+        "DB_URL=postgres://localhost\nAPI_KEY=secret123\nPORT=8080\n",
+    )
+    .unwrap();
+
+    // Import
+    cmd()
+        .arg("import")
+        .arg(env_file.to_str().unwrap())
+        .arg("--workspace")
+        .arg(workspace_dir.path())
+        .env("SECRETENV_HOME", home_dir.path())
+        .env("SECRETENV_SSH_KEY", ssh_priv.to_str().unwrap())
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("Imported 3 entries"));
+
+    // Verify values can be retrieved
+    for (key, expected_value) in &[
+        ("DB_URL", "postgres://localhost"),
+        ("API_KEY", "secret123"),
+        ("PORT", "8080"),
+    ] {
+        cmd()
+            .arg("get")
+            .arg(key)
+            .arg("--workspace")
+            .arg(workspace_dir.path())
+            .env("SECRETENV_HOME", home_dir.path())
+            .env("SECRETENV_SSH_KEY", ssh_priv.to_str().unwrap())
+            .assert()
+            .success()
+            .stdout(predicate::str::contains(*expected_value));
+    }
+}
+
+#[test]
+fn test_import_overwrites_existing_keys() {
+    let (workspace_dir, home_dir, _ssh_temp, ssh_priv) = setup_workspace();
+
+    // Set initial value
+    cmd()
+        .arg("set")
+        .arg("API_KEY")
+        .arg("old_value")
+        .arg("--workspace")
+        .arg(workspace_dir.path())
+        .env("SECRETENV_HOME", home_dir.path())
+        .env("SECRETENV_SSH_KEY", ssh_priv.to_str().unwrap())
+        .assert()
+        .success();
+
+    // Import file with same key
+    let env_file = workspace_dir.path().join("test.env");
+    fs::write(&env_file, "API_KEY=new_value\n").unwrap();
+
+    cmd()
+        .arg("import")
+        .arg(env_file.to_str().unwrap())
+        .arg("--workspace")
+        .arg(workspace_dir.path())
+        .env("SECRETENV_HOME", home_dir.path())
+        .env("SECRETENV_SSH_KEY", ssh_priv.to_str().unwrap())
+        .assert()
+        .success();
+
+    // Verify value was overwritten
+    cmd()
+        .arg("get")
+        .arg("API_KEY")
+        .arg("--workspace")
+        .arg(workspace_dir.path())
+        .env("SECRETENV_HOME", home_dir.path())
+        .env("SECRETENV_SSH_KEY", ssh_priv.to_str().unwrap())
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("new_value"));
+}
+
+#[test]
+fn test_import_invalid_dotenv_fails() {
+    let (workspace_dir, home_dir, _ssh_temp, ssh_priv) = setup_workspace();
+
+    let env_file = workspace_dir.path().join("bad.env");
+    fs::write(&env_file, "VALID_KEY=value\nINVALID LINE WITHOUT EQUALS\n").unwrap();
+
+    cmd()
+        .arg("import")
+        .arg(env_file.to_str().unwrap())
+        .arg("--workspace")
+        .arg(workspace_dir.path())
+        .env("SECRETENV_HOME", home_dir.path())
+        .env("SECRETENV_SSH_KEY", ssh_priv.to_str().unwrap())
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("missing '=' separator"));
+}
+
+#[test]
+fn test_import_nonexistent_file_fails() {
+    let (workspace_dir, home_dir, _ssh_temp, ssh_priv) = setup_workspace();
+
+    cmd()
+        .arg("import")
+        .arg("/nonexistent/path/test.env")
+        .arg("--workspace")
+        .arg(workspace_dir.path())
+        .env("SECRETENV_HOME", home_dir.path())
+        .env("SECRETENV_SSH_KEY", ssh_priv.to_str().unwrap())
+        .assert()
+        .failure();
+}
+
+#[test]
+fn test_import_empty_file_fails() {
+    let (workspace_dir, home_dir, _ssh_temp, ssh_priv) = setup_workspace();
+
+    let env_file = workspace_dir.path().join("empty.env");
+    fs::write(&env_file, "# only comments\n\n").unwrap();
+
+    cmd()
+        .arg("import")
+        .arg(env_file.to_str().unwrap())
+        .arg("--workspace")
+        .arg(workspace_dir.path())
+        .env("SECRETENV_HOME", home_dir.path())
+        .env("SECRETENV_SSH_KEY", ssh_priv.to_str().unwrap())
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("No valid entries found"));
+}
+
+#[test]
+fn test_import_with_json_output() {
+    let (workspace_dir, home_dir, _ssh_temp, ssh_priv) = setup_workspace();
+
+    let env_file = workspace_dir.path().join("test.env");
+    fs::write(&env_file, "KEY1=value1\nKEY2=value2\n").unwrap();
+
+    cmd()
+        .arg("import")
+        .arg(env_file.to_str().unwrap())
+        .arg("--json")
+        .arg("--workspace")
+        .arg(workspace_dir.path())
+        .env("SECRETENV_HOME", home_dir.path())
+        .env("SECRETENV_SSH_KEY", ssh_priv.to_str().unwrap())
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("\"imported\""))
+        .stdout(predicate::str::contains("\"file\""));
+}

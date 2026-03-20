@@ -1,0 +1,214 @@
+// Copyright 2026 Satoshi Ebisawa
+// SPDX-License-Identifier: Apache-2.0
+
+use crate::cli_common::{ALICE_MEMBER_ID, BOB_MEMBER_ID, TEST_MEMBER_ID};
+use secretenv::model::public_key::*;
+
+#[test]
+fn test_public_key_deserialization() {
+    let json_str = r#"{
+        "protected": {
+            "format": "secretenv.public.key@3",
+            "member_id": "alice@example.com",
+            "kid": "01HN8Z3Q4R5S6T7V8W9X0Y1Z2A",
+            "identity": {
+                "keys": {
+                    "kem": {
+                        "kty": "OKP",
+                        "crv": "X25519",
+                        "x": "YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXowMTIzNDU"
+                    },
+                    "sig": {
+                        "kty": "OKP",
+                        "crv": "Ed25519",
+                        "x": "YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXowMTIzNDU"
+                    }
+                },
+                "attestation": {
+                    "method": "ssh-sign",
+                    "pub": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGPf...",
+                    "sig": "c2lnbmF0dXJl"
+                }
+            },
+            "expires_at": "2025-01-15T00:00:00Z",
+            "created_at": "2024-01-15T00:00:00Z"
+        },
+        "signature": "c2VsZnNpZw"
+    }"#;
+
+    let pk: PublicKey = serde_json::from_str(json_str).expect("deserialization failed");
+
+    assert_eq!(
+        pk.protected.format,
+        secretenv::model::identifiers::format::PUBLIC_KEY_V3
+    );
+    assert_eq!(pk.protected.member_id, ALICE_MEMBER_ID);
+    assert_eq!(pk.protected.kid, "01HN8Z3Q4R5S6T7V8W9X0Y1Z2A");
+    assert_eq!(pk.protected.identity.keys.kem.kty, "OKP");
+    assert_eq!(
+        pk.protected.identity.keys.kem.crv,
+        secretenv::model::identifiers::jwk::CRV_X25519
+    );
+    assert_eq!(
+        pk.protected.identity.attestation.method,
+        secretenv::io::ssh::protocol::constants::ATTESTATION_METHOD_SSH_SIGN
+    );
+}
+
+#[test]
+fn test_public_key_serialization() {
+    let pk = PublicKey {
+        protected: PublicKeyProtected {
+            format: secretenv::model::identifiers::format::PUBLIC_KEY_V3.to_string(),
+            member_id: BOB_MEMBER_ID.to_string(),
+            kid: "01HN8Z3Q4R5S6T7V8W9X0Y1Z2B".to_string(),
+            identity: Identity {
+                keys: IdentityKeys {
+                    kem: JwkOkpPublicKey {
+                        kty: "OKP".to_string(),
+                        crv: secretenv::model::identifiers::jwk::CRV_X25519.to_string(),
+                        x: "dGVzdGtleQ".to_string(),
+                    },
+                    sig: JwkOkpPublicKey {
+                        kty: "OKP".to_string(),
+                        crv: secretenv::model::identifiers::jwk::CRV_ED25519.to_string(),
+                        x: "dGVzdGtleQ".to_string(),
+                    },
+                },
+                attestation: Attestation {
+                    method: secretenv::io::ssh::protocol::constants::ATTESTATION_METHOD_SSH_SIGN
+                        .to_string(),
+                    pub_: "ssh-ed25519 AAAAC3...".to_string(),
+                    sig: "c2lnbmF0dXJl".to_string(),
+                },
+            },
+            binding_claims: None,
+            expires_at: "2025-01-15T00:00:00Z".to_string(),
+            created_at: Some("2024-01-15T00:00:00Z".to_string()),
+        },
+        signature: "c2VsZnNpZw".to_string(),
+    };
+
+    let json_value = serde_json::to_value(&pk).expect("serialization failed");
+
+    assert_eq!(
+        json_value["protected"]["format"],
+        secretenv::model::identifiers::format::PUBLIC_KEY_V3
+    );
+    assert_eq!(json_value["protected"]["member_id"], BOB_MEMBER_ID);
+    assert_eq!(json_value["protected"]["kid"], "01HN8Z3Q4R5S6T7V8W9X0Y1Z2B");
+}
+
+#[test]
+fn test_public_key_roundtrip() {
+    let original = PublicKey {
+        protected: PublicKeyProtected {
+            format: secretenv::model::identifiers::format::PUBLIC_KEY_V3.to_string(),
+            member_id: TEST_MEMBER_ID.to_string(),
+            kid: "01HN8Z3Q4R5S6T7V8W9X0Y1Z2C".to_string(),
+            identity: Identity {
+                keys: IdentityKeys {
+                    kem: JwkOkpPublicKey {
+                        kty: "OKP".to_string(),
+                        crv: secretenv::model::identifiers::jwk::CRV_X25519.to_string(),
+                        x: "a2VtcHVi".to_string(),
+                    },
+                    sig: JwkOkpPublicKey {
+                        kty: "OKP".to_string(),
+                        crv: secretenv::model::identifiers::jwk::CRV_ED25519.to_string(),
+                        x: "c2lncHVi".to_string(),
+                    },
+                },
+                attestation: Attestation {
+                    method: secretenv::io::ssh::protocol::constants::ATTESTATION_METHOD_SSH_SIGN
+                        .to_string(),
+                    pub_: "ssh-ed25519 AAAAC3...".to_string(),
+                    sig: "YXR0ZXN0c2ln".to_string(),
+                },
+            },
+            binding_claims: None,
+            expires_at: "2025-12-31T23:59:59Z".to_string(),
+            created_at: Some("2024-01-01T00:00:00Z".to_string()),
+        },
+        signature: "c2VsZnNpZ25hdHVyZQ".to_string(),
+    };
+
+    // Serialize
+    let json_str = serde_json::to_string(&original).expect("serialization failed");
+
+    // Deserialize
+    let deserialized: PublicKey = serde_json::from_str(&json_str).expect("deserialization failed");
+
+    // Compare
+    assert_eq!(original.protected.format, deserialized.protected.format);
+    assert_eq!(
+        original.protected.member_id,
+        deserialized.protected.member_id
+    );
+    assert_eq!(original.protected.kid, deserialized.protected.kid);
+    assert_eq!(original.signature, deserialized.signature);
+}
+
+#[test]
+fn test_public_key_new_preserves_binding_claims() {
+    let github_account = GithubAccount {
+        id: 42,
+        login: "alice".to_string(),
+    };
+    let public_key = PublicKey::new(
+        TEST_MEMBER_ID.to_string(),
+        "01HN8Z3Q4R5S6T7V8W9X0Y1Z2D".to_string(),
+        Identity {
+            keys: IdentityKeys {
+                kem: JwkOkpPublicKey {
+                    kty: "OKP".to_string(),
+                    crv: secretenv::model::identifiers::jwk::CRV_X25519.to_string(),
+                    x: "a2VtcHVi".to_string(),
+                },
+                sig: JwkOkpPublicKey {
+                    kty: "OKP".to_string(),
+                    crv: secretenv::model::identifiers::jwk::CRV_ED25519.to_string(),
+                    x: "c2lncHVi".to_string(),
+                },
+            },
+            attestation: Attestation {
+                method: secretenv::io::ssh::protocol::constants::ATTESTATION_METHOD_SSH_SIGN
+                    .to_string(),
+                pub_: "ssh-ed25519 AAAAC3...".to_string(),
+                sig: "YXR0ZXN0c2ln".to_string(),
+            },
+        },
+        Some(BindingClaims {
+            github_account: Some(github_account.clone()),
+        }),
+        "2025-12-31T23:59:59Z".to_string(),
+        Some("2024-01-01T00:00:00Z".to_string()),
+        "c2ln".to_string(),
+    );
+
+    assert_eq!(
+        public_key
+            .protected
+            .binding_claims
+            .as_ref()
+            .and_then(|claims| claims.github_account.as_ref()),
+        Some(&github_account)
+    );
+}
+
+#[test]
+fn test_ulid_format_validation() {
+    // Valid ULID (26 chars, Crockford's Base32)
+    let valid_ulids = vec![
+        "01HN8Z3Q4R5S6T7V8W9X0Y1Z2A",
+        "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+        "7ZZZZZZZZZZZZZZZZZZZZZZZZZ",
+    ];
+
+    for ulid in valid_ulids {
+        assert_eq!(ulid.len(), 26);
+        assert!(ulid
+            .chars()
+            .all(|c| "0123456789ABCDEFGHJKMNPQRSTVWXYZ".contains(c)));
+    }
+}

@@ -1,0 +1,138 @@
+// Copyright 2026 Satoshi Ebisawa
+// SPDX-License-Identifier: Apache-2.0
+
+use crate::support::path::display_path_relative_to_cwd;
+use crate::{Error, Result};
+use std::path::{Path, PathBuf};
+
+/// Workspace root information
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorkspaceRoot {
+    /// Absolute path to workspace root
+    pub root_path: PathBuf,
+    /// True if .secretenv-root marker file exists
+    pub has_marker_file: bool,
+    /// True if config.toml exists
+    pub has_config_file: bool,
+}
+
+impl WorkspaceRoot {
+    pub fn members_dir(&self) -> PathBuf {
+        self.root_path.join("members")
+    }
+
+    pub fn secrets_dir(&self) -> PathBuf {
+        self.root_path.join("secrets")
+    }
+
+    pub fn config_path(&self) -> Option<PathBuf> {
+        if self.has_config_file {
+            Some(self.root_path.join("config.toml"))
+        } else {
+            None
+        }
+    }
+}
+
+pub(super) fn validate_workspace_path(path: &Path) -> Result<WorkspaceRoot> {
+    if let Some(workspace) = check_explicit_workspace_dir(path) {
+        Ok(workspace)
+    } else {
+        Err(Error::NotFound {
+            message: format!(
+                "Path '{}' is not a valid workspace (missing members/ or secrets/ directories)",
+                display_path_relative_to_cwd(path)
+            ),
+        })
+    }
+}
+
+pub fn detect_workspace_root(start_path: &Path) -> Result<WorkspaceRoot> {
+    let mut current = start_path.canonicalize().map_err(|e| Error::Io {
+        message: format!("Failed to canonicalize path: {}", e),
+        source: Some(e),
+    })?;
+    let git_root = find_git_root(&current).ok_or_else(|| Error::NotFound {
+        message: format!(
+            "No git repository found from '{}'. \
+                 Specify workspace explicitly with --workspace or SECRETENV_WORKSPACE.",
+            display_path_relative_to_cwd(start_path)
+        ),
+    })?;
+
+    loop {
+        if let Some(workspace) = check_workspace(&current) {
+            return Ok(workspace);
+        }
+
+        if current.join(".secretenv-root").exists() {
+            return Err(Error::NotFound {
+                message: format!(
+                    "Found .secretenv-root marker at '{}' but missing members/ or secrets/ directories",
+                    display_path_relative_to_cwd(&current)
+                ),
+            });
+        }
+
+        if current == git_root {
+            return Err(Error::NotFound {
+                message: format!(
+                    "No workspace found within git repository (searched from '{}')",
+                    display_path_relative_to_cwd(start_path)
+                ),
+            });
+        }
+
+        match current.parent() {
+            Some(parent) => current = parent.to_path_buf(),
+            None => {
+                return Err(Error::NotFound {
+                    message: format!(
+                        "No workspace found: searched from '{}' to filesystem root",
+                        display_path_relative_to_cwd(start_path)
+                    ),
+                })
+            }
+        }
+    }
+}
+
+pub(super) fn find_git_root(start: &Path) -> Option<PathBuf> {
+    let mut current = start.canonicalize().ok()?;
+    loop {
+        if current.join(".git").exists() {
+            return Some(current);
+        }
+        if !current.pop() {
+            return None;
+        }
+    }
+}
+
+fn check_explicit_workspace_dir(path: &Path) -> Option<WorkspaceRoot> {
+    validate_workspace_structure(path)
+}
+
+fn check_workspace(path: &Path) -> Option<WorkspaceRoot> {
+    let secretenv_dir = path.join(".secretenv");
+    if secretenv_dir.is_dir() {
+        validate_workspace_structure(&secretenv_dir)
+    } else {
+        None
+    }
+}
+
+fn validate_workspace_structure(path: &Path) -> Option<WorkspaceRoot> {
+    let members_dir = path.join("members");
+    let members_active = members_dir.join("active");
+    let secrets_dir = path.join("secrets");
+    if members_dir.is_dir() && members_active.is_dir() && secrets_dir.is_dir() {
+        Some(WorkspaceRoot {
+            root_path: path.to_path_buf(),
+            has_marker_file: path.join(".secretenv-root").exists(),
+            has_config_file: path.join("config.toml").exists(),
+        })
+    } else {
+        None
+    }
+}

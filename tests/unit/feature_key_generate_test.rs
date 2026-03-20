@@ -1,0 +1,478 @@
+// Copyright 2026 Satoshi Ebisawa
+// SPDX-License-Identifier: Apache-2.0
+
+//! Unit tests for feature/key/generate module.
+//!
+//! Tests for untested functions:
+//! - build_private_key_plaintext (tested indirectly via keygen_test)
+//! - save_and_activate (tested via public save_key_pair_atomic + set_active_kid)
+//! - ensure_keystore_dir (tested via KeystoreResolver::resolve_and_ensure)
+//! - build_public_key with github_account
+
+use crate::cli_common::ALICE_MEMBER_ID;
+use crate::test_utils::{keygen_test, setup_test_keystore};
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use base64::Engine;
+use ed25519_dalek::{SigningKey, VerifyingKey};
+use secretenv::feature::key::generate::{
+    build_identity_keys, build_public_key, generate_keypairs, PublicKeyBuildParams,
+};
+use secretenv::io::keystore::active::load_active_kid;
+use secretenv::io::keystore::resolver::KeystoreResolver;
+use secretenv::io::keystore::signer::load_signer_public_key_if_needed;
+use secretenv::io::keystore::storage::{list_kids, save_key_pair_atomic};
+use secretenv::io::ssh::backend::signature_backend::SignatureBackend;
+use secretenv::io::ssh::protocol::constants::ATTESTATION_METHOD_SSH_SIGN;
+use secretenv::io::ssh::protocol::types::Ed25519RawSignature;
+use secretenv::model::identifiers::jwk::{CRV_ED25519, CRV_X25519};
+use secretenv::model::public_key::{Attestation, GithubAccount, Identity};
+use tempfile::TempDir;
+use x25519_dalek::{PublicKey as X25519PublicKey, StaticSecret as X25519SecretKey};
+
+// ============================================================================
+// build_private_key_plaintext tests (indirect via keygen_test)
+// ============================================================================
+
+#[test]
+fn test_build_private_key_plaintext_fields() {
+    let (plaintext, _public_key) = keygen_test(ALICE_MEMBER_ID).unwrap();
+
+    // Verify KEM key fields
+    assert_eq!(plaintext.keys.kem.kty, "OKP");
+    assert_eq!(plaintext.keys.kem.crv, CRV_X25519);
+    assert!(!plaintext.keys.kem.x.is_empty(), "kem.x must be non-empty");
+    assert!(!plaintext.keys.kem.d.is_empty(), "kem.d must be non-empty");
+
+    // Verify signing key fields
+    assert_eq!(plaintext.keys.sig.kty, "OKP");
+    assert_eq!(plaintext.keys.sig.crv, CRV_ED25519);
+    assert!(!plaintext.keys.sig.x.is_empty(), "sig.x must be non-empty");
+    assert!(!plaintext.keys.sig.d.is_empty(), "sig.d must be non-empty");
+}
+
+#[test]
+fn test_build_private_key_plaintext_base64url_encoded() {
+    let (plaintext, _public_key) = keygen_test(ALICE_MEMBER_ID).unwrap();
+
+    // All x and d fields must be valid base64url
+    let kem_x = URL_SAFE_NO_PAD.decode(&plaintext.keys.kem.x);
+    assert!(kem_x.is_ok(), "kem.x must be valid base64url");
+    assert_eq!(kem_x.unwrap().len(), 32, "X25519 public key is 32 bytes");
+
+    let kem_d = URL_SAFE_NO_PAD.decode(&plaintext.keys.kem.d);
+    assert!(kem_d.is_ok(), "kem.d must be valid base64url");
+    assert_eq!(kem_d.unwrap().len(), 32, "X25519 secret key is 32 bytes");
+
+    let sig_x = URL_SAFE_NO_PAD.decode(&plaintext.keys.sig.x);
+    assert!(sig_x.is_ok(), "sig.x must be valid base64url");
+    assert_eq!(sig_x.unwrap().len(), 32, "Ed25519 public key is 32 bytes");
+
+    let sig_d = URL_SAFE_NO_PAD.decode(&plaintext.keys.sig.d);
+    assert!(sig_d.is_ok(), "sig.d must be valid base64url");
+    assert_eq!(sig_d.unwrap().len(), 32, "Ed25519 secret key is 32 bytes");
+}
+
+#[test]
+fn test_build_private_key_plaintext_key_consistency() {
+    let (plaintext, public_key) = keygen_test(ALICE_MEMBER_ID).unwrap();
+
+    // The public key's x field in kem should match the private key's x field in kem
+    assert_eq!(
+        plaintext.keys.kem.x, public_key.protected.identity.keys.kem.x,
+        "KEM public key in private and public key documents must match"
+    );
+
+    // The public key's x field in sig should match the private key's x field in sig
+    assert_eq!(
+        plaintext.keys.sig.x, public_key.protected.identity.keys.sig.x,
+        "Signing public key in private and public key documents must match"
+    );
+}
+
+// ============================================================================
+// build_public_key with/without github_account
+// ============================================================================
+
+fn make_test_identity() -> (Identity, ed25519_dalek::SigningKey, String) {
+    let (kid, _kem_sk, kem_pk, sig_sk, sig_pk) = generate_keypairs().unwrap();
+    let identity_keys = build_identity_keys(&kem_pk, &sig_pk).unwrap();
+    let identity = Identity {
+        keys: identity_keys,
+        attestation: Attestation {
+            method: ATTESTATION_METHOD_SSH_SIGN.to_string(),
+            pub_: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE".to_string(),
+            sig: "dummy".to_string(),
+        },
+    };
+    (identity, sig_sk, kid)
+}
+
+#[test]
+fn test_build_public_key_with_github_account() {
+    let (identity, sig_sk, kid) = make_test_identity();
+
+    let github_account = GithubAccount {
+        id: 12345,
+        login: "testuser".to_string(),
+    };
+
+    let public_key = build_public_key(&PublicKeyBuildParams {
+        member_id: ALICE_MEMBER_ID,
+        kid: &kid,
+        identity,
+        created_at: "2024-01-01T00:00:00Z",
+        expires_at: "2025-01-01T00:00:00Z",
+        sig_sk: &sig_sk,
+        debug: false,
+        github_account: Some(github_account),
+    })
+    .unwrap();
+
+    let binding = public_key.protected.binding_claims.as_ref();
+    assert!(binding.is_some(), "binding_claims must be present");
+
+    let github = binding.unwrap().github_account.as_ref();
+    assert!(github.is_some(), "github_account must be present");
+    assert_eq!(github.unwrap().id, 12345);
+    assert_eq!(github.unwrap().login, "testuser");
+}
+
+#[test]
+fn test_build_public_key_without_github_account() {
+    let (identity, sig_sk, kid) = make_test_identity();
+
+    let public_key = build_public_key(&PublicKeyBuildParams {
+        member_id: ALICE_MEMBER_ID,
+        kid: &kid,
+        identity,
+        created_at: "2024-01-01T00:00:00Z",
+        expires_at: "2025-01-01T00:00:00Z",
+        sig_sk: &sig_sk,
+        debug: false,
+        github_account: None,
+    })
+    .unwrap();
+
+    assert!(
+        public_key.protected.binding_claims.is_none(),
+        "binding_claims must be None when no github_account"
+    );
+}
+
+#[test]
+fn test_build_public_key_self_signature_valid_base64url() {
+    let (identity, sig_sk, kid) = make_test_identity();
+
+    let public_key = build_public_key(&PublicKeyBuildParams {
+        member_id: ALICE_MEMBER_ID,
+        kid: &kid,
+        identity,
+        created_at: "2024-01-01T00:00:00Z",
+        expires_at: "2025-01-01T00:00:00Z",
+        sig_sk: &sig_sk,
+        debug: false,
+        github_account: None,
+    })
+    .unwrap();
+
+    assert!(
+        !public_key.signature.is_empty(),
+        "signature must be non-empty"
+    );
+
+    // Signature should be valid base64url
+    let decoded = URL_SAFE_NO_PAD.decode(&public_key.signature);
+    assert!(decoded.is_ok(), "signature must be valid base64url");
+
+    // Ed25519 signature is 64 bytes
+    assert_eq!(decoded.unwrap().len(), 64, "Ed25519 signature is 64 bytes");
+}
+
+#[test]
+fn test_derive_key_from_ssh_preserves_ssh_backend_errors() {
+    struct FailingBackend;
+
+    impl SignatureBackend for FailingBackend {
+        fn sign_for_ikm(
+            &self,
+            _ssh_pubkey: &str,
+            _challenge_bytes: &[u8],
+        ) -> secretenv::Result<Ed25519RawSignature> {
+            Err(secretenv::Error::Ssh {
+                message: "ssh-keygen -Y sign failed: synthetic backend failure".to_string(),
+                source: None,
+            })
+        }
+    }
+
+    let salt = secretenv::crypto::types::primitives::Salt::new([7u8; 16]);
+    let result = secretenv::feature::key::protection::key_derivation::derive_key_from_ssh(
+        "01TESTKID000000000000000000",
+        &salt,
+        &FailingBackend,
+        "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestKey test@example.com",
+        false,
+    );
+
+    let error = match result {
+        Ok(_) => panic!("ssh backend errors must propagate"),
+        Err(error) => error,
+    };
+    let error_message = error.to_string();
+    assert!(
+        error_message.contains("synthetic backend failure"),
+        "original SSH error should be preserved: {}",
+        error_message
+    );
+    assert!(
+        !error_message.contains("W_SSH_NONDETERMINISTIC"),
+        "backend failures must not be reclassified as non-deterministic: {}",
+        error_message
+    );
+}
+
+#[test]
+fn test_derive_key_from_ssh_maps_non_deterministic_error() {
+    use std::cell::Cell;
+
+    struct NonDeterministicBackend {
+        counter: Cell<u8>,
+    }
+
+    impl SignatureBackend for NonDeterministicBackend {
+        fn sign_for_ikm(
+            &self,
+            _ssh_pubkey: &str,
+            _challenge_bytes: &[u8],
+        ) -> secretenv::Result<Ed25519RawSignature> {
+            let mut bytes = [0u8; 64];
+            bytes[0] = self.counter.get();
+            self.counter.set(bytes[0] + 1);
+            Ok(Ed25519RawSignature::new(bytes))
+        }
+    }
+
+    let salt = secretenv::crypto::types::primitives::Salt::new([9u8; 16]);
+    let result = secretenv::feature::key::protection::key_derivation::derive_key_from_ssh(
+        "01TESTKID000000000000000000",
+        &salt,
+        &NonDeterministicBackend {
+            counter: Cell::new(0),
+        },
+        "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestKey test@example.com",
+        false,
+    );
+
+    let error = match result {
+        Ok(_) => panic!("non-deterministic signatures must fail"),
+        Err(error) => error,
+    };
+    assert!(
+        error.to_string().contains("W_SSH_NONDETERMINISTIC"),
+        "non-deterministic failures should map to warning code: {}",
+        error
+    );
+}
+
+// ============================================================================
+// save_and_activate tests (via public functions)
+// ============================================================================
+
+#[test]
+fn test_save_and_activate_activates() {
+    let temp_dir = setup_test_keystore(ALICE_MEMBER_ID);
+    let keystore_root = temp_dir.path().join("keys");
+
+    // Generate a new key pair
+    let (plaintext, public_key) = keygen_test(ALICE_MEMBER_ID).unwrap();
+    let new_kid = &public_key.protected.kid;
+    let private_key =
+        crate::test_utils::create_test_private_key(&plaintext, ALICE_MEMBER_ID, new_kid).unwrap();
+
+    // Simulate save_and_activate with no_activate=false
+    save_key_pair_atomic(
+        &keystore_root,
+        ALICE_MEMBER_ID,
+        new_kid,
+        &private_key,
+        &public_key,
+    )
+    .unwrap();
+    // no_activate=false means we DO activate
+    secretenv::io::keystore::active::set_active_kid(ALICE_MEMBER_ID, new_kid, &keystore_root)
+        .unwrap();
+
+    let active = load_active_kid(ALICE_MEMBER_ID, &keystore_root).unwrap();
+    assert_eq!(
+        active.as_deref(),
+        Some(new_kid.as_str()),
+        "Key should be active after save_and_activate with no_activate=false"
+    );
+}
+
+#[test]
+fn test_save_and_activate_no_activate() {
+    let temp_dir = TempDir::new().unwrap();
+    let keystore_root = temp_dir.path().join("keys");
+    std::fs::create_dir_all(&keystore_root).unwrap();
+
+    // Generate a new key pair
+    let (plaintext, public_key) = keygen_test(ALICE_MEMBER_ID).unwrap();
+    let new_kid = &public_key.protected.kid;
+    let private_key =
+        crate::test_utils::create_test_private_key(&plaintext, ALICE_MEMBER_ID, new_kid).unwrap();
+
+    // Simulate save_and_activate with no_activate=true
+    // Only save, do NOT set active
+    save_key_pair_atomic(
+        &keystore_root,
+        ALICE_MEMBER_ID,
+        new_kid,
+        &private_key,
+        &public_key,
+    )
+    .unwrap();
+
+    // Key files should exist
+    let kids = list_kids(&keystore_root, ALICE_MEMBER_ID).unwrap();
+    assert!(kids.contains(&new_kid.to_string()), "Key should be saved");
+
+    // But no active kid should be set
+    let active = load_active_kid(ALICE_MEMBER_ID, &keystore_root).unwrap();
+    assert!(
+        active.is_none(),
+        "No key should be active after save_and_activate with no_activate=true"
+    );
+}
+
+// ============================================================================
+// ensure_keystore_dir tests (via KeystoreResolver::resolve_and_ensure)
+// ============================================================================
+
+#[test]
+fn test_ensure_keystore_dir_creates_directory() {
+    let temp_dir = TempDir::new().unwrap();
+    let home = temp_dir.path().to_path_buf();
+    let expected_keystore = home.join("keys");
+
+    // Directory should not exist yet
+    assert!(!expected_keystore.exists());
+
+    let result = KeystoreResolver::resolve_and_ensure(Some(&home)).unwrap();
+
+    assert_eq!(result, expected_keystore);
+    assert!(
+        expected_keystore.exists(),
+        "Keystore directory should be created"
+    );
+    assert!(
+        expected_keystore.is_dir(),
+        "Keystore path should be a directory"
+    );
+}
+
+#[test]
+fn test_ensure_keystore_dir_idempotent() {
+    let temp_dir = TempDir::new().unwrap();
+    let home = temp_dir.path().to_path_buf();
+
+    // Call twice - second call should succeed without error
+    let result1 = KeystoreResolver::resolve_and_ensure(Some(&home)).unwrap();
+    let result2 = KeystoreResolver::resolve_and_ensure(Some(&home)).unwrap();
+
+    assert_eq!(result1, result2, "Both calls should return the same path");
+}
+
+// ============================================================================
+// Tests merged from services_keys_test.rs
+// ============================================================================
+
+#[test]
+fn test_generate_keypairs() {
+    let (kid, _kem_sk, kem_pk, _sig_sk, sig_pk) = generate_keypairs().unwrap();
+
+    assert!(!kid.is_empty());
+    assert_eq!(kem_pk.as_bytes().len(), 32);
+    assert_eq!(sig_pk.as_bytes().len(), 32);
+}
+
+#[test]
+fn test_build_identity_keys() {
+    let kem_sk = X25519SecretKey::random_from_rng(rand::rngs::OsRng);
+    let kem_pk = X25519PublicKey::from(&kem_sk);
+    let sig_sk = SigningKey::generate(&mut rand::rngs::OsRng);
+    let sig_pk: VerifyingKey = sig_sk.verifying_key();
+
+    let identity_keys = build_identity_keys(&kem_pk, &sig_pk).unwrap();
+
+    assert_eq!(identity_keys.kem.crv, CRV_X25519);
+    assert_eq!(identity_keys.sig.crv, CRV_ED25519);
+}
+
+#[test]
+fn test_build_public_key() {
+    let (_temp_dir, _kid, _kem_sk, kem_pk, _sig_sk, sig_pk) = {
+        let temp_dir = setup_test_keystore(ALICE_MEMBER_ID);
+        let (kid, kem_sk, kem_pk, sig_sk, sig_pk) = generate_keypairs().unwrap();
+        (temp_dir, kid, kem_sk, kem_pk, sig_sk, sig_pk)
+    };
+    let identity_keys = build_identity_keys(&kem_pk, &sig_pk).unwrap();
+
+    let identity = Identity {
+        keys: identity_keys,
+        attestation: Attestation {
+            method: ATTESTATION_METHOD_SSH_SIGN.to_string(),
+            pub_: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE".to_string(),
+            sig: "dummy".to_string(),
+        },
+    };
+
+    let public_key = build_public_key(&PublicKeyBuildParams {
+        member_id: ALICE_MEMBER_ID,
+        kid: &_kid,
+        identity,
+        created_at: "2024-01-01T00:00:00Z",
+        expires_at: "2025-01-01T00:00:00Z",
+        sig_sk: &_sig_sk,
+        debug: false,
+        github_account: None,
+    })
+    .unwrap();
+
+    assert_eq!(public_key.protected.member_id, ALICE_MEMBER_ID);
+    assert_eq!(public_key.protected.kid, _kid);
+    assert!(!public_key.signature.is_empty());
+}
+
+#[test]
+fn test_load_signer_public_key_if_needed_default() {
+    let temp_dir = setup_test_keystore(ALICE_MEMBER_ID);
+    let keystore_root = temp_dir.path().join("keys");
+    let kids = list_kids(&keystore_root, ALICE_MEMBER_ID).unwrap();
+    let kid = kids.first().unwrap();
+
+    // no_signer_pub=false means DO embed the signer public key
+    let result =
+        load_signer_public_key_if_needed(&keystore_root, ALICE_MEMBER_ID, kid, false).unwrap();
+
+    assert!(result.is_some());
+    assert_eq!(
+        result.as_ref().unwrap().protected.member_id,
+        ALICE_MEMBER_ID
+    );
+    assert_eq!(&result.as_ref().unwrap().protected.kid, kid);
+}
+
+#[test]
+fn test_load_signer_public_key_if_needed_no_signer_pub() {
+    let temp_dir = setup_test_keystore(ALICE_MEMBER_ID);
+    let keystore_root = temp_dir.path().join("keys");
+    let kids = list_kids(&keystore_root, ALICE_MEMBER_ID).unwrap();
+    let kid = kids.first().unwrap();
+
+    // no_signer_pub=true means DON'T embed the signer public key
+    let result =
+        load_signer_public_key_if_needed(&keystore_root, ALICE_MEMBER_ID, kid, true).unwrap();
+
+    assert!(result.is_none());
+}

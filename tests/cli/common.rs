@@ -1,0 +1,124 @@
+// Copyright 2026 Satoshi Ebisawa
+// SPDX-License-Identifier: Apache-2.0
+
+//! Common helpers for CLI integration tests
+//!
+//! This module provides shared helper functions and constants used across
+//! CLI integration tests to reduce code duplication and improve maintainability.
+
+use crate::test_utils::create_temp_ssh_keypair_in_dir;
+use assert_cmd::{cargo, Command};
+use secretenv::cli::common::options::CommonOptions;
+use std::path::PathBuf;
+use tempfile::TempDir;
+
+// ============================================================================
+// Test Binary Helper
+// ============================================================================
+
+/// Helper to get the secretenv test binary command.
+///
+/// Sets `SECRETENV_SSH_SIGNER=ssh-keygen` for CLI integration tests.
+pub fn cmd() -> Command {
+    let mut c = cargo::cargo_bin_cmd!("secretenv");
+    c.env("SECRETENV_SSH_SIGNER", "ssh-keygen");
+    c
+}
+
+// ============================================================================
+// Test Constants
+// ============================================================================
+
+/// Test member ID constants
+pub const TEST_MEMBER_ID: &str = "test@example.com";
+pub const ALICE_MEMBER_ID: &str = "alice@example.com";
+pub const BOB_MEMBER_ID: &str = "bob@example.com";
+pub const CAROL_MEMBER_ID: &str = "carol@example.com";
+pub const DAVE_MEMBER_ID: &str = "dave@example.com";
+pub const EVE_MEMBER_ID: &str = "eve@example.com";
+pub const FRANK_MEMBER_ID: &str = "frank@example.com";
+
+// ============================================================================
+// Common Helper Functions
+// ============================================================================
+
+/// Helper to create default CommonOptions for testing.
+///
+/// Uses `ssh_keygen: true` so tests work in CI environments where
+/// `SSH_AUTH_SOCK` is set but no keys are loaded in the agent.
+pub fn default_common_options() -> CommonOptions {
+    CommonOptions {
+        home: None,
+        workspace: None,
+        identity: None,
+        ssh_agent: false,
+        ssh_keygen: true,
+        json: false,
+        quiet: false,
+        verbose: false,
+    }
+}
+
+/// Helper to set SSH key path in CommonOptions from temp_dir
+pub fn set_ssh_key_from_temp_dir(common_opts: &mut CommonOptions, temp_dir: &TempDir) {
+    let ssh_key_path = temp_dir.path().join(".ssh").join("test_ed25519");
+    common_opts.identity = Some(ssh_key_path);
+}
+
+/// Helper to create a workspace with initialized member.
+///
+/// Returns: (workspace_dir, home_dir, ssh_temp, ssh_priv_path)
+pub fn setup_workspace() -> (TempDir, TempDir, TempDir, PathBuf) {
+    const MAX_INIT_ATTEMPTS: usize = 3;
+
+    for attempt in 1..=MAX_INIT_ATTEMPTS {
+        let workspace_dir = TempDir::new().unwrap();
+        let home_dir = TempDir::new().unwrap();
+        let (ssh_temp, ssh_priv, _ssh_pub, _ssh_pub_content) = create_temp_ssh_keypair();
+
+        std::fs::create_dir_all(workspace_dir.path().join("members")).unwrap();
+        std::fs::create_dir_all(workspace_dir.path().join("secrets")).unwrap();
+
+        let output = cmd()
+            .arg("init")
+            .arg("--workspace")
+            .arg(workspace_dir.path())
+            .arg("--member-id")
+            .arg(TEST_MEMBER_ID)
+            .env("SECRETENV_HOME", home_dir.path())
+            .env("SECRETENV_SSH_KEY", ssh_priv.to_str().unwrap())
+            .output()
+            .unwrap();
+
+        if output.status.success() {
+            return (workspace_dir, home_dir, ssh_temp, ssh_priv);
+        }
+
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let is_retryable = stderr.contains("W_SSH_NONDETERMINISTIC");
+        if !is_retryable || attempt == MAX_INIT_ATTEMPTS {
+            panic!(
+                "failed to initialize test workspace (attempt {attempt}/{MAX_INIT_ATTEMPTS}): {}",
+                stderr.trim()
+            );
+        }
+    }
+
+    unreachable!("setup_workspace should return or panic within retry loop")
+}
+
+/// Helper to create a temporary SSH Ed25519 keypair for testing
+///
+/// Returns: (temp_dir, private_key_path, public_key_path, public_key_content)
+pub fn create_temp_ssh_keypair() -> (TempDir, PathBuf, PathBuf, String) {
+    let temp_dir = TempDir::new().unwrap();
+    let (private_key_path, public_key_path, public_key_content) =
+        create_temp_ssh_keypair_in_dir(&temp_dir);
+
+    (
+        temp_dir,
+        private_key_path,
+        public_key_path,
+        public_key_content,
+    )
+}

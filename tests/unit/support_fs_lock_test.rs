@@ -1,0 +1,73 @@
+// Copyright 2026 Satoshi Ebisawa
+// SPDX-License-Identifier: Apache-2.0
+
+//! Unit tests for support/fs/lock module
+//!
+//! Tests for file locking utilities.
+
+use secretenv::support::fs::lock::with_file_lock;
+use std::fs;
+use tempfile::TempDir;
+
+#[test]
+fn test_with_file_lock() {
+    let temp_dir = TempDir::new().unwrap();
+    let file_path = temp_dir.path().join("test.txt");
+
+    let result = with_file_lock(&file_path, || {
+        fs::write(&file_path, "locked content").unwrap();
+        Ok(())
+    });
+
+    assert!(result.is_ok());
+    assert!(file_path.exists());
+    let content = fs::read_to_string(&file_path).unwrap();
+    assert_eq!(content, "locked content");
+}
+
+#[test]
+fn test_with_file_lock_returns_value() {
+    let temp_dir = TempDir::new().unwrap();
+    let file_path = temp_dir.path().join("test.txt");
+
+    let result = with_file_lock(&file_path, || Ok::<i32, secretenv::Error>(42));
+
+    assert_eq!(result.unwrap(), 42);
+}
+
+#[test]
+fn test_with_file_lock_propagates_error() {
+    let temp_dir = TempDir::new().unwrap();
+    let file_path = temp_dir.path().join("test.txt");
+
+    let result: Result<(), secretenv::Error> = with_file_lock(&file_path, || {
+        Err(secretenv::Error::Config {
+            message: "Test error".to_string(),
+        })
+    });
+
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_with_file_lock_creates_parent_dir() {
+    let temp_dir = TempDir::new().unwrap();
+    let file_path = temp_dir.path().join("a/b/test.txt");
+    let parent_dir = file_path.parent().unwrap();
+
+    assert!(
+        !parent_dir.exists(),
+        "Precondition: parent dir must not exist"
+    );
+
+    let result = with_file_lock(&file_path, || {
+        // If with_file_lock doesn't create the parent directory, this write
+        // will fail and the test will catch it.
+        fs::write(&file_path, "locked content").unwrap();
+        Ok::<(), secretenv::Error>(())
+    });
+
+    assert!(result.is_ok());
+    assert!(parent_dir.exists());
+    assert!(file_path.exists());
+}
