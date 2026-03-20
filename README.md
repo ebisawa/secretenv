@@ -21,7 +21,7 @@ It is also to make it easier to reason about who a secret is shared with, whethe
 ### Homebrew (macOS / Linux)
 
 ```bash
-brew tap ebisawa/secretenv/secretenv
+brew tap ebisawa/secretenv
 brew install secretenv
 ```
 

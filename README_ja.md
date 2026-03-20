@@ -21,7 +21,7 @@
 ### Homebrew (macOS / Linux)
 
 ```bash
-brew tap ebisawa/secretenv/secretenv
+brew tap ebisawa/secretenv
 brew install secretenv
 ```
 

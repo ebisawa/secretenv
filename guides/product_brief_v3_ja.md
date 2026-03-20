@@ -133,7 +133,7 @@ SecretEnv は以下の性質を重視しています。
 ### インストール
 
 ```bash
-brew tap ebisawa/secretenv/secretenv
+brew tap ebisawa/secretenv
 brew install secretenv
 ```
 

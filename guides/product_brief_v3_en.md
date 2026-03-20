@@ -133,7 +133,7 @@ Core operations are offline-first. Encryption, decryption, signature verificatio
 ### Installation
 
 ```bash
-brew tap ebisawa/secretenv/secretenv
+brew tap ebisawa/secretenv
 brew install secretenv
 ```
 
