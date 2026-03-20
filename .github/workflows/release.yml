@@ -26,9 +26,6 @@ jobs:
           - target: aarch64-unknown-linux-gnu
             runner: ubuntu-latest
             use_cross: true
-          - target: x86_64-apple-darwin
-            runner: macos-13
-            use_cross: false
           - target: aarch64-apple-darwin
             runner: macos-latest
             use_cross: false
@@ -125,11 +122,9 @@ jobs:
         run: |
           SHA256_LINUX_X86="$(grep "x86_64-unknown-linux-gnu" SHA256SUMS | awk '{print $1}')"
           SHA256_LINUX_ARM="$(grep "aarch64-unknown-linux-gnu" SHA256SUMS | awk '{print $1}')"
-          SHA256_MACOS_X86="$(grep "x86_64-apple-darwin" SHA256SUMS | awk '{print $1}')"
           SHA256_MACOS_ARM="$(grep "aarch64-apple-darwin" SHA256SUMS | awk '{print $1}')"
           echo "SHA256_LINUX_X86=${SHA256_LINUX_X86}" >> "$GITHUB_ENV"
           echo "SHA256_LINUX_ARM=${SHA256_LINUX_ARM}" >> "$GITHUB_ENV"
-          echo "SHA256_MACOS_X86=${SHA256_MACOS_X86}" >> "$GITHUB_ENV"
           echo "SHA256_MACOS_ARM=${SHA256_MACOS_ARM}" >> "$GITHUB_ENV"
 
       - name: Update Formula
@@ -138,7 +133,6 @@ jobs:
           TAG: ${{ github.ref_name }}
           SHA256_LINUX_X86: ${{ env.SHA256_LINUX_X86 }}
           SHA256_LINUX_ARM: ${{ env.SHA256_LINUX_ARM }}
-          SHA256_MACOS_X86: ${{ env.SHA256_MACOS_X86 }}
           SHA256_MACOS_ARM: ${{ env.SHA256_MACOS_ARM }}
         with:
           github-token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
@@ -157,10 +151,6 @@ jobs:
               license "Apache-2.0"
 
               on_macos do
-                on_intel do
-                  url "${base}/secretenv-${tag}-x86_64-apple-darwin.tar.gz"
-                  sha256 "${process.env.SHA256_MACOS_X86}"
-                end
                 on_arm do
                   url "${base}/secretenv-${tag}-aarch64-apple-darwin.tar.gz"
                   sha256 "${process.env.SHA256_MACOS_ARM}"
