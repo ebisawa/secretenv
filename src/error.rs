@@ -167,10 +167,8 @@ impl From<crate::crypto::CryptoError> for Error {
 
 impl From<crate::io::ssh::SshError> for Error {
     fn from(err: crate::io::ssh::SshError) -> Self {
-        Error::Ssh {
-            message: err.to_string(),
-            source: None,
-        }
+        let crate::io::ssh::SshError::OperationFailed { message, source } = err;
+        Error::Ssh { message, source }
     }
 }
 
