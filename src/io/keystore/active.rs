@@ -57,7 +57,7 @@ pub fn set_active_kid(member_id: &str, kid: &str, keystore_root: &Path) -> Resul
     let active_path = keystore_root.join(member_id).join("active");
 
     // Write kid to active file atomically (with trailing newline)
-    atomic::save_text(&active_path, &format!("{}\n", kid))
+    atomic::save_text_restricted(&active_path, &format!("{}\n", kid))
 }
 
 /// Clear the active kid for a member

@@ -8,7 +8,7 @@
 use crate::io::json::load_json_file;
 use crate::model::private_key::PrivateKey;
 use crate::model::public_key::PublicKey;
-use crate::support::fs::{atomic, ensure_dir, list_dir};
+use crate::support::fs::{atomic, ensure_dir_restricted, list_dir};
 use crate::support::path::display_path_relative_to_cwd;
 use crate::{Error, Result};
 use std::fs;
@@ -30,8 +30,8 @@ fn save_key_pair_to_tmp(
     public_key: &PublicKey,
 ) -> Result<()> {
     let result: Result<()> = (|| {
-        atomic::save_json(&tmp_dir.join("private.json"), private_key)?;
-        atomic::save_json(&tmp_dir.join("public.json"), public_key)?;
+        atomic::save_json_restricted(&tmp_dir.join("private.json"), private_key)?;
+        atomic::save_json_restricted(&tmp_dir.join("public.json"), public_key)?;
         Ok(())
     })();
 
@@ -57,11 +57,11 @@ pub fn save_key_pair_atomic(
     public_key: &PublicKey,
 ) -> Result<()> {
     let member_dir = keystore_root.join(member_id);
-    ensure_dir(&member_dir)?;
+    ensure_dir_restricted(&member_dir)?;
 
     let tmp_name = format!(".tmp-{}", uuid::Uuid::new_v4());
     let tmp_dir = member_dir.join(&tmp_name);
-    ensure_dir(&tmp_dir)?;
+    ensure_dir_restricted(&tmp_dir)?;
 
     save_key_pair_to_tmp(&tmp_dir, private_key, public_key)?;
 
