@@ -5,6 +5,7 @@
 //!
 //! Integration tests for CLI commands using assert_cmd
 
+#[allow(dead_code)]
 #[path = "test_utils.rs"]
 mod test_utils;
 

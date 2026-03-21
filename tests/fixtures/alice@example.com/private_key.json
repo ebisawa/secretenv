@@ -1,0 +1,19 @@
+{
+  "protected": {
+    "format": "secretenv.private.key@3",
+    "member_id": "alice@example.com",
+    "kid": "01KM8R41Y7J9VXGE6VM8AHR452",
+    "alg": {
+      "kdf": "sshsig-ed25519-hkdf-sha256",
+      "fpr": "SHA256:2GiidRWSTYY0gGPvPGeCuseb48ELtqJpUrKAqMtCDJo",
+      "salt": "MP-H99u8CrsX84m2w_PHEw",
+      "aead": "xchacha20-poly1305"
+    },
+    "created_at": "2026-03-21T17:47:07Z",
+    "expires_at": "2027-03-21T17:47:07Z"
+  },
+  "encrypted": {
+    "nonce": "koVBKWO53J1tDFYeldZu9LFesOzMvO8v",
+    "ct": "xveaiM9WXFAdfGlU0DodMZ0CXVPSduxTszyDUy53dXfXF9N2VU5EHYd4mLz2EgnUfax07PtAX6a_47V7qPPTa3GET4ZtZtkwL7VvtL9o3vucRItE27PQTZhzWyQTn_q15tpRlybG2BhDV7H3PYV7-JI4sxvx1W_hAz2ZuBcwi1kaYFI5E2aKc5luigJXoDB09nQYfOVfiozTYa3eRqrycSeGnwONM8sJOw9ckB0KelwQB5Ie9nS0As1jypTbASeAlgLhjqGI2Jx7WQATdlhAzPKp3-kVlfN7Ljq6i-OstUJssOcRButG7MvTTiilLhYoSMJA_XAD5bJIW5CV9oP0WhkwLRyip9OxPVcitz786kIHoFAvId_qpdTBUu2VZG5D2MKiSTFCPkLo"
+  }
+}

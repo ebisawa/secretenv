@@ -11,7 +11,7 @@ use crate::cli_common::ALICE_MEMBER_ID;
 use crate::keygen_helpers::{
     make_attested_public_key, make_decrypted_private_key_plaintext, make_verified_members,
 };
-use crate::test_utils::setup_test_keystore;
+use crate::test_utils::{setup_member_key_context, setup_test_keystore_from_fixtures};
 use ed25519_dalek::SigningKey;
 use secretenv::crypto::kem::decode_kem_secret_key;
 use secretenv::crypto::types::keys::MasterKey;
@@ -46,27 +46,6 @@ use uuid::Uuid;
 // Helper Functions
 // ============================================================================
 
-fn setup_member_key_context(temp_dir: &TempDir, member_id: &str, _kid: &str) -> CryptoContext {
-    let keystore_root = temp_dir.path().join("keys");
-    let ssh_pub =
-        std::fs::read_to_string(temp_dir.path().join(".ssh").join("test_ed25519.pub")).unwrap();
-    let backend: Box<dyn SignatureBackend> = Box::new(SshKeygenBackend::new(
-        Box::new(DefaultSshKeygen::new("ssh-keygen")),
-        SshKeyDescriptor::from_path(temp_dir.path().join(".ssh").join("test_ed25519")),
-    ));
-
-    CryptoContext::load(
-        member_id,
-        backend.as_ref(),
-        &ssh_pub,
-        None,
-        Some(&keystore_root),
-        Some(temp_dir.path().join("workspace")),
-        false,
-    )
-    .unwrap()
-}
-
 /// Encrypt a file and return (verified_doc, key_ctx, kid, _temp_dir)
 ///
 /// The returned TempDir must be kept alive for the duration of the test
@@ -79,14 +58,14 @@ fn encrypt_file_for_test(
     String,
     TempDir,
 ) {
-    let temp_dir = setup_test_keystore(ALICE_MEMBER_ID);
+    let temp_dir = setup_test_keystore_from_fixtures(ALICE_MEMBER_ID);
     let keystore_root = temp_dir.path().join("keys");
 
     let kids = list_kids(&keystore_root, ALICE_MEMBER_ID).unwrap();
     let kid = kids.first().unwrap().clone();
     let public_key = load_public_key(&keystore_root, ALICE_MEMBER_ID, &kid).unwrap();
 
-    let key_ctx = setup_member_key_context(&temp_dir, ALICE_MEMBER_ID, &kid);
+    let key_ctx = setup_member_key_context(&temp_dir, ALICE_MEMBER_ID, None);
 
     let recipient_ids = vec![ALICE_MEMBER_ID.to_string()];
     let members = make_verified_members(std::slice::from_ref(&public_key));
@@ -126,14 +105,14 @@ fn encrypt_kv_for_test(
     String,
     TempDir,
 ) {
-    let temp_dir = setup_test_keystore(ALICE_MEMBER_ID);
+    let temp_dir = setup_test_keystore_from_fixtures(ALICE_MEMBER_ID);
     let keystore_root = temp_dir.path().join("keys");
 
     let kids = list_kids(&keystore_root, ALICE_MEMBER_ID).unwrap();
     let kid = kids.first().unwrap().clone();
     let public_key = load_public_key(&keystore_root, ALICE_MEMBER_ID, &kid).unwrap();
 
-    let key_ctx = setup_member_key_context(&temp_dir, ALICE_MEMBER_ID, &kid);
+    let key_ctx = setup_member_key_context(&temp_dir, ALICE_MEMBER_ID, None);
 
     let kv_map = parse_dotenv(dotenv_content).unwrap();
     let recipients = vec![ALICE_MEMBER_ID.to_string()];
@@ -289,14 +268,14 @@ fn test_decrypt_kv_document_roundtrip() {
 /// Test that encrypting an empty KV map produces an empty decrypted map.
 #[test]
 fn test_decrypt_kv_entries_empty() {
-    let temp_dir = setup_test_keystore(ALICE_MEMBER_ID);
+    let temp_dir = setup_test_keystore_from_fixtures(ALICE_MEMBER_ID);
     let keystore_root = temp_dir.path().join("keys");
 
     let kids = list_kids(&keystore_root, ALICE_MEMBER_ID).unwrap();
     let kid = kids.first().unwrap().clone();
     let public_key = load_public_key(&keystore_root, ALICE_MEMBER_ID, &kid).unwrap();
 
-    let key_ctx = setup_member_key_context(&temp_dir, ALICE_MEMBER_ID, &kid);
+    let key_ctx = setup_member_key_context(&temp_dir, ALICE_MEMBER_ID, None);
 
     // Create empty KV map
     let kv_map = std::collections::HashMap::new();
@@ -425,7 +404,7 @@ fn create_test_master_key() -> MasterKey {
 #[test]
 fn test_unwrap_master_key_for_file() {
     // Setup test keystore
-    let temp_dir = setup_test_keystore(ALICE_MEMBER_ID);
+    let temp_dir = setup_test_keystore_from_fixtures(ALICE_MEMBER_ID);
     let keystore_root = temp_dir.path().join("keys");
     let kids = list_kids(&keystore_root, ALICE_MEMBER_ID).unwrap();
     let kid = kids.first().unwrap();
@@ -484,7 +463,7 @@ fn test_unwrap_master_key_for_file() {
 #[test]
 fn test_unwrap_master_key_for_file_wrong_member() {
     // Setup test keystore
-    let temp_dir = setup_test_keystore(ALICE_MEMBER_ID);
+    let temp_dir = setup_test_keystore_from_fixtures(ALICE_MEMBER_ID);
     let keystore_root = temp_dir.path().join("keys");
     let kids = list_kids(&keystore_root, ALICE_MEMBER_ID).unwrap();
     let kid = kids.first().unwrap();
@@ -552,7 +531,7 @@ fn test_unwrap_master_key_for_file_wrong_member() {
 #[test]
 fn test_unwrap_master_key_from_wrap_item() {
     // Setup test keystore
-    let temp_dir = setup_test_keystore(ALICE_MEMBER_ID);
+    let temp_dir = setup_test_keystore_from_fixtures(ALICE_MEMBER_ID);
     let keystore_root = temp_dir.path().join("keys");
     let kids = list_kids(&keystore_root, ALICE_MEMBER_ID).unwrap();
     let kid = kids.first().unwrap();
@@ -605,7 +584,7 @@ fn test_unwrap_master_key_from_wrap_item() {
 #[test]
 fn test_hpke_aad_binding_defence_in_depth() {
     // Setup test keystore
-    let temp_dir = setup_test_keystore(ALICE_MEMBER_ID);
+    let temp_dir = setup_test_keystore_from_fixtures(ALICE_MEMBER_ID);
     let keystore_root = temp_dir.path().join("keys");
     let kids = list_kids(&keystore_root, ALICE_MEMBER_ID).unwrap();
     let kid = kids.first().unwrap();

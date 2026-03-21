@@ -10,7 +10,7 @@
 //! - build_public_key with github_account
 
 use crate::cli_common::ALICE_MEMBER_ID;
-use crate::test_utils::{keygen_test, setup_test_keystore};
+use crate::test_utils::{keygen_test, setup_test_keystore_from_fixtures};
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
 use ed25519_dalek::{SigningKey, VerifyingKey};
@@ -292,7 +292,7 @@ fn test_derive_key_from_ssh_maps_non_deterministic_error() {
 
 #[test]
 fn test_save_and_activate_activates() {
-    let temp_dir = setup_test_keystore(ALICE_MEMBER_ID);
+    let temp_dir = setup_test_keystore_from_fixtures(ALICE_MEMBER_ID);
     let keystore_root = temp_dir.path().join("keys");
     let ssh_pub_content = std::fs::read_to_string(temp_dir.path().join(".ssh/test_ed25519.pub"))
         .unwrap()
@@ -446,7 +446,7 @@ fn test_build_identity_keys() {
 #[test]
 fn test_build_public_key() {
     let (_temp_dir, _kid, _kem_sk, kem_pk, _sig_sk, sig_pk) = {
-        let temp_dir = setup_test_keystore(ALICE_MEMBER_ID);
+        let temp_dir = setup_test_keystore_from_fixtures(ALICE_MEMBER_ID);
         let (kid, kem_sk, kem_pk, sig_sk, sig_pk) = generate_keypairs().unwrap();
         (temp_dir, kid, kem_sk, kem_pk, sig_sk, sig_pk)
     };
@@ -480,7 +480,7 @@ fn test_build_public_key() {
 
 #[test]
 fn test_load_signer_public_key_if_needed_default() {
-    let temp_dir = setup_test_keystore(ALICE_MEMBER_ID);
+    let temp_dir = setup_test_keystore_from_fixtures(ALICE_MEMBER_ID);
     let keystore_root = temp_dir.path().join("keys");
     let kids = list_kids(&keystore_root, ALICE_MEMBER_ID).unwrap();
     let kid = kids.first().unwrap();
@@ -499,7 +499,7 @@ fn test_load_signer_public_key_if_needed_default() {
 
 #[test]
 fn test_load_signer_public_key_if_needed_no_signer_pub() {
-    let temp_dir = setup_test_keystore(ALICE_MEMBER_ID);
+    let temp_dir = setup_test_keystore_from_fixtures(ALICE_MEMBER_ID);
     let keystore_root = temp_dir.path().join("keys");
     let kids = list_kids(&keystore_root, ALICE_MEMBER_ID).unwrap();
     let kid = kids.first().unwrap();

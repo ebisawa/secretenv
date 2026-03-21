@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::cli_common::ALICE_MEMBER_ID;
-use crate::test_utils::setup_test_keystore;
+use crate::test_utils::setup_test_keystore_from_fixtures;
 use secretenv::io::keystore::member::{
     find_active_key_document, load_single_member_id_from_keystore,
 };
@@ -21,7 +21,7 @@ fn test_load_single_member_id_from_keystore_returns_single_member() {
 
 #[test]
 fn test_find_active_key_document_returns_active_key() {
-    let temp_dir = setup_test_keystore(ALICE_MEMBER_ID);
+    let temp_dir = setup_test_keystore_from_fixtures(ALICE_MEMBER_ID);
     let keystore_root = temp_dir.path().join("keys");
 
     let active = find_active_key_document(ALICE_MEMBER_ID, &keystore_root)

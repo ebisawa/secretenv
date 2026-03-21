@@ -1,7 +1,7 @@
 // Copyright 2026 Satoshi Ebisawa
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::test_utils::setup_test_keystore;
+use crate::test_utils::setup_test_keystore_from_fixtures;
 use secretenv::app::context::CommonCommandOptions;
 use secretenv::app::registration::{
     build_join_registration, resolve_registration_key_plan, RegistrationKeyPlan, RegistrationMode,
@@ -21,7 +21,7 @@ fn build_common_options(home: &TempDir, workspace: &TempDir) -> CommonCommandOpt
 
 #[test]
 fn test_resolve_registration_key_plan_existing_active_key() {
-    let home_dir = setup_test_keystore("alice@example.com");
+    let home_dir = setup_test_keystore_from_fixtures("alice@example.com");
     let keystore_root = home_dir.path().join("keys");
 
     let plan = resolve_registration_key_plan("alice@example.com", &keystore_root).unwrap();
@@ -44,7 +44,7 @@ fn test_resolve_registration_key_plan_missing_active_key() {
 
 #[test]
 fn test_build_join_registration_reuses_existing_key_without_github_user() {
-    let home_dir = setup_test_keystore("alice@example.com");
+    let home_dir = setup_test_keystore_from_fixtures("alice@example.com");
     let workspace_dir = TempDir::new().unwrap();
     std::fs::create_dir_all(workspace_dir.path().join("members/active")).unwrap();
     std::fs::create_dir_all(workspace_dir.path().join("members/incoming")).unwrap();

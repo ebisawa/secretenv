@@ -7,8 +7,9 @@
 
 use crate::cli_common::ALICE_MEMBER_ID;
 use crate::keygen_helpers::make_verified_members;
-use crate::test_utils::{setup_test_keystore, setup_test_workspace};
-use secretenv::feature::context::crypto::CryptoContext;
+use crate::test_utils::{
+    setup_member_key_context, setup_test_keystore_from_fixtures, setup_test_workspace_from_fixtures,
+};
 use secretenv::feature::encrypt::SigningContext;
 use secretenv::feature::kv::encrypt::encrypt_kv_document;
 use secretenv::feature::kv::{
@@ -17,32 +18,7 @@ use secretenv::feature::kv::{
 use secretenv::format::content::KvEncContent;
 use secretenv::format::token::TokenCodec;
 use secretenv::io::keystore::storage::{list_kids, load_public_key};
-use secretenv::io::ssh::backend::signature_backend::SignatureBackend;
-use secretenv::io::ssh::backend::ssh_keygen::SshKeygenBackend;
-use secretenv::io::ssh::external::keygen::DefaultSshKeygen;
-use secretenv::io::ssh::protocol::key_descriptor::SshKeyDescriptor;
 use tempfile::TempDir;
-
-fn setup_member_key_context(temp_dir: &TempDir, member_id: &str, kid: &str) -> CryptoContext {
-    let keystore_root = temp_dir.path().join("keys");
-    let ssh_pub =
-        std::fs::read_to_string(temp_dir.path().join(".ssh").join("test_ed25519.pub")).unwrap();
-    let backend: Box<dyn SignatureBackend> = Box::new(SshKeygenBackend::new(
-        Box::new(DefaultSshKeygen::new("ssh-keygen")),
-        SshKeyDescriptor::from_path(temp_dir.path().join(".ssh").join("test_ed25519")),
-    ));
-
-    CryptoContext::load(
-        member_id,
-        backend.as_ref(),
-        &ssh_pub,
-        Some(kid),
-        Some(&keystore_root),
-        Some(temp_dir.path().join("workspace")),
-        false,
-    )
-    .unwrap()
-}
 
 fn create_test_kv_enc_content(
     temp_dir: &TempDir,
@@ -56,7 +32,7 @@ fn create_test_kv_enc_content(
     let public_key = load_public_key(&keystore_root, ALICE_MEMBER_ID, kid).unwrap();
 
     // Load CryptoContext to get signing key
-    let key_ctx = setup_member_key_context(temp_dir, ALICE_MEMBER_ID, kid);
+    let key_ctx = setup_member_key_context(temp_dir, ALICE_MEMBER_ID, Some(kid));
     let recipients = vec![ALICE_MEMBER_ID.to_string()];
     let members = vec![public_key];
     let verified_members = make_verified_members(&members);
@@ -86,7 +62,7 @@ fn test_list_kv_keys() {
     );
     kv_map.insert("API_KEY".to_string(), "secret123".to_string());
 
-    let temp_dir = setup_test_keystore(ALICE_MEMBER_ID);
+    let temp_dir = setup_test_keystore_from_fixtures(ALICE_MEMBER_ID);
     let encrypted = create_test_kv_enc_content(&temp_dir, &kv_map);
 
     // List keys
@@ -101,7 +77,7 @@ fn test_list_kv_keys() {
 fn test_list_kv_keys_empty() {
     let kv_map = std::collections::HashMap::new();
 
-    let temp_dir = setup_test_keystore(ALICE_MEMBER_ID);
+    let temp_dir = setup_test_keystore_from_fixtures(ALICE_MEMBER_ID);
     let encrypted = create_test_kv_enc_content(&temp_dir, &kv_map);
 
     // List keys
@@ -119,13 +95,13 @@ fn test_decrypt_kv_value() {
     );
     kv_map.insert("API_KEY".to_string(), "secret123".to_string());
 
-    let temp_dir = setup_test_keystore(ALICE_MEMBER_ID);
+    let temp_dir = setup_test_keystore_from_fixtures(ALICE_MEMBER_ID);
     let encrypted = create_test_kv_enc_content(&temp_dir, &kv_map);
 
     let keystore_root = temp_dir.path().join("keys");
     let kids = list_kids(&keystore_root, ALICE_MEMBER_ID).unwrap();
     let kid = kids.first().unwrap();
-    let key_ctx = setup_member_key_context(&temp_dir, ALICE_MEMBER_ID, kid);
+    let key_ctx = setup_member_key_context(&temp_dir, ALICE_MEMBER_ID, Some(kid));
 
     // Get value
     let encrypted = KvEncContent::new_unchecked(encrypted);
@@ -143,13 +119,13 @@ fn test_decrypt_kv_value_not_found() {
         "postgres://localhost".to_string(),
     );
 
-    let temp_dir = setup_test_keystore(ALICE_MEMBER_ID);
+    let temp_dir = setup_test_keystore_from_fixtures(ALICE_MEMBER_ID);
     let encrypted = create_test_kv_enc_content(&temp_dir, &kv_map);
 
     let keystore_root = temp_dir.path().join("keys");
     let kids = list_kids(&keystore_root, ALICE_MEMBER_ID).unwrap();
     let kid = kids.first().unwrap();
-    let key_ctx = setup_member_key_context(&temp_dir, ALICE_MEMBER_ID, kid);
+    let key_ctx = setup_member_key_context(&temp_dir, ALICE_MEMBER_ID, Some(kid));
 
     // Get non-existent value
     let encrypted = KvEncContent::new_unchecked(encrypted);
@@ -161,11 +137,11 @@ fn test_decrypt_kv_value_not_found() {
 
 #[test]
 fn test_set_kv_entry_new_file() {
-    let (temp_dir, workspace_dir) = setup_test_workspace(&[ALICE_MEMBER_ID]);
+    let (temp_dir, workspace_dir) = setup_test_workspace_from_fixtures(&[ALICE_MEMBER_ID]);
     let keystore_root = temp_dir.path().join("keys");
     let kids = list_kids(&keystore_root, ALICE_MEMBER_ID).unwrap();
     let kid = kids.first().unwrap();
-    let key_ctx = setup_member_key_context(&temp_dir, ALICE_MEMBER_ID, kid);
+    let key_ctx = setup_member_key_context(&temp_dir, ALICE_MEMBER_ID, Some(kid));
 
     // Set context
     let ctx = KvWriteContext {
@@ -200,13 +176,13 @@ fn test_set_kv_entry_existing_file() {
     let mut kv_map = std::collections::HashMap::new();
     kv_map.insert("API_KEY".to_string(), "secret123".to_string());
 
-    let temp_dir = setup_test_keystore(ALICE_MEMBER_ID);
+    let temp_dir = setup_test_keystore_from_fixtures(ALICE_MEMBER_ID);
     let existing_content = create_test_kv_enc_content(&temp_dir, &kv_map);
 
     let keystore_root = temp_dir.path().join("keys");
     let kids = list_kids(&keystore_root, ALICE_MEMBER_ID).unwrap();
     let kid = kids.first().unwrap();
-    let key_ctx = setup_member_key_context(&temp_dir, ALICE_MEMBER_ID, kid);
+    let key_ctx = setup_member_key_context(&temp_dir, ALICE_MEMBER_ID, Some(kid));
 
     // Set context
     let ctx = KvWriteContext {
@@ -240,13 +216,13 @@ fn test_unset_kv_entry() {
     );
     kv_map.insert("API_KEY".to_string(), "secret123".to_string());
 
-    let temp_dir = setup_test_keystore(ALICE_MEMBER_ID);
+    let temp_dir = setup_test_keystore_from_fixtures(ALICE_MEMBER_ID);
     let existing_content = create_test_kv_enc_content(&temp_dir, &kv_map);
 
     let keystore_root = temp_dir.path().join("keys");
     let kids = list_kids(&keystore_root, ALICE_MEMBER_ID).unwrap();
     let kid = kids.first().unwrap();
-    let key_ctx = setup_member_key_context(&temp_dir, ALICE_MEMBER_ID, kid);
+    let key_ctx = setup_member_key_context(&temp_dir, ALICE_MEMBER_ID, Some(kid));
 
     // Unset context
     let ctx = KvWriteContext {
@@ -275,13 +251,13 @@ fn test_unset_kv_entry_not_found() {
         "postgres://localhost".to_string(),
     );
 
-    let temp_dir = setup_test_keystore(ALICE_MEMBER_ID);
+    let temp_dir = setup_test_keystore_from_fixtures(ALICE_MEMBER_ID);
     let existing_content = create_test_kv_enc_content(&temp_dir, &kv_map);
 
     let keystore_root = temp_dir.path().join("keys");
     let kids = list_kids(&keystore_root, ALICE_MEMBER_ID).unwrap();
     let kid = kids.first().unwrap();
-    let key_ctx = setup_member_key_context(&temp_dir, ALICE_MEMBER_ID, kid);
+    let key_ctx = setup_member_key_context(&temp_dir, ALICE_MEMBER_ID, Some(kid));
 
     // Unset context
     let ctx = KvWriteContext {
@@ -302,11 +278,11 @@ fn test_unset_kv_entry_not_found() {
 
 #[test]
 fn test_set_kv_entry_multiple_entries_new_file() {
-    let (temp_dir, workspace_dir) = setup_test_workspace(&[ALICE_MEMBER_ID]);
+    let (temp_dir, workspace_dir) = setup_test_workspace_from_fixtures(&[ALICE_MEMBER_ID]);
     let keystore_root = temp_dir.path().join("keys");
     let kids = list_kids(&keystore_root, ALICE_MEMBER_ID).unwrap();
     let kid = kids.first().unwrap();
-    let key_ctx = setup_member_key_context(&temp_dir, ALICE_MEMBER_ID, kid);
+    let key_ctx = setup_member_key_context(&temp_dir, ALICE_MEMBER_ID, Some(kid));
 
     let ctx = KvWriteContext {
         member_id: ALICE_MEMBER_ID.to_string(),
@@ -338,13 +314,13 @@ fn test_set_kv_entry_multiple_entries_existing_file() {
     let mut kv_map = std::collections::HashMap::new();
     kv_map.insert("EXISTING_KEY".to_string(), "existing_value".to_string());
 
-    let temp_dir = setup_test_keystore(ALICE_MEMBER_ID);
+    let temp_dir = setup_test_keystore_from_fixtures(ALICE_MEMBER_ID);
     let existing_content = create_test_kv_enc_content(&temp_dir, &kv_map);
 
     let keystore_root = temp_dir.path().join("keys");
     let kids = list_kids(&keystore_root, ALICE_MEMBER_ID).unwrap();
     let kid = kids.first().unwrap();
-    let key_ctx = setup_member_key_context(&temp_dir, ALICE_MEMBER_ID, kid);
+    let key_ctx = setup_member_key_context(&temp_dir, ALICE_MEMBER_ID, Some(kid));
 
     let ctx = KvWriteContext {
         member_id: ALICE_MEMBER_ID.to_string(),
