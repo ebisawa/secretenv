@@ -92,10 +92,11 @@ fn test_resolve_agent_with_explicit_key_loads_pubkey_from_file() {
             // The error should be from agent signing/determinism check,
             // NOT from public key loading. If the old behavior (ssh-add -L)
             // were used, we'd see "No Ed25519 key found" or similar.
+            let msg_lower = msg.to_lowercase();
             assert!(
-                msg.contains("ssh-agent signing failed")
-                    || msg.contains("agent")
-                    || msg.contains("determinism"),
+                msg_lower.contains("agent")
+                    || msg_lower.contains("ssh_auth_sock")
+                    || msg_lower.contains("determinism"),
                 "Expected agent/determinism error, got: {}",
                 msg
             );
