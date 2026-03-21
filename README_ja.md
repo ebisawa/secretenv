@@ -25,7 +25,13 @@ brew tap ebisawa/secretenv
 brew install secretenv
 ```
 
-### Build from source
+### シェルスクリプト
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ebisawa/secretenv/main/install.sh | sh
+```
+
+### ソースからビルド
 
 ```bash
 git clone <secretenv-repo>

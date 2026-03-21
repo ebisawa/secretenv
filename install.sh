@@ -31,12 +31,13 @@ case "${ARCH}" in
 esac
 
 # Map to release target triple
-if [ "${OS}" = "linux" ] && [ "${ARCH}" = "x86_64" ]; then
+if [ "${OS}" = "darwin" ] && [ "${ARCH}" = "x86_64" ]; then
+  echo "macOS x86_64 (Intel) is no longer supported. Please use an Apple Silicon Mac." >&2
+  exit 1
+elif [ "${OS}" = "linux" ] && [ "${ARCH}" = "x86_64" ]; then
   TARGET="x86_64-unknown-linux-gnu"
 elif [ "${OS}" = "linux" ] && [ "${ARCH}" = "aarch64" ]; then
   TARGET="aarch64-unknown-linux-gnu"
-elif [ "${OS}" = "darwin" ] && [ "${ARCH}" = "x86_64" ]; then
-  TARGET="x86_64-apple-darwin"
 elif [ "${OS}" = "darwin" ] && [ "${ARCH}" = "aarch64" ]; then
   TARGET="aarch64-apple-darwin"
 else

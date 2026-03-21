@@ -25,6 +25,12 @@ brew tap ebisawa/secretenv
 brew install secretenv
 ```
 
+### Shell script
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ebisawa/secretenv/main/install.sh | sh
+```
+
 ### Build from source
 
 ```bash
