@@ -45,15 +45,19 @@ where
         })?;
     }
 
-    let lock_file = OpenOptions::new()
-        .write(true)
-        .create(true)
-        .truncate(true)
-        .open(&lock_path)
-        .map_err(|e| Error::Io {
+    let lock_file = {
+        let mut opts = OpenOptions::new();
+        opts.write(true).create(true).truncate(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            opts.mode(0o600);
+        }
+        opts.open(&lock_path).map_err(|e| Error::Io {
             message: format!("Failed to open lock file: {}", e),
             source: Some(e),
-        })?;
+        })?
+    };
 
     let mut lock = RwLock::new(lock_file);
     let _guard = lock.write().map_err(|e| Error::Io {
