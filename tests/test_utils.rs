@@ -10,8 +10,6 @@ pub mod crypto_context;
 pub mod ed25519_backend;
 #[path = "../tests/test_utils/fixture.rs"]
 mod fixture;
-#[path = "../tests/test_utils/fixture_generator.rs"]
-pub mod fixture_generator;
 pub mod keygen_helpers;
 #[allow(unused_imports)]
 pub use crypto_context::setup_member_key_context;
@@ -19,7 +17,6 @@ pub use crypto_context::setup_member_key_context;
 pub use fixture::{
     create_temp_ssh_keypair_in_dir, load_fixture_ssh_pubkey, save_public_key, setup_test_keystore,
     setup_test_keystore_from_fixtures, setup_test_workspace, setup_test_workspace_from_fixtures,
-    FIXTURE_ALICE_KID, FIXTURE_BOB_KID,
 };
 #[allow(unused_imports)]
 pub use keygen_helpers::{create_test_private_key, keygen_test};
