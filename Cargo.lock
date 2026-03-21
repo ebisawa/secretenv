@@ -2303,7 +2303,6 @@ dependencies = [
 name = "secretenv"
 version = "0.1.1-alpha"
 dependencies = [
- "aes-gcm",
  "assert_cmd",
  "base64",
  "chacha20poly1305",

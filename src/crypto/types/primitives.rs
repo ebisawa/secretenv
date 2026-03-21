@@ -3,24 +3,6 @@
 
 //! Fixed-size cryptographic primitive types with type safety
 
-/// AES-256-GCM nonce (12 bytes)
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AesNonce([u8; 12]);
-
-impl AesNonce {
-    /// Create a new AES nonce from 12 bytes
-    pub fn new(bytes: [u8; 12]) -> Self {
-        Self(bytes)
-    }
-
-    /// Get the nonce bytes
-    pub fn as_bytes(&self) -> &[u8; 12] {
-        &self.0
-    }
-}
-
-impl_fixed_size_type!(AesNonce, 12, "AES nonce");
-
 /// XChaCha20-Poly1305 nonce (24 bytes)
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct XChaChaNonce([u8; 24]);

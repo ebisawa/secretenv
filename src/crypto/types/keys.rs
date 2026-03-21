@@ -5,26 +5,6 @@
 
 use zeroize::Zeroizing;
 
-/// AES-256-GCM encryption key (32 bytes)
-///
-/// This key is wrapped in Zeroizing for secure memory clearing.
-#[derive(Clone)]
-pub struct AesKey(Zeroizing<[u8; 32]>);
-
-impl AesKey {
-    /// Create a new AES key from 32 bytes
-    pub fn new(bytes: [u8; 32]) -> Self {
-        Self(Zeroizing::new(bytes))
-    }
-
-    /// Get the key bytes
-    pub fn as_bytes(&self) -> &[u8; 32] {
-        &self.0
-    }
-}
-
-impl_fixed_size_type!(AesKey, 32, "AES key", zeroizing);
-
 /// XChaCha20-Poly1305 encryption key (32 bytes)
 ///
 /// This key is wrapped in Zeroizing for secure memory clearing.

@@ -16,7 +16,7 @@ pub enum Error {
         source: Option<Box<dyn std::error::Error + Send + Sync>>,
     },
 
-    /// Cryptographic operation failed (HPKE, AES-GCM, Ed25519, etc.).
+    /// Cryptographic operation failed (HPKE, Ed25519, etc.).
     #[error("Cryptographic error: {message}")]
     Crypto {
         message: String,
@@ -187,15 +187,6 @@ impl From<hkdf::InvalidLength> for Error {
     fn from(err: hkdf::InvalidLength) -> Self {
         Error::Crypto {
             message: format!("HKDF key derivation failed: {}", err),
-            source: None,
-        }
-    }
-}
-
-impl From<aes_gcm::Error> for Error {
-    fn from(err: aes_gcm::Error) -> Self {
-        Error::Crypto {
-            message: format!("AES-GCM error: {}", err),
             source: None,
         }
     }
