@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::cli_common::ALICE_MEMBER_ID;
-use crate::test_utils::setup_test_keystore;
+use crate::test_utils::setup_test_keystore_from_fixtures;
 use secretenv::io::keystore::active::load_active_kid;
 use secretenv::io::keystore::storage::load_public_key;
 use secretenv::io::workspace::setup::{
@@ -34,7 +34,7 @@ fn test_validate_workspace_exists_accepts_complete_workspace() {
 
 #[test]
 fn test_save_member_document_writes_public_key_json() {
-    let temp_dir = setup_test_keystore(ALICE_MEMBER_ID);
+    let temp_dir = setup_test_keystore_from_fixtures(ALICE_MEMBER_ID);
     let keystore_root = temp_dir.path().join("keys");
     let kid = load_active_kid(ALICE_MEMBER_ID, &keystore_root)
         .unwrap()

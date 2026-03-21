@@ -199,6 +199,8 @@ pub mod support_fs_test;
 pub mod support_time_test;
 #[path = "unit/support_validation_test.rs"]
 pub mod support_validation_test;
+#[path = "unit/test_utils_ed25519_backend_test.rs"]
+pub mod test_utils_ed25519_backend_test;
 #[path = "unit/verify_github_test.rs"]
 pub mod verify_github_test;
 #[path = "unit/workspace_detection_test.rs"]

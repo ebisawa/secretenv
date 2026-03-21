@@ -4,7 +4,7 @@
 //! Unit tests for feature/key/manage module
 
 use crate::cli_common::{ALICE_MEMBER_ID, BOB_MEMBER_ID};
-use crate::test_utils::{create_test_private_key, keygen_test, setup_test_keystore};
+use crate::test_utils::{create_test_private_key, keygen_test, setup_test_keystore_from_fixtures};
 use secretenv::feature::key::manage::{activate_key, export_key, list_keys, remove_key};
 use secretenv::io::keystore::storage::save_key_pair_atomic;
 
@@ -32,7 +32,7 @@ fn add_second_key(temp_dir: &tempfile::TempDir, member_id: &str) -> String {
 
 #[test]
 fn test_list_keys_single_member() {
-    let temp_dir = setup_test_keystore(ALICE_MEMBER_ID);
+    let temp_dir = setup_test_keystore_from_fixtures(ALICE_MEMBER_ID);
     let home = Some(temp_dir.path().to_path_buf());
 
     let result = list_keys(home, None).unwrap();
@@ -46,7 +46,7 @@ fn test_list_keys_single_member() {
 
 #[test]
 fn test_list_keys_filtered_by_member_id() {
-    let temp_dir = setup_test_keystore(ALICE_MEMBER_ID);
+    let temp_dir = setup_test_keystore_from_fixtures(ALICE_MEMBER_ID);
     let keystore_root = temp_dir.path().join("keys");
 
     // Add Bob's key to the same keystore
@@ -85,7 +85,7 @@ fn test_list_keys_filtered_by_member_id() {
 
 #[test]
 fn test_list_keys_nonexistent_member() {
-    let temp_dir = setup_test_keystore(ALICE_MEMBER_ID);
+    let temp_dir = setup_test_keystore_from_fixtures(ALICE_MEMBER_ID);
     let home = Some(temp_dir.path().to_path_buf());
 
     // Listing for a member that doesn't exist should return an empty result or error.
@@ -103,7 +103,7 @@ fn test_list_keys_nonexistent_member() {
 
 #[test]
 fn test_activate_key_explicit_kid() {
-    let temp_dir = setup_test_keystore(ALICE_MEMBER_ID);
+    let temp_dir = setup_test_keystore_from_fixtures(ALICE_MEMBER_ID);
 
     // Add a second key (not active)
     let second_kid = add_second_key(&temp_dir, ALICE_MEMBER_ID);
@@ -118,7 +118,7 @@ fn test_activate_key_explicit_kid() {
 
 #[test]
 fn test_activate_key_auto_select_latest() {
-    let temp_dir = setup_test_keystore(ALICE_MEMBER_ID);
+    let temp_dir = setup_test_keystore_from_fixtures(ALICE_MEMBER_ID);
 
     // Add a second key so there are two valid keys
     let second_kid = add_second_key(&temp_dir, ALICE_MEMBER_ID);
@@ -136,7 +136,7 @@ fn test_activate_key_auto_select_latest() {
 
 #[test]
 fn test_activate_key_not_found() {
-    let temp_dir = setup_test_keystore(ALICE_MEMBER_ID);
+    let temp_dir = setup_test_keystore_from_fixtures(ALICE_MEMBER_ID);
     let home = Some(temp_dir.path().to_path_buf());
 
     let result = activate_key(
@@ -159,7 +159,7 @@ fn test_activate_key_not_found() {
 
 #[test]
 fn test_remove_key_non_active() {
-    let temp_dir = setup_test_keystore(ALICE_MEMBER_ID);
+    let temp_dir = setup_test_keystore_from_fixtures(ALICE_MEMBER_ID);
 
     // Add second key (non-active)
     let second_kid = add_second_key(&temp_dir, ALICE_MEMBER_ID);
@@ -174,7 +174,7 @@ fn test_remove_key_non_active() {
 
 #[test]
 fn test_remove_key_active_without_force() {
-    let temp_dir = setup_test_keystore(ALICE_MEMBER_ID);
+    let temp_dir = setup_test_keystore_from_fixtures(ALICE_MEMBER_ID);
     let keystore_root = temp_dir.path().join("keys");
 
     // Get the active kid
@@ -197,7 +197,7 @@ fn test_remove_key_active_without_force() {
 
 #[test]
 fn test_remove_key_active_with_force() {
-    let temp_dir = setup_test_keystore(ALICE_MEMBER_ID);
+    let temp_dir = setup_test_keystore_from_fixtures(ALICE_MEMBER_ID);
     let keystore_root = temp_dir.path().join("keys");
 
     let active_kid =
@@ -224,7 +224,7 @@ fn test_remove_key_active_with_force() {
 
 #[test]
 fn test_export_key_active() {
-    let temp_dir = setup_test_keystore(ALICE_MEMBER_ID);
+    let temp_dir = setup_test_keystore_from_fixtures(ALICE_MEMBER_ID);
     let home = Some(temp_dir.path().to_path_buf());
 
     // Export with kid=None should use the active key

@@ -6,7 +6,7 @@
 //! Tests for public key lookup by kid and verifying key loading from signatures.
 
 use crate::cli_common::ALICE_MEMBER_ID;
-use crate::test_utils::setup_test_workspace;
+use crate::test_utils::setup_test_workspace_from_fixtures;
 use secretenv::feature::verify::key_loader::{
     find_public_key_by_kid, load_verifying_key_from_signature,
 };
@@ -15,12 +15,12 @@ use secretenv::model::signature::Signature;
 use secretenv::model::verification::VerifyingKeySource;
 use std::fs;
 
-use crate::test_utils::setup_test_keystore;
+use crate::test_utils::setup_test_keystore_from_fixtures;
 
 /// find_public_key_by_kid finds key in workspace active members
 #[test]
 fn test_find_public_key_by_kid_workspace_active() {
-    let (_temp_dir, workspace_dir) = setup_test_workspace(&[ALICE_MEMBER_ID]);
+    let (_temp_dir, workspace_dir) = setup_test_workspace_from_fixtures(&[ALICE_MEMBER_ID]);
 
     // Read Alice's public key from the workspace to get the kid
     let member_file = workspace_dir
@@ -48,7 +48,7 @@ fn test_find_public_key_by_kid_workspace_active() {
 /// (incoming members are excluded from signature verification)
 #[test]
 fn test_find_public_key_by_kid_workspace_incoming_excluded() {
-    let (_temp_dir, workspace_dir) = setup_test_workspace(&[ALICE_MEMBER_ID]);
+    let (_temp_dir, workspace_dir) = setup_test_workspace_from_fixtures(&[ALICE_MEMBER_ID]);
 
     // Read Alice's public key and move it from active to incoming
     let active_path = workspace_dir
@@ -92,7 +92,7 @@ fn test_find_public_key_by_kid_none() {
 /// when kid exists in workspace active members
 #[test]
 fn test_load_verifying_key_from_signature_with_signer_pub() {
-    let (_temp_dir, workspace_dir) = setup_test_workspace(&[ALICE_MEMBER_ID]);
+    let (_temp_dir, workspace_dir) = setup_test_workspace_from_fixtures(&[ALICE_MEMBER_ID]);
 
     // Read Alice's public key from workspace to get the kid
     let member_file = workspace_dir
@@ -127,7 +127,7 @@ fn test_load_verifying_key_from_signature_with_signer_pub() {
 /// but kid is not found in workspace active members
 #[test]
 fn test_load_verifying_key_from_signature_with_signer_pub_not_active_member_fails() {
-    let temp_dir = setup_test_keystore(ALICE_MEMBER_ID);
+    let temp_dir = setup_test_keystore_from_fixtures(ALICE_MEMBER_ID);
     let keystore_root = temp_dir.path().join("keys");
 
     // Create a separate empty workspace (not the one setup_test_keystore created)
@@ -160,7 +160,7 @@ fn test_load_verifying_key_from_signature_with_signer_pub_not_active_member_fail
 /// but no workspace is available for membership verification
 #[test]
 fn test_load_verifying_key_from_signature_with_signer_pub_no_workspace_fails() {
-    let temp_dir = setup_test_keystore(ALICE_MEMBER_ID);
+    let temp_dir = setup_test_keystore_from_fixtures(ALICE_MEMBER_ID);
     let keystore_root = temp_dir.path().join("keys");
 
     let kids = list_kids(&keystore_root, ALICE_MEMBER_ID).unwrap();
@@ -188,7 +188,7 @@ fn test_load_verifying_key_from_signature_with_signer_pub_no_workspace_fails() {
 /// does not match kid in embedded signer_pub
 #[test]
 fn test_load_verifying_key_from_signature_kid_mismatch() {
-    let (_temp_dir, workspace_dir) = setup_test_workspace(&[ALICE_MEMBER_ID]);
+    let (_temp_dir, workspace_dir) = setup_test_workspace_from_fixtures(&[ALICE_MEMBER_ID]);
 
     // Read Alice's public key from workspace
     let member_file = workspace_dir

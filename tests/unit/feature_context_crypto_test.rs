@@ -7,8 +7,7 @@
 
 use crate::cli_common::ALICE_MEMBER_ID;
 use crate::keygen_helpers::make_verified_members;
-use crate::test_utils::setup_test_keystore;
-use secretenv::feature::context::crypto::CryptoContext;
+use crate::test_utils::{setup_member_key_context, setup_test_keystore_from_fixtures};
 use secretenv::feature::decrypt::file::decrypt_file_document;
 use secretenv::feature::encrypt::file::encrypt_file_document;
 use secretenv::feature::encrypt::SigningContext;
@@ -20,36 +19,15 @@ use secretenv::format::kv::dotenv::parse_dotenv;
 use secretenv::format::kv::parse_kv_document;
 use secretenv::format::token::TokenCodec;
 use secretenv::io::keystore::storage::{list_kids, load_public_key};
-use secretenv::io::ssh::backend::signature_backend::SignatureBackend;
-use secretenv::io::ssh::backend::ssh_keygen::SshKeygenBackend;
-use secretenv::io::ssh::external::keygen::DefaultSshKeygen;
-use secretenv::io::ssh::protocol::key_descriptor::SshKeyDescriptor;
 
 #[test]
 fn test_parse_verify_decrypt_kv() {
     // Setup test keystore
-    let temp_dir = setup_test_keystore(ALICE_MEMBER_ID);
+    let temp_dir = setup_test_keystore_from_fixtures(ALICE_MEMBER_ID);
     let keystore_root = temp_dir.path().join("keys");
 
-    // Setup SSH backend for CryptoContext
-    let ssh_pub =
-        std::fs::read_to_string(temp_dir.path().join(".ssh").join("test_ed25519.pub")).unwrap();
-    let backend: Box<dyn SignatureBackend> = Box::new(SshKeygenBackend::new(
-        Box::new(DefaultSshKeygen::new("ssh-keygen")),
-        SshKeyDescriptor::from_path(temp_dir.path().join(".ssh").join("test_ed25519")),
-    ));
-
     // Load CryptoContext (use active key) - this gives us the signing key
-    let key_ctx = CryptoContext::load(
-        ALICE_MEMBER_ID,
-        backend.as_ref(),
-        &ssh_pub,
-        None, // Use active key
-        Some(&keystore_root),
-        Some(temp_dir.path().join("workspace")),
-        false,
-    )
-    .unwrap();
+    let key_ctx = setup_member_key_context(&temp_dir, ALICE_MEMBER_ID, None);
 
     // Get public key from keystore
     let kids = list_kids(&keystore_root, ALICE_MEMBER_ID).unwrap();
@@ -103,28 +81,11 @@ fn test_parse_verify_decrypt_kv() {
 #[test]
 fn test_parse_verify_decrypt_file() {
     // Setup test keystore
-    let temp_dir = setup_test_keystore(ALICE_MEMBER_ID);
+    let temp_dir = setup_test_keystore_from_fixtures(ALICE_MEMBER_ID);
     let keystore_root = temp_dir.path().join("keys");
 
-    // Setup SSH backend for CryptoContext
-    let ssh_pub =
-        std::fs::read_to_string(temp_dir.path().join(".ssh").join("test_ed25519.pub")).unwrap();
-    let backend: Box<dyn SignatureBackend> = Box::new(SshKeygenBackend::new(
-        Box::new(DefaultSshKeygen::new("ssh-keygen")),
-        SshKeyDescriptor::from_path(temp_dir.path().join(".ssh").join("test_ed25519")),
-    ));
-
     // Load CryptoContext (use active key) - this gives us the signing key
-    let key_ctx = CryptoContext::load(
-        ALICE_MEMBER_ID,
-        backend.as_ref(),
-        &ssh_pub,
-        None, // Use active key
-        Some(&keystore_root),
-        Some(temp_dir.path().join("workspace")),
-        false,
-    )
-    .unwrap();
+    let key_ctx = setup_member_key_context(&temp_dir, ALICE_MEMBER_ID, None);
 
     // Get public key from keystore
     let kids = list_kids(&keystore_root, ALICE_MEMBER_ID).unwrap();
@@ -173,32 +134,15 @@ fn test_parse_verify_decrypt_file() {
 #[test]
 fn test_crypto_context_load() {
     // Setup test keystore
-    let temp_dir = setup_test_keystore(ALICE_MEMBER_ID);
+    let temp_dir = setup_test_keystore_from_fixtures(ALICE_MEMBER_ID);
     let keystore_root = temp_dir.path().join("keys");
-
-    // Setup SSH backend
-    let ssh_pub =
-        std::fs::read_to_string(temp_dir.path().join(".ssh").join("test_ed25519.pub")).unwrap();
-    let backend: Box<dyn SignatureBackend> = Box::new(SshKeygenBackend::new(
-        Box::new(DefaultSshKeygen::new("ssh-keygen")),
-        SshKeyDescriptor::from_path(temp_dir.path().join(".ssh").join("test_ed25519")),
-    ));
 
     // Get kid from keystore
     let kids = list_kids(&keystore_root, ALICE_MEMBER_ID).unwrap();
     let kid = kids.first().unwrap();
 
     // Load CryptoContext
-    let key_ctx = CryptoContext::load(
-        ALICE_MEMBER_ID,
-        backend.as_ref(),
-        &ssh_pub,
-        Some(kid),
-        Some(&keystore_root),
-        Some(temp_dir.path().join("workspace")),
-        false,
-    )
-    .unwrap();
+    let key_ctx = setup_member_key_context(&temp_dir, ALICE_MEMBER_ID, Some(kid));
 
     // Verify context
     assert_eq!(key_ctx.member_id, ALICE_MEMBER_ID);
@@ -209,28 +153,11 @@ fn test_crypto_context_load() {
 #[test]
 fn test_crypto_context_load_without_explicit_kid() {
     // Setup test keystore
-    let temp_dir = setup_test_keystore(ALICE_MEMBER_ID);
+    let temp_dir = setup_test_keystore_from_fixtures(ALICE_MEMBER_ID);
     let keystore_root = temp_dir.path().join("keys");
 
-    // Setup SSH backend
-    let ssh_pub =
-        std::fs::read_to_string(temp_dir.path().join(".ssh").join("test_ed25519.pub")).unwrap();
-    let backend: Box<dyn SignatureBackend> = Box::new(SshKeygenBackend::new(
-        Box::new(DefaultSshKeygen::new("ssh-keygen")),
-        SshKeyDescriptor::from_path(temp_dir.path().join(".ssh").join("test_ed25519")),
-    ));
-
     // Load CryptoContext without explicit kid (should use active key)
-    let key_ctx = CryptoContext::load(
-        ALICE_MEMBER_ID,
-        backend.as_ref(),
-        &ssh_pub,
-        None,
-        Some(&keystore_root),
-        Some(temp_dir.path().join("workspace")),
-        false,
-    )
-    .unwrap();
+    let key_ctx = setup_member_key_context(&temp_dir, ALICE_MEMBER_ID, None);
 
     // Verify context
     assert_eq!(key_ctx.member_id, ALICE_MEMBER_ID);

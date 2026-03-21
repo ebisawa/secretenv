@@ -5,7 +5,7 @@
 
 use crate::cli_common::{ALICE_MEMBER_ID, BOB_MEMBER_ID};
 use crate::keygen_helpers::make_verified_members;
-use crate::test_utils::setup_test_keystore;
+use crate::test_utils::{setup_member_key_context, setup_test_keystore_from_fixtures};
 use secretenv::feature::context::crypto::CryptoContext;
 use secretenv::feature::encrypt::SigningContext;
 use secretenv::feature::kv::encrypt::encrypt_kv_document;
@@ -17,35 +17,9 @@ use secretenv::format::kv::enc::parser::KvEncLine;
 use secretenv::format::kv::parse_kv_document;
 use secretenv::format::token::TokenCodec;
 use secretenv::io::keystore::storage::{list_kids, load_public_key};
-use secretenv::io::ssh::backend::signature_backend::SignatureBackend;
-use secretenv::io::ssh::backend::ssh_keygen::SshKeygenBackend;
-use secretenv::io::ssh::external::keygen::DefaultSshKeygen;
-use secretenv::io::ssh::protocol::key_descriptor::SshKeyDescriptor;
 use secretenv::model::kv_enc::{KvEntryValue, KvWrap};
 use std::fs;
 use tempfile::TempDir;
-
-/// Build CryptoContext for a member in a test keystore.
-fn setup_member_key_context(temp_dir: &TempDir, member_id: &str, kid: &str) -> CryptoContext {
-    let keystore_root = temp_dir.path().join("keys");
-    let ssh_pub =
-        fs::read_to_string(temp_dir.path().join(".ssh").join("test_ed25519.pub")).unwrap();
-    let backend: Box<dyn SignatureBackend> = Box::new(SshKeygenBackend::new(
-        Box::new(DefaultSshKeygen::new("ssh-keygen")),
-        SshKeyDescriptor::from_path(temp_dir.path().join(".ssh").join("test_ed25519")),
-    ));
-
-    CryptoContext::load(
-        member_id,
-        backend.as_ref(),
-        &ssh_pub,
-        Some(kid),
-        Some(&keystore_root),
-        Some(temp_dir.path().join("workspace")),
-        false,
-    )
-    .unwrap()
-}
 
 /// Create workspace members directory with the member's public key file.
 fn setup_workspace_members(temp_dir: &TempDir, member_id: &str, kid: &str) {
@@ -130,7 +104,7 @@ fn encrypt_kv_for_alice_and_bob(
 /// Returns (temp_dir, alice_kid, bob_kid).
 fn setup_two_member_keystore() -> (TempDir, String, String) {
     // Start with alice keystore
-    let temp_dir = setup_test_keystore(ALICE_MEMBER_ID);
+    let temp_dir = setup_test_keystore_from_fixtures(ALICE_MEMBER_ID);
     let keystore_root = temp_dir.path().join("keys");
 
     let alice_kids = list_kids(&keystore_root, ALICE_MEMBER_ID).unwrap();
@@ -167,12 +141,12 @@ fn setup_two_member_keystore() -> (TempDir, String, String) {
 
 #[test]
 fn test_rewrap_kv_document_succeeds() {
-    let temp_dir = setup_test_keystore(ALICE_MEMBER_ID);
+    let temp_dir = setup_test_keystore_from_fixtures(ALICE_MEMBER_ID);
     let keystore_root = temp_dir.path().join("keys");
 
     let kids = list_kids(&keystore_root, ALICE_MEMBER_ID).unwrap();
     let kid = kids.first().unwrap();
-    let key_ctx = setup_member_key_context(&temp_dir, ALICE_MEMBER_ID, kid);
+    let key_ctx = setup_member_key_context(&temp_dir, ALICE_MEMBER_ID, Some(kid));
     setup_workspace_members(&temp_dir, ALICE_MEMBER_ID, kid);
 
     let encrypted = encrypt_kv_for_alice(&temp_dir, kid, &key_ctx);
@@ -205,12 +179,12 @@ fn test_rewrap_kv_document_succeeds() {
 
 #[test]
 fn test_rewrap_kv_document_rotate_key() {
-    let temp_dir = setup_test_keystore(ALICE_MEMBER_ID);
+    let temp_dir = setup_test_keystore_from_fixtures(ALICE_MEMBER_ID);
     let keystore_root = temp_dir.path().join("keys");
 
     let kids = list_kids(&keystore_root, ALICE_MEMBER_ID).unwrap();
     let kid = kids.first().unwrap();
-    let key_ctx = setup_member_key_context(&temp_dir, ALICE_MEMBER_ID, kid);
+    let key_ctx = setup_member_key_context(&temp_dir, ALICE_MEMBER_ID, Some(kid));
     setup_workspace_members(&temp_dir, ALICE_MEMBER_ID, kid);
 
     let encrypted = encrypt_kv_for_alice(&temp_dir, kid, &key_ctx);
@@ -267,7 +241,7 @@ fn test_rewrap_kv_document_rotate_key() {
 #[test]
 fn test_rewrap_kv_add_recipient() {
     let (temp_dir, alice_kid, bob_kid) = setup_two_member_keystore();
-    let key_ctx = setup_member_key_context(&temp_dir, ALICE_MEMBER_ID, &alice_kid);
+    let key_ctx = setup_member_key_context(&temp_dir, ALICE_MEMBER_ID, Some(&alice_kid));
 
     // Encrypt for alice only
     let encrypted = encrypt_kv_for_alice(&temp_dir, &alice_kid, &key_ctx);
@@ -317,7 +291,7 @@ fn test_rewrap_kv_add_recipient() {
 #[test]
 fn test_rewrap_kv_remove_recipient() {
     let (temp_dir, alice_kid, bob_kid) = setup_two_member_keystore();
-    let key_ctx = setup_member_key_context(&temp_dir, ALICE_MEMBER_ID, &alice_kid);
+    let key_ctx = setup_member_key_context(&temp_dir, ALICE_MEMBER_ID, Some(&alice_kid));
 
     // Encrypt for alice and bob
     let encrypted = encrypt_kv_for_alice_and_bob(&temp_dir, &alice_kid, &bob_kid, &key_ctx);
@@ -356,7 +330,7 @@ fn test_rewrap_kv_remove_recipient() {
 #[test]
 fn test_rewrap_kv_clear_disclosure_history() {
     let (temp_dir, alice_kid, bob_kid) = setup_two_member_keystore();
-    let key_ctx = setup_member_key_context(&temp_dir, ALICE_MEMBER_ID, &alice_kid);
+    let key_ctx = setup_member_key_context(&temp_dir, ALICE_MEMBER_ID, Some(&alice_kid));
 
     // Encrypt for alice and bob
     let encrypted = encrypt_kv_for_alice_and_bob(&temp_dir, &alice_kid, &bob_kid, &key_ctx);
@@ -408,12 +382,12 @@ fn test_rewrap_kv_clear_disclosure_history() {
 
 #[test]
 fn test_rewrap_kv_invalid_signature_error() {
-    let temp_dir = setup_test_keystore(ALICE_MEMBER_ID);
+    let temp_dir = setup_test_keystore_from_fixtures(ALICE_MEMBER_ID);
     let keystore_root = temp_dir.path().join("keys");
 
     let kids = list_kids(&keystore_root, ALICE_MEMBER_ID).unwrap();
     let kid = kids.first().unwrap();
-    let key_ctx = setup_member_key_context(&temp_dir, ALICE_MEMBER_ID, kid);
+    let key_ctx = setup_member_key_context(&temp_dir, ALICE_MEMBER_ID, Some(kid));
     setup_workspace_members(&temp_dir, ALICE_MEMBER_ID, kid);
 
     let encrypted = encrypt_kv_for_alice(&temp_dir, kid, &key_ctx);
@@ -467,7 +441,7 @@ fn extract_disclosed_flags(content: &str) -> Vec<(String, bool)> {
 #[test]
 fn test_rewrap_kv_remove_recipient_sets_disclosed_true() {
     let (temp_dir, alice_kid, bob_kid) = setup_two_member_keystore();
-    let key_ctx = setup_member_key_context(&temp_dir, ALICE_MEMBER_ID, &alice_kid);
+    let key_ctx = setup_member_key_context(&temp_dir, ALICE_MEMBER_ID, Some(&alice_kid));
 
     // Encrypt for alice and bob
     let encrypted = encrypt_kv_for_alice_and_bob(&temp_dir, &alice_kid, &bob_kid, &key_ctx);
@@ -511,7 +485,7 @@ fn test_rewrap_kv_remove_recipient_sets_disclosed_true() {
 #[test]
 fn test_rewrap_kv_add_recipient_preserves_disclosed() {
     let (temp_dir, alice_kid, bob_kid) = setup_two_member_keystore();
-    let key_ctx = setup_member_key_context(&temp_dir, ALICE_MEMBER_ID, &alice_kid);
+    let key_ctx = setup_member_key_context(&temp_dir, ALICE_MEMBER_ID, Some(&alice_kid));
 
     // Encrypt for alice only
     let encrypted = encrypt_kv_for_alice(&temp_dir, &alice_kid, &key_ctx);
@@ -555,12 +529,12 @@ fn test_rewrap_kv_add_recipient_preserves_disclosed() {
 
 #[test]
 fn test_rewrap_kv_rotate_key_preserves_disclosed() {
-    let temp_dir = setup_test_keystore(ALICE_MEMBER_ID);
+    let temp_dir = setup_test_keystore_from_fixtures(ALICE_MEMBER_ID);
     let keystore_root = temp_dir.path().join("keys");
 
     let kids = list_kids(&keystore_root, ALICE_MEMBER_ID).unwrap();
     let kid = kids.first().unwrap();
-    let key_ctx = setup_member_key_context(&temp_dir, ALICE_MEMBER_ID, kid);
+    let key_ctx = setup_member_key_context(&temp_dir, ALICE_MEMBER_ID, Some(kid));
     setup_workspace_members(&temp_dir, ALICE_MEMBER_ID, kid);
 
     let encrypted = encrypt_kv_for_alice(&temp_dir, kid, &key_ctx);
@@ -604,7 +578,7 @@ fn test_rewrap_kv_rotate_key_preserves_disclosed() {
 #[test]
 fn test_rewrap_kv_remove_then_rotate_preserves_disclosed_true() {
     let (temp_dir, alice_kid, bob_kid) = setup_two_member_keystore();
-    let key_ctx = setup_member_key_context(&temp_dir, ALICE_MEMBER_ID, &alice_kid);
+    let key_ctx = setup_member_key_context(&temp_dir, ALICE_MEMBER_ID, Some(&alice_kid));
 
     // Encrypt for alice and bob with two entries
     let keystore_root = temp_dir.path().join("keys");
@@ -667,7 +641,7 @@ fn test_rewrap_kv_remove_then_rotate_preserves_disclosed_true() {
 #[test]
 fn test_rewrap_kv_clear_disclosure_history_resets_disclosed_flags() {
     let (temp_dir, alice_kid, bob_kid) = setup_two_member_keystore();
-    let key_ctx = setup_member_key_context(&temp_dir, ALICE_MEMBER_ID, &alice_kid);
+    let key_ctx = setup_member_key_context(&temp_dir, ALICE_MEMBER_ID, Some(&alice_kid));
 
     // Encrypt for alice and bob with two entries
     let keystore_root = temp_dir.path().join("keys");

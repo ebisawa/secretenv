@@ -7,9 +7,8 @@
 
 use crate::cli_common::ALICE_MEMBER_ID;
 use crate::keygen_helpers::make_attested_public_key;
-use crate::test_utils::setup_test_keystore;
+use crate::test_utils::{setup_member_key_context, setup_test_keystore_from_fixtures};
 use ed25519_dalek::SigningKey;
-use secretenv::feature::context::crypto::CryptoContext;
 use secretenv::feature::decrypt::file::decrypt_file_document;
 use secretenv::feature::encrypt::{encrypt_file_document, SigningContext};
 use secretenv::feature::kv::decrypt::decrypt_kv_document;
@@ -17,10 +16,6 @@ use secretenv::feature::verify::file::verify_file_document;
 use secretenv::feature::verify::kv::verify_kv_document;
 use secretenv::format::kv::parse_kv_document;
 use secretenv::io::keystore::storage::{list_kids, load_public_key};
-use secretenv::io::ssh::backend::signature_backend::SignatureBackend;
-use secretenv::io::ssh::backend::ssh_keygen::SshKeygenBackend;
-use secretenv::io::ssh::external::keygen::DefaultSshKeygen;
-use secretenv::io::ssh::protocol::key_descriptor::SshKeyDescriptor;
 use secretenv::model::file_enc::FileEncDocument;
 use secretenv::model::identifiers::format::FILE_ENC_V3;
 
@@ -31,28 +26,13 @@ fn generate_ed25519_keypair(seed: [u8; 32]) -> SigningKey {
 
 #[test]
 fn test_encrypt_file_document() {
-    // Use keys from setup_test_keystore (already saved)
-    let temp_dir = setup_test_keystore(ALICE_MEMBER_ID);
+    // Use keys from fixture keystore
+    let temp_dir = setup_test_keystore_from_fixtures(ALICE_MEMBER_ID);
     let keystore_root = temp_dir.path().join("keys");
     let kids = list_kids(&keystore_root, ALICE_MEMBER_ID).unwrap();
     let kid = kids.first().unwrap();
     // Load CryptoContext to get signing key
-    let ssh_pub =
-        std::fs::read_to_string(temp_dir.path().join(".ssh").join("test_ed25519.pub")).unwrap();
-    let backend: Box<dyn SignatureBackend> = Box::new(SshKeygenBackend::new(
-        Box::new(DefaultSshKeygen::new("ssh-keygen")),
-        SshKeyDescriptor::from_path(temp_dir.path().join(".ssh").join("test_ed25519")),
-    ));
-    let key_ctx = CryptoContext::load(
-        ALICE_MEMBER_ID,
-        backend.as_ref(),
-        &ssh_pub,
-        None,
-        Some(&keystore_root),
-        Some(temp_dir.path().join("workspace")),
-        false,
-    )
-    .unwrap();
+    let key_ctx = setup_member_key_context(&temp_dir, ALICE_MEMBER_ID, None);
 
     let public_key = load_public_key(&keystore_root, ALICE_MEMBER_ID, kid).unwrap();
 
@@ -97,8 +77,8 @@ fn test_encrypt_file_document() {
 
 #[test]
 fn test_encrypt_file_document_recipient_count_mismatch() {
-    // Use keys from setup_test_keystore (already saved)
-    let temp_dir = setup_test_keystore(ALICE_MEMBER_ID);
+    // Use keys from fixture keystore
+    let temp_dir = setup_test_keystore_from_fixtures(ALICE_MEMBER_ID);
     let keystore_root = temp_dir.path().join("keys");
     let kids = list_kids(&keystore_root, ALICE_MEMBER_ID).unwrap();
     let kid = kids.first().unwrap();
@@ -129,27 +109,12 @@ fn test_encrypt_kv_document_via_inner_api() {
     use secretenv::format::token::TokenCodec;
     use std::collections::HashMap;
 
-    // Use keys from setup_test_keystore (already saved)
-    let temp_dir = setup_test_keystore(ALICE_MEMBER_ID);
+    // Use keys from fixture keystore
+    let temp_dir = setup_test_keystore_from_fixtures(ALICE_MEMBER_ID);
     let keystore_root = temp_dir.path().join("keys");
     let kids = list_kids(&keystore_root, ALICE_MEMBER_ID).unwrap();
     let kid = kids.first().unwrap();
-    let ssh_pub =
-        std::fs::read_to_string(temp_dir.path().join(".ssh").join("test_ed25519.pub")).unwrap();
-    let backend: Box<dyn SignatureBackend> = Box::new(SshKeygenBackend::new(
-        Box::new(DefaultSshKeygen::new("ssh-keygen")),
-        SshKeyDescriptor::from_path(temp_dir.path().join(".ssh").join("test_ed25519")),
-    ));
-    let key_ctx = CryptoContext::load(
-        ALICE_MEMBER_ID,
-        backend.as_ref(),
-        &ssh_pub,
-        None,
-        Some(&keystore_root),
-        Some(temp_dir.path().join("workspace")),
-        false,
-    )
-    .unwrap();
+    let key_ctx = setup_member_key_context(&temp_dir, ALICE_MEMBER_ID, None);
 
     let public_key = load_public_key(&keystore_root, ALICE_MEMBER_ID, kid).unwrap();
     let signing_key = &key_ctx.signing_key;

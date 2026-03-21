@@ -1,0 +1,29 @@
+{
+  "protected": {
+    "format": "secretenv.public.key@3",
+    "member_id": "bob@example.com",
+    "kid": "01KM8R41YW44AVEP1NBSG2VQFC",
+    "identity": {
+      "keys": {
+        "kem": {
+          "kty": "OKP",
+          "crv": "X25519",
+          "x": "9u01Qc_9zDSsUt6ObRTo584nUqVdHly1xflxGutdM2I"
+        },
+        "sig": {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "CQi1vmojAIDPVsPtBegkpxpw9fnk1eWloXBFw20bqac"
+        }
+      },
+      "attestation": {
+        "method": "ssh-sign",
+        "pub": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKC4Jh1mDCwR4MJeF9nb8WRu2diqMpU/6wrCce9XzvBU test@example.com",
+        "sig": "DQaWcuJPcsWlJ4p9P-MSFFuFpigeNJE1qeoT4Cij8Q4d8WkLawe8JzFQwy5ycXk7nZT_j0PAlNJG4adVq7yrBQ"
+      }
+    },
+    "expires_at": "2027-03-21T17:47:07Z",
+    "created_at": "2026-03-21T17:47:07Z"
+  },
+  "signature": "6G9wYNOG9IQDemsJ7g82GNc85u_5f77ShXKcoq5YpDCB7yC8Ff5jglrBLDAgvyPGRnlTwacRvb9N-BXxs7FWDQ"
+}

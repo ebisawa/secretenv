@@ -7,19 +7,14 @@
 
 use crate::cli_common::ALICE_MEMBER_ID;
 use crate::keygen_helpers::make_verified_members;
-use crate::test_utils::setup_test_keystore;
+use crate::test_utils::{setup_member_key_context, setup_test_keystore_from_fixtures};
 use base64::Engine;
-use secretenv::feature::context::crypto::CryptoContext;
 use secretenv::feature::encrypt::file::encrypt_file_document;
 use secretenv::feature::encrypt::SigningContext;
 use secretenv::feature::rewrap::file::rewrap_file_document;
 use secretenv::feature::rewrap::RewrapOptions;
 use secretenv::format::content::FileEncContent;
 use secretenv::io::keystore::storage::{list_kids, load_public_key};
-use secretenv::io::ssh::backend::signature_backend::SignatureBackend;
-use secretenv::io::ssh::backend::ssh_keygen::SshKeygenBackend;
-use secretenv::io::ssh::external::keygen::DefaultSshKeygen;
-use secretenv::io::ssh::protocol::key_descriptor::SshKeyDescriptor;
 use std::fs;
 use tempfile::TempDir;
 
@@ -41,27 +36,6 @@ fn setup_workspace_members(temp_dir: &TempDir, member_id: &str, kid: &str) {
     .unwrap();
 }
 
-fn setup_member_key_context(temp_dir: &TempDir, member_id: &str, kid: &str) -> CryptoContext {
-    let keystore_root = temp_dir.path().join("keys");
-    let ssh_pub =
-        std::fs::read_to_string(temp_dir.path().join(".ssh").join("test_ed25519.pub")).unwrap();
-    let backend: Box<dyn SignatureBackend> = Box::new(SshKeygenBackend::new(
-        Box::new(DefaultSshKeygen::new("ssh-keygen")),
-        SshKeyDescriptor::from_path(temp_dir.path().join(".ssh").join("test_ed25519")),
-    ));
-
-    CryptoContext::load(
-        member_id,
-        backend.as_ref(),
-        &ssh_pub,
-        Some(kid),
-        Some(&keystore_root),
-        Some(temp_dir.path().join("workspace")),
-        false,
-    )
-    .unwrap()
-}
-
 /// Build RewrapOptions with no special operations (pure sync behavior).
 fn rewrap_options_default(debug: bool) -> RewrapOptions {
     RewrapOptions {
@@ -76,13 +50,13 @@ fn rewrap_options_default(debug: bool) -> RewrapOptions {
 #[test]
 fn test_rewrap_file_flow_rejects_invalid_signature() {
     // Create valid file-enc content, then tamper the signature so verification fails.
-    let temp_dir = setup_test_keystore(ALICE_MEMBER_ID);
+    let temp_dir = setup_test_keystore_from_fixtures(ALICE_MEMBER_ID);
     let keystore_root = temp_dir.path().join("keys");
 
     let kids = list_kids(&keystore_root, ALICE_MEMBER_ID).unwrap();
     let kid = kids.first().unwrap();
     let public_key = load_public_key(&keystore_root, ALICE_MEMBER_ID, kid).unwrap();
-    let key_ctx = setup_member_key_context(&temp_dir, ALICE_MEMBER_ID, kid);
+    let key_ctx = setup_member_key_context(&temp_dir, ALICE_MEMBER_ID, Some(kid));
 
     let content = b"secret";
     let recipient_ids = vec![ALICE_MEMBER_ID.to_string()];
@@ -123,13 +97,13 @@ fn test_rewrap_file_flow_rejects_invalid_signature() {
 
 #[test]
 fn test_rewrap_file_flow_succeeds_with_valid_signature() {
-    let temp_dir = setup_test_keystore(ALICE_MEMBER_ID);
+    let temp_dir = setup_test_keystore_from_fixtures(ALICE_MEMBER_ID);
     let keystore_root = temp_dir.path().join("keys");
 
     let kids = list_kids(&keystore_root, ALICE_MEMBER_ID).unwrap();
     let kid = kids.first().unwrap();
     let public_key = load_public_key(&keystore_root, ALICE_MEMBER_ID, kid).unwrap();
-    let key_ctx = setup_member_key_context(&temp_dir, ALICE_MEMBER_ID, kid);
+    let key_ctx = setup_member_key_context(&temp_dir, ALICE_MEMBER_ID, Some(kid));
     setup_workspace_members(&temp_dir, ALICE_MEMBER_ID, kid);
 
     let content = b"secret";

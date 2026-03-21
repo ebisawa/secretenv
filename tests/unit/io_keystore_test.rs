@@ -6,7 +6,7 @@
 //! Tests for key operation helper functions.
 
 use crate::cli_common::ALICE_MEMBER_ID;
-use crate::test_utils::{create_test_private_key, keygen_test, setup_test_keystore};
+use crate::test_utils::{create_test_private_key, keygen_test, setup_test_keystore_from_fixtures};
 use secretenv::io::keystore::active::set_active_kid;
 use secretenv::io::keystore::helpers::resolve_kid;
 use secretenv::io::keystore::resolver::KeystoreResolver;
@@ -26,7 +26,7 @@ fn test_ensure_keystore_dir() {
 
 #[test]
 fn test_save_and_activate() {
-    let temp_dir = setup_test_keystore(ALICE_MEMBER_ID);
+    let temp_dir = setup_test_keystore_from_fixtures(ALICE_MEMBER_ID);
     let keystore_root = temp_dir.path().join("keys");
     let ssh_pub_content = std::fs::read_to_string(temp_dir.path().join(".ssh/test_ed25519.pub"))
         .unwrap()
@@ -72,7 +72,7 @@ fn test_save_and_activate() {
 
 #[test]
 fn test_save_without_activate() {
-    let temp_dir = setup_test_keystore(ALICE_MEMBER_ID);
+    let temp_dir = setup_test_keystore_from_fixtures(ALICE_MEMBER_ID);
     let keystore_root = temp_dir.path().join("keys");
     let ssh_pub_content = std::fs::read_to_string(temp_dir.path().join(".ssh/test_ed25519.pub"))
         .unwrap()
