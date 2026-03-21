@@ -8,7 +8,7 @@
 use crate::io::json::load_json_file;
 use crate::model::private_key::PrivateKey;
 use crate::model::public_key::PublicKey;
-use crate::support::fs::{atomic, ensure_dir_restricted, list_dir};
+use crate::support::fs::{atomic, check_permission, ensure_dir_restricted, list_dir};
 use crate::support::path::display_path_relative_to_cwd;
 use crate::{Error, Result};
 use std::fs;
@@ -82,6 +82,12 @@ pub fn save_key_pair_atomic(
 /// Load PrivateKey from keystore
 pub fn load_private_key(keystore_root: &Path, member_id: &str, kid: &str) -> Result<PrivateKey> {
     let path = key_dir(keystore_root, member_id, kid).join("private.json");
+    if let Some(msg) = check_permission(&path) {
+        return Err(Error::Io {
+            message: msg,
+            source: None,
+        });
+    }
     load_json_file(&path, "private key")
 }
 
