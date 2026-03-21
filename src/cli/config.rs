@@ -6,6 +6,7 @@
 use clap::{Args, Subcommand};
 
 use crate::app::config;
+use crate::app::context::CommonCommandOptions;
 use crate::cli::common::options::CommonOptions;
 use crate::Error;
 
@@ -81,12 +82,16 @@ pub fn run(args: ConfigArgs) -> Result<(), Error> {
 }
 
 fn run_get(args: GetArgs) -> Result<(), Error> {
-    println!("{}", config::get_config(&args.key)?);
+    let options = CommonCommandOptions::from(&args.common);
+    let base_dir = options.resolve_base_dir()?;
+    println!("{}", config::get_config(&args.key, Some(&base_dir))?);
     Ok(())
 }
 
 fn run_set(args: SetArgs) -> Result<(), Error> {
-    let result = config::set_config(&args.key, &args.value)?;
+    let options = CommonCommandOptions::from(&args.common);
+    let base_dir = options.resolve_base_dir()?;
+    let result = config::set_config(&args.key, &args.value, Some(&base_dir))?;
     eprintln!(
         "Set '{}' = '{}' in {} config",
         result.key,
@@ -97,7 +102,9 @@ fn run_set(args: SetArgs) -> Result<(), Error> {
 }
 
 fn run_unset(args: UnsetArgs) -> Result<(), Error> {
-    let result = config::unset_config(&args.key)?;
+    let options = CommonCommandOptions::from(&args.common);
+    let base_dir = options.resolve_base_dir()?;
+    let result = config::unset_config(&args.key, Some(&base_dir))?;
     eprintln!(
         "Unset '{}' from {} config",
         result.key,
@@ -106,8 +113,10 @@ fn run_unset(args: UnsetArgs) -> Result<(), Error> {
     Ok(())
 }
 
-fn run_list(_args: ListArgs) -> Result<(), Error> {
-    let config = config::list_config()?;
+fn run_list(args: ListArgs) -> Result<(), Error> {
+    let options = CommonCommandOptions::from(&args.common);
+    let base_dir = options.resolve_base_dir()?;
+    let config = config::list_config(Some(&base_dir))?;
 
     for (key, value) in config {
         println!("{} = {}", key, value);

@@ -7,6 +7,7 @@ use crate::feature::config::{self};
 use crate::io::config::store::{set_config_value, unset_config_value};
 use crate::{Error, Result};
 use std::collections::BTreeMap;
+use std::path::Path;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConfigScope {
@@ -24,21 +25,21 @@ pub struct ConfigUnsetResult {
     pub scope: ConfigScope,
 }
 
-pub fn get_config(key: &str) -> Result<String> {
+pub fn get_config(key: &str, base_dir: Option<&Path>) -> Result<String> {
     let normalized = config::normalize_key(key)?;
-    let value = config::resolve_config_value(&normalized, None)?.0;
+    let value = config::resolve_config_value(&normalized, base_dir)?.0;
     value.ok_or_else(|| Error::NotFound {
         message: format!("Configuration key '{}' not found", key),
     })
 }
 
-pub fn list_config() -> Result<BTreeMap<String, String>> {
-    config::load_global_config(None)
+pub fn list_config(base_dir: Option<&Path>) -> Result<BTreeMap<String, String>> {
+    config::load_global_config(base_dir)
 }
 
-pub fn set_config(key: &str, value: &str) -> Result<ConfigSetResult> {
+pub fn set_config(key: &str, value: &str, base_dir: Option<&Path>) -> Result<ConfigSetResult> {
     let normalized = config::normalize_key(key)?;
-    let (config_path, scope) = config::get_config_path_and_scope(None)?;
+    let (config_path, scope) = config::get_config_path_and_scope(base_dir)?;
     set_config_value(&config_path, &normalized, value)?;
     Ok(ConfigSetResult {
         key: key.to_string(),
@@ -47,9 +48,9 @@ pub fn set_config(key: &str, value: &str) -> Result<ConfigSetResult> {
     })
 }
 
-pub fn unset_config(key: &str) -> Result<ConfigUnsetResult> {
+pub fn unset_config(key: &str, base_dir: Option<&Path>) -> Result<ConfigUnsetResult> {
     let normalized = config::normalize_key(key)?;
-    let (config_path, scope) = config::get_config_path_and_scope(None)?;
+    let (config_path, scope) = config::get_config_path_and_scope(base_dir)?;
     unset_config_value(&config_path, &normalized)?;
     Ok(ConfigUnsetResult {
         key: key.to_string(),
