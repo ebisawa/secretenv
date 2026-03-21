@@ -238,10 +238,13 @@ fn test_verify_file_document_returns_verified() {
 // ---------------------------------------------------------------------------
 
 /// Helper: create an encrypted FileEncDocument + CryptoContext for error-path tests
+/// The returned TempDir must be kept alive for the duration of the test
+/// to prevent premature cleanup of keystore and workspace files.
 fn create_encrypted_file_for_error_tests() -> (
     secretenv::model::file_enc::FileEncDocument,
     CryptoContext,
     String, // kid
+    TempDir,
 ) {
     let temp_dir = setup_test_keystore(ALICE_MEMBER_ID);
     let keystore_root = temp_dir.path().join("keys");
@@ -268,7 +271,7 @@ fn create_encrypted_file_for_error_tests() -> (
     )
     .unwrap();
 
-    (file_enc_doc, key_ctx, kid)
+    (file_enc_doc, key_ctx, kid, temp_dir)
 }
 
 /// Helper: wrap a FileEncDocument into VerifiedFileEncDocument with a dummy proof
@@ -287,7 +290,7 @@ fn wrap_as_verified(
 
 #[test]
 fn test_decrypt_file_wrong_format() {
-    let (mut doc, key_ctx, kid) = create_encrypted_file_for_error_tests();
+    let (mut doc, key_ctx, kid, _temp_dir) = create_encrypted_file_for_error_tests();
 
     // Tamper: set wrong format marker
     doc.protected.format = "secretenv.file@999".to_string();
@@ -311,7 +314,7 @@ fn test_decrypt_file_wrong_format() {
 
 #[test]
 fn test_decrypt_file_wrong_payload_format() {
-    let (mut doc, key_ctx, kid) = create_encrypted_file_for_error_tests();
+    let (mut doc, key_ctx, kid, _temp_dir) = create_encrypted_file_for_error_tests();
 
     // Tamper: set wrong payload format
     doc.protected.payload.protected.format = "secretenv.file.payload@999".to_string();
@@ -335,7 +338,7 @@ fn test_decrypt_file_wrong_payload_format() {
 
 #[test]
 fn test_decrypt_file_unsupported_aead() {
-    let (mut doc, key_ctx, kid) = create_encrypted_file_for_error_tests();
+    let (mut doc, key_ctx, kid, _temp_dir) = create_encrypted_file_for_error_tests();
 
     // Tamper: set unsupported AEAD algorithm
     doc.protected.payload.protected.alg.aead = "aes-256-gcm".to_string();
@@ -359,7 +362,7 @@ fn test_decrypt_file_unsupported_aead() {
 
 #[test]
 fn test_decrypt_file_sid_mismatch() {
-    let (mut doc, key_ctx, kid) = create_encrypted_file_for_error_tests();
+    let (mut doc, key_ctx, kid, _temp_dir) = create_encrypted_file_for_error_tests();
 
     // Tamper: change payload SID so it mismatches the outer SID
     doc.protected.payload.protected.sid = uuid::Uuid::new_v4();

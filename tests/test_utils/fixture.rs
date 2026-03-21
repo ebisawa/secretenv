@@ -32,7 +32,7 @@ pub fn create_temp_ssh_keypair_in_dir(temp_dir: &TempDir) -> (PathBuf, PathBuf, 
     let private_key_path = ssh_dir.join("test_ed25519");
     let public_key_path = ssh_dir.join("test_ed25519.pub");
 
-    std::process::Command::new("ssh-keygen")
+    let output = std::process::Command::new("ssh-keygen")
         .arg("-t")
         .arg(secretenv::io::ssh::protocol::constants::KEYGEN_TYPE_ED25519)
         .arg("-f")
@@ -42,7 +42,13 @@ pub fn create_temp_ssh_keypair_in_dir(temp_dir: &TempDir) -> (PathBuf, PathBuf, 
         .arg("-C")
         .arg("test@example.com")
         .output()
-        .expect("Failed to generate SSH keypair with ssh-keygen");
+        .expect("Failed to spawn ssh-keygen");
+    assert!(
+        output.status.success(),
+        "ssh-keygen failed with status {}: {}",
+        output.status,
+        String::from_utf8_lossy(&output.stderr)
+    );
 
     let public_key_content = fs::read_to_string(&public_key_path)
         .expect("Failed to read public key")

@@ -67,13 +67,17 @@ fn setup_member_key_context(temp_dir: &TempDir, member_id: &str, _kid: &str) -> 
     .unwrap()
 }
 
-/// Encrypt a file and return (verified_doc, key_ctx, kid)
+/// Encrypt a file and return (verified_doc, key_ctx, kid, _temp_dir)
+///
+/// The returned TempDir must be kept alive for the duration of the test
+/// to prevent premature cleanup of keystore and workspace files.
 fn encrypt_file_for_test(
     content: &[u8],
 ) -> (
     secretenv::model::file_enc::VerifiedFileEncDocument,
     CryptoContext,
     String,
+    TempDir,
 ) {
     let temp_dir = setup_test_keystore(ALICE_MEMBER_ID);
     let keystore_root = temp_dir.path().join("keys");
@@ -107,16 +111,20 @@ fn encrypt_file_for_test(
     )
     .unwrap();
 
-    (verified_doc, key_ctx, kid)
+    (verified_doc, key_ctx, kid, temp_dir)
 }
 
-/// Encrypt KV content and return (verified_doc, key_ctx, kid)
+/// Encrypt KV content and return (verified_doc, key_ctx, kid, _temp_dir)
+///
+/// The returned TempDir must be kept alive for the duration of the test
+/// to prevent premature cleanup of keystore and workspace files.
 fn encrypt_kv_for_test(
     dotenv_content: &str,
 ) -> (
     secretenv::model::kv_enc::VerifiedKvEncDocument,
     CryptoContext,
     String,
+    TempDir,
 ) {
     let temp_dir = setup_test_keystore(ALICE_MEMBER_ID);
     let keystore_root = temp_dir.path().join("keys");
@@ -150,7 +158,7 @@ fn encrypt_kv_for_test(
     let verified_doc =
         verify_kv_document(&doc, Some(&temp_dir.path().join("workspace")), false).unwrap();
 
-    (verified_doc, key_ctx, kid)
+    (verified_doc, key_ctx, kid, temp_dir)
 }
 
 // ============================================================================
@@ -160,7 +168,7 @@ fn encrypt_kv_for_test(
 /// Test that decryption succeeds when the correct kid is used (find_wrap_item_by_kid success path).
 #[test]
 fn test_find_wrap_item_by_kid() {
-    let (verified_doc, key_ctx, kid) = encrypt_file_for_test(b"test content");
+    let (verified_doc, key_ctx, kid, _temp_dir) = encrypt_file_for_test(b"test content");
 
     // Decryption with correct kid should succeed
     let result = decrypt_file_document(
@@ -178,7 +186,7 @@ fn test_find_wrap_item_by_kid() {
 /// Test that a non-existent kid produces an error containing "No wrap found".
 #[test]
 fn test_find_wrap_item_by_kid_not_found() {
-    let (verified_doc, key_ctx, _kid) = encrypt_file_for_test(b"test content");
+    let (verified_doc, key_ctx, _kid, _temp_dir) = encrypt_file_for_test(b"test content");
 
     let nonexistent_kid = "00000000000000000000000000";
     let result = decrypt_file_document(
@@ -202,7 +210,7 @@ fn test_find_wrap_item_by_kid_not_found() {
 /// (find_wrap_item_by_kid selects by kid, not rid; rid mismatch only prints a warning.)
 #[test]
 fn test_find_wrap_item_by_kid_rid_mismatch_still_succeeds() {
-    let (verified_doc, key_ctx, kid) = encrypt_file_for_test(b"rid mismatch test");
+    let (verified_doc, key_ctx, kid, _temp_dir) = encrypt_file_for_test(b"rid mismatch test");
 
     // Use a different member_id (not matching rid in wrap item) but correct kid and private key.
     // The function should still succeed because selection is by kid, not rid.
@@ -231,7 +239,7 @@ fn test_find_wrap_item_by_kid_rid_mismatch_still_succeeds() {
 #[test]
 fn test_decrypt_file_document_roundtrip() {
     let original_content = b"Hello, World! This is a file encryption roundtrip test.";
-    let (verified_doc, key_ctx, kid) = encrypt_file_for_test(original_content);
+    let (verified_doc, key_ctx, kid, _temp_dir) = encrypt_file_for_test(original_content);
 
     let decrypted = decrypt_file_document(
         &verified_doc,
@@ -253,7 +261,7 @@ fn test_decrypt_file_document_roundtrip() {
 #[test]
 fn test_decrypt_kv_document_roundtrip() {
     let dotenv = "SECRET_KEY=my-secret-value\n";
-    let (verified_doc, key_ctx, kid) = encrypt_kv_for_test(dotenv);
+    let (verified_doc, key_ctx, kid, _temp_dir) = encrypt_kv_for_test(dotenv);
 
     let decrypted = decrypt_kv_document(
         &verified_doc,
@@ -333,7 +341,7 @@ fn test_decrypt_kv_entries_empty() {
 #[test]
 fn test_decrypt_kv_entries_multiple() {
     let dotenv = "DB_HOST=localhost\nDB_PORT=5432\nDB_USER=admin\nDB_PASS=secret\n";
-    let (verified_doc, key_ctx, kid) = encrypt_kv_for_test(dotenv);
+    let (verified_doc, key_ctx, kid, _temp_dir) = encrypt_kv_for_test(dotenv);
 
     let decrypted = decrypt_kv_document(
         &verified_doc,
@@ -373,7 +381,7 @@ fn test_decrypt_kv_entries_multiple() {
 /// Test that using a wrong kid for file decryption produces an error.
 #[test]
 fn test_unwrap_master_key_for_file_wrong_kid() {
-    let (verified_doc, key_ctx, _kid) = encrypt_file_for_test(b"wrong kid test");
+    let (verified_doc, key_ctx, _kid, _temp_dir) = encrypt_file_for_test(b"wrong kid test");
 
     // Use a completely different kid that doesn't exist in the wrap items
     let wrong_kid = "AAAAAAAAAAAAAAAAAAAAAAAAAA";
