@@ -139,7 +139,12 @@ brew install secretenv
 
 ### 既存プロジェクトへの導入
 
+Git リポジトリのディレクトリで以下を実行します。secretenv は Git リポジトリ内で workspace を自動検出します。
+
 ```bash
+# Git リポジトリのディレクトリに移動
+cd /path/to/your-repo
+
 # 1. workspace を作成
 secretenv init --member-id alice@example.com
 

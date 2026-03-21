@@ -139,7 +139,12 @@ brew install secretenv
 
 ### Add It to an Existing Project
 
+Run the following commands inside a Git repository directory. secretenv auto-detects the workspace within a Git repository.
+
 ```bash
+# Navigate to your Git repository
+cd /path/to/your-repo
+
 # 1. Create the workspace
 secretenv init --member-id alice@example.com
 
