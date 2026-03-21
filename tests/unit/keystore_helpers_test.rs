@@ -42,8 +42,9 @@ fn dummy_public_key(member_id: &str) -> PublicKey {
                     },
                 },
                 attestation: Attestation {
-                    method: crate::keygen_helpers::PROTECTION_METHOD_TEST.to_string(),
-                    pub_: "test-key".to_string(),
+                    method: "ssh-sign".to_string(),
+                    pub_: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFakeKeyForTest test@test"
+                        .to_string(),
                     sig: "AA".to_string(),
                 },
             },

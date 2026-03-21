@@ -5,7 +5,7 @@
 
 use crate::cli_common::{ALICE_MEMBER_ID, BOB_MEMBER_ID};
 use crate::keygen_helpers::make_verified_members;
-use crate::test_utils::{setup_test_keystore, stub_ssh_keygen};
+use crate::test_utils::setup_test_keystore;
 use secretenv::feature::context::crypto::CryptoContext;
 use secretenv::feature::encrypt::file::encrypt_file_document;
 use secretenv::feature::encrypt::SigningContext;
@@ -15,6 +15,7 @@ use secretenv::format::content::FileEncContent;
 use secretenv::io::keystore::storage::{list_kids, load_public_key};
 use secretenv::io::ssh::backend::signature_backend::SignatureBackend;
 use secretenv::io::ssh::backend::ssh_keygen::SshKeygenBackend;
+use secretenv::io::ssh::external::keygen::DefaultSshKeygen;
 use secretenv::io::ssh::protocol::key_descriptor::SshKeyDescriptor;
 use std::fs;
 use tempfile::TempDir;
@@ -25,7 +26,7 @@ fn setup_member_key_context(temp_dir: &TempDir, member_id: &str, kid: &str) -> C
     let ssh_pub =
         fs::read_to_string(temp_dir.path().join(".ssh").join("test_ed25519.pub")).unwrap();
     let backend: Box<dyn SignatureBackend> = Box::new(SshKeygenBackend::new(
-        stub_ssh_keygen(),
+        Box::new(DefaultSshKeygen::new("ssh-keygen")),
         SshKeyDescriptor::from_path(temp_dir.path().join(".ssh").join("test_ed25519")),
     ));
 
@@ -131,12 +132,20 @@ fn setup_two_member_keystore() -> (TempDir, String, String) {
     let alice_kids = list_kids(&keystore_root, ALICE_MEMBER_ID).unwrap();
     let alice_kid = alice_kids.first().unwrap().clone();
 
-    let (bob_private, bob_public) = crate::keygen_helpers::keygen_test(BOB_MEMBER_ID).unwrap();
+    let ssh_pub_content = std::fs::read_to_string(temp_dir.path().join(".ssh/test_ed25519.pub"))
+        .unwrap()
+        .trim()
+        .to_string();
+    let ssh_priv = temp_dir.path().join(".ssh/test_ed25519");
+    let (bob_private, bob_public) =
+        crate::keygen_helpers::keygen_test(BOB_MEMBER_ID, &ssh_priv, &ssh_pub_content).unwrap();
     let bob_kid = bob_public.protected.kid.clone();
     let bob_private_doc = crate::keygen_helpers::create_test_private_key(
         &bob_private,
         &bob_public.protected.member_id,
         &bob_public.protected.kid,
+        &ssh_priv,
+        &ssh_pub_content,
     )
     .unwrap();
     secretenv::io::keystore::storage::save_key_pair_atomic(

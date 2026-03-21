@@ -7,7 +7,7 @@
 
 use crate::cli_common::ALICE_MEMBER_ID;
 use crate::keygen_helpers::make_verified_members;
-use crate::test_utils::{setup_test_keystore, setup_test_workspace, stub_ssh_keygen};
+use crate::test_utils::{setup_test_keystore, setup_test_workspace};
 use secretenv::feature::context::crypto::CryptoContext;
 use secretenv::feature::encrypt::SigningContext;
 use secretenv::feature::kv::encrypt::encrypt_kv_document;
@@ -19,6 +19,7 @@ use secretenv::format::token::TokenCodec;
 use secretenv::io::keystore::storage::{list_kids, load_public_key};
 use secretenv::io::ssh::backend::signature_backend::SignatureBackend;
 use secretenv::io::ssh::backend::ssh_keygen::SshKeygenBackend;
+use secretenv::io::ssh::external::keygen::DefaultSshKeygen;
 use secretenv::io::ssh::protocol::key_descriptor::SshKeyDescriptor;
 use tempfile::TempDir;
 
@@ -27,7 +28,7 @@ fn setup_member_key_context(temp_dir: &TempDir, member_id: &str, kid: &str) -> C
     let ssh_pub =
         std::fs::read_to_string(temp_dir.path().join(".ssh").join("test_ed25519.pub")).unwrap();
     let backend: Box<dyn SignatureBackend> = Box::new(SshKeygenBackend::new(
-        stub_ssh_keygen(),
+        Box::new(DefaultSshKeygen::new("ssh-keygen")),
         SshKeyDescriptor::from_path(temp_dir.path().join(".ssh").join("test_ed25519")),
     ));
 

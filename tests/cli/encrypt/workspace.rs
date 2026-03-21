@@ -22,7 +22,13 @@ fn test_encrypt_member_id_mismatch() {
     let secrets_dir = workspace_dir.join("secrets");
 
     // Generate another key and tamper with member_id in the public key
-    let (_bob_private, mut bob_public) = keygen_test(BOB_MEMBER_ID).unwrap();
+    let ssh_pub_content = std::fs::read_to_string(temp_dir.path().join(".ssh/test_ed25519.pub"))
+        .unwrap()
+        .trim()
+        .to_string();
+    let ssh_priv = temp_dir.path().join(".ssh/test_ed25519");
+    let (_bob_private, mut bob_public) =
+        keygen_test(BOB_MEMBER_ID, &ssh_priv, &ssh_pub_content).unwrap();
     // Tamper: filename is alice but content has bob's member_id
     bob_public.protected.member_id = BOB_MEMBER_ID.to_string();
     let alice_member_file = members_dir.join(format!("{}.json", ALICE_MEMBER_ID));

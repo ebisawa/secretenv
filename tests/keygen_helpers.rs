@@ -1,29 +1,36 @@
 // Copyright 2026 Satoshi Ebisawa
 // SPDX-License-Identifier: Apache-2.0
 
-//! Key generation helpers for v3 testing (without SSH attestation)
+//! Key generation helpers for v3 testing with real SSH attestation and encryption.
 //!
-//! This module provides test-only functions for generating key pairs and private keys
-//! without requiring SSH key attestation. These functions are intended for use in
-//! test code only and should NOT be used in production code.
+//! All test keys are generated with proper SSH attestation (via ssh-keygen) and
+//! encrypted with real SSH key protection. No test-only bypasses in production code.
 
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
 use ed25519_dalek::{SigningKey, VerifyingKey};
 use rand::rngs::OsRng;
+use secretenv::feature::context::ssh::SshSigningContext;
+use secretenv::feature::key::protection::encryption::{
+    encrypt_private_key, PrivateKeyEncryptionParams,
+};
+use secretenv::feature::key::public_key_document::build_attestation;
+use secretenv::io::ssh::backend::ssh_keygen::SshKeygenBackend;
+use secretenv::io::ssh::backend::SignatureBackend;
+use secretenv::io::ssh::external::keygen::DefaultSshKeygen;
+use secretenv::io::ssh::protocol::{build_sha256_fingerprint, SshKeyDescriptor};
 use secretenv::model::{
-    private_key::{
-        EncryptedData, IdentityKeysPrivate, JwkOkpPrivateKey, PrivateKey, PrivateKeyAlgorithm,
-        PrivateKeyPlaintext, PrivateKeyProtected,
-    },
+    private_key::{IdentityKeysPrivate, JwkOkpPrivateKey, PrivateKey, PrivateKeyPlaintext},
     public_key::{
-        Attestation, Identity, IdentityKeys, JwkOkpPublicKey, PublicKey, PublicKeyProtected,
+        AttestationProof, AttestedIdentity, Identity, IdentityKeys, JwkOkpPublicKey, PublicKey,
+        PublicKeyProtected, VerifiedPublicKeyAttested,
     },
-    public_key::{AttestationProof, AttestedIdentity, VerifiedPublicKeyAttested},
+    ssh::SshDeterminismStatus,
     verification::SelfSignatureProof,
     verified::{DecryptionProof, VerifiedPrivateKey},
 };
 use secretenv::{Error, Result};
+use std::path::Path;
 use time::OffsetDateTime;
 use ulid::Ulid;
 
@@ -33,8 +40,25 @@ use ulid::Ulid;
 
 const PUBLIC_KEY_FORMAT: &str = secretenv::model::identifiers::format::PUBLIC_KEY_V3;
 
-/// Test-only protection method identifier (bypass SSH key validation).
-pub const PROTECTION_METHOD_TEST: &str = "test";
+// ============================================================================
+// SSH context helpers
+// ============================================================================
+
+/// Build a SshSigningContext for tests using a real SSH keypair.
+fn build_test_ssh_context(ssh_key_path: &Path, ssh_pubkey: &str) -> Result<SshSigningContext> {
+    let fingerprint = build_sha256_fingerprint(ssh_pubkey)?;
+    let backend: Box<dyn SignatureBackend> = Box::new(SshKeygenBackend::new(
+        Box::new(DefaultSshKeygen::new("ssh-keygen")),
+        SshKeyDescriptor::from_path(ssh_key_path.to_path_buf()),
+    ));
+    Ok(SshSigningContext {
+        signing_method: secretenv::config::types::SshSigner::SshKeygen,
+        public_key: ssh_pubkey.to_string(),
+        fingerprint,
+        backend,
+        determinism: SshDeterminismStatus::Verified,
+    })
+}
 
 // ============================================================================
 // Helpers
@@ -85,12 +109,15 @@ fn generate_sig_keypair() -> (JwkOkpPrivateKey, String) {
 // Public API
 // ============================================================================
 
-/// Generate a test key pair (without SSH attestation)
+/// Generate a test key pair with real SSH attestation.
 ///
-/// This function is for testing purposes only and does NOT create
-/// proper attestation or binding_claims.github_account. For production use, use the CLI
-/// command which properly integrates SSH signatures.
-pub fn keygen_test(member_id: &str) -> Result<(PrivateKeyPlaintext, PublicKey)> {
+/// Uses the provided SSH key to create a proper attestation signature.
+/// The returned PublicKey passes `verify_public_key_with_attestation()`.
+pub fn keygen_test(
+    member_id: &str,
+    ssh_key_path: &Path,
+    ssh_pubkey: &str,
+) -> Result<(PrivateKeyPlaintext, PublicKey)> {
     let (kem_keypair, kem_pub) = generate_kem_keypair();
     let (sig_keypair, sig_pub) = generate_sig_keypair();
 
@@ -123,35 +150,37 @@ pub fn keygen_test(member_id: &str) -> Result<(PrivateKeyPlaintext, PublicKey)> 
         },
     };
 
+    let identity_keys = IdentityKeys {
+        kem: JwkOkpPublicKey {
+            kty: "OKP".to_string(),
+            crv: secretenv::model::identifiers::jwk::CRV_X25519.to_string(),
+            x: kem_pub,
+        },
+        sig: JwkOkpPublicKey {
+            kty: "OKP".to_string(),
+            crv: secretenv::model::identifiers::jwk::CRV_ED25519.to_string(),
+            x: sig_pub,
+        },
+    };
+
+    // Build real SSH attestation
+    let ssh_context = build_test_ssh_context(ssh_key_path, ssh_pubkey)?;
+    let attestation = build_attestation(&ssh_context, &identity_keys)?;
+
     let protected = PublicKeyProtected {
         format: PUBLIC_KEY_FORMAT.to_string(),
         member_id: member_id.to_string(),
         kid: kid.clone(),
         identity: Identity {
-            keys: IdentityKeys {
-                kem: JwkOkpPublicKey {
-                    kty: "OKP".to_string(),
-                    crv: secretenv::model::identifiers::jwk::CRV_X25519.to_string(),
-                    x: kem_pub,
-                },
-                sig: JwkOkpPublicKey {
-                    kty: "OKP".to_string(),
-                    crv: secretenv::model::identifiers::jwk::CRV_ED25519.to_string(),
-                    x: sig_pub,
-                },
-            },
-            attestation: Attestation {
-                method: "test".to_string(),
-                pub_: "test-key".to_string(),
-                sig: b64(b"test-sig"),
-            },
+            keys: identity_keys,
+            attestation,
         },
         binding_claims: None,
         expires_at,
         created_at: Some(created_at),
     };
 
-    // Generate actual signature for PublicKey
+    // Generate actual self-signature for PublicKey
     let protected_jcs =
         secretenv::format::jcs::normalize(&protected).map_err(|e| Error::Crypto {
             message: format!("Failed to normalize PublicKey protected: {}", e),
@@ -173,53 +202,44 @@ pub fn keygen_test(member_id: &str) -> Result<(PrivateKeyPlaintext, PublicKey)> 
     Ok((private_key, public_key))
 }
 
-/// Create a test PrivateKey (for testing only).
+/// Create a test PrivateKey with real SSH key encryption.
 ///
-/// This function creates a PrivateKey with protection.method="test",
-/// which allows tests to bypass SSH key requirements during decryption.
-/// The plaintext is Base64-encoded (not encrypted) in the ct field.
-///
-/// **IMPORTANT**: This is for testing only. Do NOT use in production.
+/// Uses `encrypt_private_key()` with the provided SSH key to produce
+/// a properly encrypted PrivateKey document.
 pub fn create_test_private_key(
     plaintext: &PrivateKeyPlaintext,
     member_id: &str,
     kid: &str,
+    ssh_key_path: &Path,
+    ssh_pubkey: &str,
 ) -> Result<PrivateKey> {
+    let ssh_fpr = build_sha256_fingerprint(ssh_pubkey)?;
+    let backend: Box<dyn SignatureBackend> = Box::new(SshKeygenBackend::new(
+        Box::new(DefaultSshKeygen::new("ssh-keygen")),
+        SshKeyDescriptor::from_path(ssh_key_path.to_path_buf()),
+    ));
+
     let now = OffsetDateTime::now_utc();
     let created_at = secretenv::support::time::build_timestamp_display(now)?;
     let expires_at =
         secretenv::support::time::build_timestamp_display(now + time::Duration::days(365))?;
 
-    // Serialize plaintext to JSON
-    let plaintext_json = serde_json::to_string(plaintext).map_err(|e| Error::Crypto {
-        message: format!("Failed to serialize plaintext: {}", e),
-        source: Some(Box::new(e)),
-    })?;
-
-    Ok(PrivateKey {
-        protected: PrivateKeyProtected {
-            format: secretenv::model::identifiers::format::PRIVATE_KEY_V3.to_string(),
-            member_id: member_id.to_string(),
-            kid: kid.to_string(),
-            alg: PrivateKeyAlgorithm {
-                kdf: PROTECTION_METHOD_TEST.to_string(),
-                fpr: "sha256:test".to_string(),
-                salt: b64(&[0u8; 16]),
-                aead: "none".to_string(),
-            },
-            created_at,
-            expires_at,
-        },
-        encrypted: EncryptedData {
-            nonce: b64(&[0u8; 24]),
-            ct: b64(plaintext_json.as_bytes()), // Plaintext as Base64
-        },
+    encrypt_private_key(&PrivateKeyEncryptionParams {
+        plaintext,
+        member_id: member_id.to_string(),
+        kid: kid.to_string(),
+        backend: backend.as_ref(),
+        ssh_pubkey,
+        ssh_fpr,
+        created_at,
+        expires_at,
+        debug: false,
     })
 }
 
 /// Create a Decrypted wrapper for PrivateKeyPlaintext (for testing only)
 ///
-/// This function wraps a PrivateKeyPlaintext in a Decrypted type without
+/// This function wraps a PrivateKeyPlaintext in a VerifiedPrivateKey type without
 /// performing full validation. It's intended for test code only.
 #[allow(dead_code)] // Used in unit tests via tests/unit.rs
 pub fn make_decrypted_private_key_plaintext(
@@ -251,7 +271,6 @@ pub fn make_verified_members(members: &[PublicKey]) -> Vec<VerifiedPublicKeyAtte
 ///
 /// This function wraps a PublicKey in a VerifiedPublicKeyAttested type without
 /// performing full verification. It's intended for test code only.
-/// The PublicKey should have method="test" attestation to skip verification.
 #[allow(dead_code)] // Used in unit tests via tests/unit.rs
 pub fn make_attested_public_key(public_key: PublicKey) -> VerifiedPublicKeyAttested {
     let proof = AttestationProof {

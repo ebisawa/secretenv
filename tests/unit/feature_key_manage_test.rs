@@ -11,9 +11,15 @@ use secretenv::io::keystore::storage::save_key_pair_atomic;
 /// Helper: generate a second key pair, save it to the keystore, and return its kid.
 fn add_second_key(temp_dir: &tempfile::TempDir, member_id: &str) -> String {
     let keystore_root = temp_dir.path().join("keys");
-    let (priv_plain, pub_key) = keygen_test(member_id).unwrap();
+    let ssh_pub_content = std::fs::read_to_string(temp_dir.path().join(".ssh/test_ed25519.pub"))
+        .unwrap()
+        .trim()
+        .to_string();
+    let ssh_priv = temp_dir.path().join(".ssh/test_ed25519");
+    let (priv_plain, pub_key) = keygen_test(member_id, &ssh_priv, &ssh_pub_content).unwrap();
     let kid = pub_key.protected.kid.clone();
-    let priv_key = create_test_private_key(&priv_plain, member_id, &kid).unwrap();
+    let priv_key =
+        create_test_private_key(&priv_plain, member_id, &kid, &ssh_priv, &ssh_pub_content).unwrap();
 
     save_key_pair_atomic(&keystore_root, member_id, &kid, &priv_key, &pub_key).unwrap();
 
@@ -44,9 +50,22 @@ fn test_list_keys_filtered_by_member_id() {
     let keystore_root = temp_dir.path().join("keys");
 
     // Add Bob's key to the same keystore
-    let (bob_priv_plain, bob_pub) = keygen_test(BOB_MEMBER_ID).unwrap();
+    let ssh_pub_content = std::fs::read_to_string(temp_dir.path().join(".ssh/test_ed25519.pub"))
+        .unwrap()
+        .trim()
+        .to_string();
+    let ssh_priv = temp_dir.path().join(".ssh/test_ed25519");
+    let (bob_priv_plain, bob_pub) =
+        keygen_test(BOB_MEMBER_ID, &ssh_priv, &ssh_pub_content).unwrap();
     let bob_kid = bob_pub.protected.kid.clone();
-    let bob_priv = create_test_private_key(&bob_priv_plain, BOB_MEMBER_ID, &bob_kid).unwrap();
+    let bob_priv = create_test_private_key(
+        &bob_priv_plain,
+        BOB_MEMBER_ID,
+        &bob_kid,
+        &ssh_priv,
+        &ssh_pub_content,
+    )
+    .unwrap();
     save_key_pair_atomic(&keystore_root, BOB_MEMBER_ID, &bob_kid, &bob_priv, &bob_pub).unwrap();
 
     let home = Some(temp_dir.path().to_path_buf());

@@ -28,10 +28,22 @@ fn test_ensure_keystore_dir() {
 fn test_save_and_activate() {
     let temp_dir = setup_test_keystore(ALICE_MEMBER_ID);
     let keystore_root = temp_dir.path().join("keys");
-    let (private_key_plaintext, public_key) = keygen_test(ALICE_MEMBER_ID).unwrap();
+    let ssh_pub_content = std::fs::read_to_string(temp_dir.path().join(".ssh/test_ed25519.pub"))
+        .unwrap()
+        .trim()
+        .to_string();
+    let ssh_priv = temp_dir.path().join(".ssh/test_ed25519");
+    let (private_key_plaintext, public_key) =
+        keygen_test(ALICE_MEMBER_ID, &ssh_priv, &ssh_pub_content).unwrap();
     let kid = &public_key.protected.kid;
-    let private_key =
-        create_test_private_key(&private_key_plaintext, ALICE_MEMBER_ID, kid).unwrap();
+    let private_key = create_test_private_key(
+        &private_key_plaintext,
+        ALICE_MEMBER_ID,
+        kid,
+        &ssh_priv,
+        &ssh_pub_content,
+    )
+    .unwrap();
 
     // Save keys
     save_key_pair_atomic(
@@ -62,10 +74,22 @@ fn test_save_and_activate() {
 fn test_save_without_activate() {
     let temp_dir = setup_test_keystore(ALICE_MEMBER_ID);
     let keystore_root = temp_dir.path().join("keys");
-    let (private_key_plaintext, public_key) = keygen_test(ALICE_MEMBER_ID).unwrap();
+    let ssh_pub_content = std::fs::read_to_string(temp_dir.path().join(".ssh/test_ed25519.pub"))
+        .unwrap()
+        .trim()
+        .to_string();
+    let ssh_priv = temp_dir.path().join(".ssh/test_ed25519");
+    let (private_key_plaintext, public_key) =
+        keygen_test(ALICE_MEMBER_ID, &ssh_priv, &ssh_pub_content).unwrap();
     let kid = &public_key.protected.kid;
-    let private_key =
-        create_test_private_key(&private_key_plaintext, ALICE_MEMBER_ID, kid).unwrap();
+    let private_key = create_test_private_key(
+        &private_key_plaintext,
+        ALICE_MEMBER_ID,
+        kid,
+        &ssh_priv,
+        &ssh_pub_content,
+    )
+    .unwrap();
 
     // Save without activating
     save_key_pair_atomic(

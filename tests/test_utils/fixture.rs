@@ -55,7 +55,7 @@ pub fn create_temp_ssh_keypair_in_dir(temp_dir: &TempDir) -> (PathBuf, PathBuf, 
 /// Setup test workspace with members directory and public keys
 pub fn setup_test_workspace(member_ids: &[&str]) -> (TempDir, PathBuf) {
     let temp_dir = TempDir::new().unwrap();
-    let (_ssh_priv, _ssh_pub, _ssh_pub_content) = create_temp_ssh_keypair_in_dir(&temp_dir);
+    let (ssh_priv, _ssh_pub, ssh_pub_content) = create_temp_ssh_keypair_in_dir(&temp_dir);
 
     let workspace_dir = temp_dir.path().join("workspace");
     let workspace_keystore = workspace_dir.join("keystore");
@@ -70,11 +70,14 @@ pub fn setup_test_workspace(member_ids: &[&str]) -> (TempDir, PathBuf) {
     fs::create_dir_all(&base_keystore).unwrap();
 
     for member_id in member_ids {
-        let (private_key, public_key) = keygen_test(member_id).unwrap();
+        let (private_key, public_key) =
+            keygen_test(member_id, &ssh_priv, &ssh_pub_content).unwrap();
         let private_key_doc = create_test_private_key(
             &private_key,
             &public_key.protected.member_id,
             &public_key.protected.kid,
+            &ssh_priv,
+            &ssh_pub_content,
         )
         .unwrap();
 
@@ -109,16 +112,18 @@ pub fn setup_test_workspace(member_ids: &[&str]) -> (TempDir, PathBuf) {
 /// Setup test environment with keystore and test keys
 pub fn setup_test_keystore(member_id: &str) -> TempDir {
     let temp_dir = TempDir::new().unwrap();
-    let (_ssh_priv, _ssh_pub, _ssh_pub_content) = create_temp_ssh_keypair_in_dir(&temp_dir);
+    let (ssh_priv, _ssh_pub, ssh_pub_content) = create_temp_ssh_keypair_in_dir(&temp_dir);
 
     let keystore_root = temp_dir.path().join("keys");
     fs::create_dir_all(&keystore_root).unwrap();
 
-    let (private_key, public_key) = keygen_test(member_id).unwrap();
+    let (private_key, public_key) = keygen_test(member_id, &ssh_priv, &ssh_pub_content).unwrap();
     let private_key_doc = create_test_private_key(
         &private_key,
         &public_key.protected.member_id,
         &public_key.protected.kid,
+        &ssh_priv,
+        &ssh_pub_content,
     )
     .unwrap();
 

@@ -7,7 +7,7 @@
 
 use crate::cli_common::ALICE_MEMBER_ID;
 use crate::keygen_helpers::make_attested_public_key;
-use crate::test_utils::{setup_test_keystore, stub_ssh_keygen};
+use crate::test_utils::setup_test_keystore;
 use ed25519_dalek::SigningKey;
 use secretenv::feature::context::crypto::CryptoContext;
 use secretenv::feature::decrypt::file::decrypt_file_document;
@@ -19,6 +19,7 @@ use secretenv::format::kv::parse_kv_document;
 use secretenv::io::keystore::storage::{list_kids, load_public_key};
 use secretenv::io::ssh::backend::signature_backend::SignatureBackend;
 use secretenv::io::ssh::backend::ssh_keygen::SshKeygenBackend;
+use secretenv::io::ssh::external::keygen::DefaultSshKeygen;
 use secretenv::io::ssh::protocol::key_descriptor::SshKeyDescriptor;
 use secretenv::model::file_enc::FileEncDocument;
 use secretenv::model::identifiers::format::FILE_ENC_V3;
@@ -39,7 +40,7 @@ fn test_encrypt_file_document() {
     let ssh_pub =
         std::fs::read_to_string(temp_dir.path().join(".ssh").join("test_ed25519.pub")).unwrap();
     let backend: Box<dyn SignatureBackend> = Box::new(SshKeygenBackend::new(
-        stub_ssh_keygen(),
+        Box::new(DefaultSshKeygen::new("ssh-keygen")),
         SshKeyDescriptor::from_path(temp_dir.path().join(".ssh").join("test_ed25519")),
     ));
     let key_ctx = CryptoContext::load(
@@ -136,7 +137,7 @@ fn test_encrypt_kv_document_via_inner_api() {
     let ssh_pub =
         std::fs::read_to_string(temp_dir.path().join(".ssh").join("test_ed25519.pub")).unwrap();
     let backend: Box<dyn SignatureBackend> = Box::new(SshKeygenBackend::new(
-        stub_ssh_keygen(),
+        Box::new(DefaultSshKeygen::new("ssh-keygen")),
         SshKeyDescriptor::from_path(temp_dir.path().join(".ssh").join("test_ed25519")),
     ));
     let key_ctx = CryptoContext::load(

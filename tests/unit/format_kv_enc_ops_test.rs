@@ -5,7 +5,7 @@
 
 use crate::cli_common::{ALICE_MEMBER_ID, BOB_MEMBER_ID, TEST_MEMBER_ID};
 use crate::keygen_helpers::{make_decrypted_private_key_plaintext, make_verified_members};
-use crate::test_utils::keygen_test;
+use crate::test_utils::{create_temp_ssh_keypair_in_dir, keygen_test};
 use ed25519_dalek::SigningKey;
 use secretenv::feature::encrypt::SigningContext;
 use secretenv::feature::kv::decrypt::decrypt_kv_document;
@@ -57,8 +57,10 @@ fn test_encrypt_and_decrypt_kv() {
     let signing_key = generate_ed25519_keypair([2u8; 32]);
 
     // Generate test keys
-    let (private1, public1) = keygen_test(ALICE_MEMBER_ID).unwrap();
-    let (private2, public2) = keygen_test(BOB_MEMBER_ID).unwrap();
+    let ssh_temp = tempfile::TempDir::new().unwrap();
+    let (ssh_priv, _ssh_pub_path, ssh_pub_content) = create_temp_ssh_keypair_in_dir(&ssh_temp);
+    let (private1, public1) = keygen_test(ALICE_MEMBER_ID, &ssh_priv, &ssh_pub_content).unwrap();
+    let (private2, public2) = keygen_test(BOB_MEMBER_ID, &ssh_priv, &ssh_pub_content).unwrap();
 
     // Input dotenv
     let input = "DATABASE_URL=postgres://localhost\nAPI_KEY=secret123\n";
@@ -126,7 +128,9 @@ fn test_encrypt_empty_input() {
     // Generate signing key for tests
     let signing_key = generate_ed25519_keypair([2u8; 32]);
 
-    let (_, public) = keygen_test(TEST_MEMBER_ID).unwrap();
+    let ssh_temp = tempfile::TempDir::new().unwrap();
+    let (ssh_priv, _ssh_pub_path, ssh_pub_content) = create_temp_ssh_keypair_in_dir(&ssh_temp);
+    let (_, public) = keygen_test(TEST_MEMBER_ID, &ssh_priv, &ssh_pub_content).unwrap();
 
     let input = "";
     let recipients = vec![TEST_MEMBER_ID.to_string()];
@@ -166,7 +170,9 @@ fn test_encrypt_with_comments_and_blank_lines() {
     // Generate signing key for tests
     let signing_key = generate_ed25519_keypair([2u8; 32]);
 
-    let (private, public) = keygen_test(TEST_MEMBER_ID).unwrap();
+    let ssh_temp = tempfile::TempDir::new().unwrap();
+    let (ssh_priv, _ssh_pub_path, ssh_pub_content) = create_temp_ssh_keypair_in_dir(&ssh_temp);
+    let (private, public) = keygen_test(TEST_MEMBER_ID, &ssh_priv, &ssh_pub_content).unwrap();
     let test_kid = public.protected.kid.clone();
 
     let input = r#"# This is a comment
@@ -218,7 +224,9 @@ fn test_large_value_in_kv_enc() {
     // Generate signing key for tests
     let signing_key = generate_ed25519_keypair([2u8; 32]);
 
-    let (private, public) = keygen_test(TEST_MEMBER_ID).unwrap();
+    let ssh_temp = tempfile::TempDir::new().unwrap();
+    let (ssh_priv, _ssh_pub_path, ssh_pub_content) = create_temp_ssh_keypair_in_dir(&ssh_temp);
+    let (private, public) = keygen_test(TEST_MEMBER_ID, &ssh_priv, &ssh_pub_content).unwrap();
     let test_kid = public.protected.kid.clone();
 
     // Create input with a large value
@@ -259,10 +267,12 @@ fn test_wrap_line_with_many_recipients() {
 
     // Create multiple recipients to make WRAP larger
     // Generate all keys first and keep them
+    let ssh_temp = tempfile::TempDir::new().unwrap();
+    let (ssh_priv, _ssh_pub_path, ssh_pub_content) = create_temp_ssh_keypair_in_dir(&ssh_temp);
     let mut keys = Vec::new();
     for i in 0..10 {
         let email = format!("user{}@example.com", i);
-        keys.push(keygen_test(&email).unwrap());
+        keys.push(keygen_test(&email, &ssh_priv, &ssh_pub_content).unwrap());
     }
 
     let members: Vec<PublicKey> = keys.iter().map(|(_, pub_key)| pub_key.clone()).collect();
@@ -445,7 +455,9 @@ fn kv_head_field(content: &str, field: &str) -> String {
 #[test]
 fn test_set_existing_file_preserves_sid() {
     let member_id = "alice@example.com";
-    let (private, public) = keygen_test(member_id).unwrap();
+    let ssh_temp = tempfile::TempDir::new().unwrap();
+    let (ssh_priv, _ssh_pub_path, ssh_pub_content) = create_temp_ssh_keypair_in_dir(&ssh_temp);
+    let (private, public) = keygen_test(member_id, &ssh_priv, &ssh_pub_content).unwrap();
     let kid = public.protected.kid.clone();
 
     let temp = tempfile::TempDir::new().unwrap();
@@ -485,7 +497,9 @@ fn test_set_existing_file_preserves_sid() {
 #[test]
 fn test_set_existing_file_preserves_wrap_token() {
     let member_id = "alice@example.com";
-    let (private, public) = keygen_test(member_id).unwrap();
+    let ssh_temp = tempfile::TempDir::new().unwrap();
+    let (ssh_priv, _ssh_pub_path, ssh_pub_content) = create_temp_ssh_keypair_in_dir(&ssh_temp);
+    let (private, public) = keygen_test(member_id, &ssh_priv, &ssh_pub_content).unwrap();
     let kid = public.protected.kid.clone();
 
     let temp = tempfile::TempDir::new().unwrap();
@@ -519,7 +533,9 @@ fn test_set_existing_file_preserves_wrap_token() {
 #[test]
 fn test_set_existing_file_preserves_other_entry_tokens() {
     let member_id = "alice@example.com";
-    let (private, public) = keygen_test(member_id).unwrap();
+    let ssh_temp = tempfile::TempDir::new().unwrap();
+    let (ssh_priv, _ssh_pub_path, ssh_pub_content) = create_temp_ssh_keypair_in_dir(&ssh_temp);
+    let (private, public) = keygen_test(member_id, &ssh_priv, &ssh_pub_content).unwrap();
     let kid = public.protected.kid.clone();
 
     let temp = tempfile::TempDir::new().unwrap();
@@ -567,9 +583,12 @@ fn make_unset_test_ctx(
     String,                                 // initial content
     secretenv::feature::kv::KvWriteContext, // write context
     tempfile::TempDir,                      // must be kept alive
+    tempfile::TempDir,                      // SSH temp dir - must be kept alive
 ) {
     let member_id = "alice@example.com";
-    let (private, public) = keygen_test(member_id).unwrap();
+    let ssh_temp = tempfile::TempDir::new().unwrap();
+    let (ssh_priv, _ssh_pub_path, ssh_pub_content) = create_temp_ssh_keypair_in_dir(&ssh_temp);
+    let (private, public) = keygen_test(member_id, &ssh_priv, &ssh_pub_content).unwrap();
     let kid = public.protected.kid.clone();
     let temp = tempfile::TempDir::new().unwrap();
     let keystore_root = temp.path().join("keys");
@@ -578,12 +597,13 @@ fn make_unset_test_ctx(
 
     let key_ctx = setup_crypto_ctx_for_test(member_id, &kid, &keystore_root, &private);
     let ctx = secretenv::feature::kv::KvWriteContext::new(member_id, key_ctx, false, false);
-    (initial, ctx, temp)
+    (initial, ctx, temp, ssh_temp)
 }
 
 #[test]
 fn test_unset_preserves_sid_and_created_at() {
-    let (initial, ctx, _temp) = make_unset_test_ctx(&[("KEY1", "value1"), ("KEY2", "value2")]);
+    let (initial, ctx, _temp, _ssh_temp) =
+        make_unset_test_ctx(&[("KEY1", "value1"), ("KEY2", "value2")]);
     let sid_before = kv_head_field(&initial, "sid");
     let created_at_before = kv_head_field(&initial, "created_at");
 
@@ -604,7 +624,8 @@ fn test_unset_preserves_sid_and_created_at() {
 
 #[test]
 fn test_unset_preserves_wrap_token() {
-    let (initial, ctx, _temp) = make_unset_test_ctx(&[("KEY1", "value1"), ("KEY2", "value2")]);
+    let (initial, ctx, _temp, _ssh_temp) =
+        make_unset_test_ctx(&[("KEY1", "value1"), ("KEY2", "value2")]);
     let wrap_before = kv_wrap_line(&initial);
 
     let initial = KvEncContent::new_unchecked(initial);
@@ -619,7 +640,8 @@ fn test_unset_preserves_wrap_token() {
 
 #[test]
 fn test_unset_preserves_other_entry_tokens() {
-    let (initial, ctx, _temp) = make_unset_test_ctx(&[("KEY1", "value1"), ("KEY2", "value2")]);
+    let (initial, ctx, _temp, _ssh_temp) =
+        make_unset_test_ctx(&[("KEY1", "value1"), ("KEY2", "value2")]);
     let key2_token_before = kv_entry_token(&initial, "KEY2").unwrap();
 
     let initial = KvEncContent::new_unchecked(initial);
@@ -638,7 +660,7 @@ fn test_unset_preserves_other_entry_tokens() {
 
 #[test]
 fn test_unset_key_not_found_error() {
-    let (initial, ctx, _temp) = make_unset_test_ctx(&[("KEY1", "value1")]);
+    let (initial, ctx, _temp, _ssh_temp) = make_unset_test_ctx(&[("KEY1", "value1")]);
 
     let initial = KvEncContent::new_unchecked(initial);
     let result = secretenv::feature::kv::unset_kv_entry(&initial, "NONEXISTENT", &ctx);

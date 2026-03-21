@@ -11,7 +11,7 @@ use crate::cli_common::ALICE_MEMBER_ID;
 use crate::keygen_helpers::{
     make_attested_public_key, make_decrypted_private_key_plaintext, make_verified_members,
 };
-use crate::test_utils::{setup_test_keystore, stub_ssh_keygen};
+use crate::test_utils::setup_test_keystore;
 use ed25519_dalek::SigningKey;
 use secretenv::crypto::kem::decode_kem_secret_key;
 use secretenv::crypto::types::keys::MasterKey;
@@ -33,6 +33,7 @@ use secretenv::format::token::TokenCodec;
 use secretenv::io::keystore::storage::{list_kids, load_private_key, load_public_key};
 use secretenv::io::ssh::backend::signature_backend::SignatureBackend;
 use secretenv::io::ssh::backend::ssh_keygen::SshKeygenBackend;
+use secretenv::io::ssh::external::keygen::DefaultSshKeygen;
 use secretenv::io::ssh::protocol::key_descriptor::SshKeyDescriptor;
 use secretenv::model::file_enc::VerifiedFileEncDocument;
 use secretenv::model::identifiers::jwk::{CRV_ED25519, CRV_X25519};
@@ -50,7 +51,7 @@ fn setup_member_key_context(temp_dir: &TempDir, member_id: &str, _kid: &str) -> 
     let ssh_pub =
         std::fs::read_to_string(temp_dir.path().join(".ssh").join("test_ed25519.pub")).unwrap();
     let backend: Box<dyn SignatureBackend> = Box::new(SshKeygenBackend::new(
-        stub_ssh_keygen(),
+        Box::new(DefaultSshKeygen::new("ssh-keygen")),
         SshKeyDescriptor::from_path(temp_dir.path().join(".ssh").join("test_ed25519")),
     ));
 
@@ -427,7 +428,7 @@ fn test_unwrap_master_key_for_file() {
     let ssh_pub =
         std::fs::read_to_string(temp_dir.path().join(".ssh").join("test_ed25519.pub")).unwrap();
     let backend: Box<dyn SignatureBackend> = Box::new(SshKeygenBackend::new(
-        stub_ssh_keygen(),
+        Box::new(DefaultSshKeygen::new("ssh-keygen")),
         SshKeyDescriptor::from_path(temp_dir.path().join(".ssh").join("test_ed25519")),
     ));
     let private_key =
@@ -554,7 +555,7 @@ fn test_unwrap_master_key_from_wrap_item() {
     let ssh_pub =
         std::fs::read_to_string(temp_dir.path().join(".ssh").join("test_ed25519.pub")).unwrap();
     let backend: Box<dyn SignatureBackend> = Box::new(SshKeygenBackend::new(
-        stub_ssh_keygen(),
+        Box::new(DefaultSshKeygen::new("ssh-keygen")),
         SshKeyDescriptor::from_path(temp_dir.path().join(".ssh").join("test_ed25519")),
     ));
     let private_key_plaintext =
@@ -607,7 +608,7 @@ fn test_hpke_aad_binding_defence_in_depth() {
     let ssh_pub =
         std::fs::read_to_string(temp_dir.path().join(".ssh").join("test_ed25519.pub")).unwrap();
     let backend: Box<dyn SignatureBackend> = Box::new(SshKeygenBackend::new(
-        stub_ssh_keygen(),
+        Box::new(DefaultSshKeygen::new("ssh-keygen")),
         SshKeyDescriptor::from_path(temp_dir.path().join(".ssh").join("test_ed25519")),
     ));
     let private_key_plaintext =

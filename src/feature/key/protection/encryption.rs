@@ -18,12 +18,9 @@ use crate::model::private_key::{
 };
 
 const PROTECTION_METHOD_SSHSIG_ED25519_HKDF_SHA256: &str = "sshsig-ed25519-hkdf-sha256";
-const PROTECTION_METHOD_TEST: &str = "test";
 use crate::io::ssh::backend::SignatureBackend;
 use crate::support::base64url::{b64_decode_array, b64_decode_ciphertext, b64_encode};
 use crate::{Error, Result};
-use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-use base64::Engine;
 use tracing::debug;
 
 /// Build protected header for PrivateKey encryption
@@ -42,7 +39,7 @@ fn build_protected_header(
         alg: PrivateKeyAlgorithm {
             kdf: PROTECTION_METHOD_SSHSIG_ED25519_HKDF_SHA256.to_string(),
             fpr: ssh_fpr.clone(),
-            salt: URL_SAFE_NO_PAD.encode(salt.as_bytes()),
+            salt: b64_encode(salt.as_bytes()),
             aead: alg::AEAD_XCHACHA20_POLY1305.to_string(),
         },
         created_at: created_at.clone(),
@@ -183,21 +180,6 @@ pub fn decrypt_private_key(
     ssh_pubkey: &str,
     debug: bool,
 ) -> Result<PrivateKeyPlaintext> {
-    // Test-only path: bypass SSH decryption for alg.kdf == "test"
-    if private_key.protected.alg.kdf == PROTECTION_METHOD_TEST {
-        let plaintext_bytes = URL_SAFE_NO_PAD
-            .decode(&private_key.encrypted.ct)
-            .map_err(|e| Error::Crypto {
-                message: format!("Failed to decode test private key: {}", e),
-                source: Some(Box::new(e)),
-            })?;
-        return serde_json::from_slice(&plaintext_bytes).map_err(|e| Error::Parse {
-            message: format!("Failed to parse test private key: {}", e),
-            source: Some(Box::new(e)),
-        });
-    }
-
-    // Normal SSH decryption path
     // Decode encryption parameters
     let (salt, nonce, ct, aad) = decode_encryption_params(private_key)?;
 

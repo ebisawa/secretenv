@@ -75,34 +75,15 @@ pub fn verify_public_key_with_attestation(
 ) -> Result<VerifiedPublicKeyAttested> {
     let verified = verify_public_key(public_key, debug)?;
 
-    // Verify attestation.
-    //
-    // Important: `attestation.method == "test"` must never be a verification bypass
-    // for production/release builds. We only allow skipping in debug builds to keep
-    // existing test fixtures working.
-    let method = public_key.protected.identity.attestation.method.as_str();
-    if method == "test" {
-        if cfg!(debug_assertions) {
-            if debug {
-                debug!("[VERIFY] PublicKey attestation skipped (test mode)");
-            }
-        } else {
-            return Err(Error::Crypto {
-                message: "Refusing PublicKey verification with attestation.method == \"test\" in non-debug build"
-                    .to_string(),
-                source: None,
-            });
-        }
-    } else {
-        verify_attestation(
-            &public_key.protected.identity.keys,
-            &public_key.protected.identity.attestation.pub_,
-            &public_key.protected.identity.attestation.sig,
-        )?;
+    // Verify attestation
+    verify_attestation(
+        &public_key.protected.identity.keys,
+        &public_key.protected.identity.attestation.pub_,
+        &public_key.protected.identity.attestation.sig,
+    )?;
 
-        if debug {
-            debug!("[VERIFY] PublicKey attestation verified");
-        }
+    if debug {
+        debug!("[VERIFY] PublicKey attestation verified");
     }
 
     let proof = AttestationProof {

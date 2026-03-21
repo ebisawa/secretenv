@@ -7,12 +7,13 @@
 
 use crate::cli_common::ALICE_MEMBER_ID;
 use crate::keygen_helpers::make_attested_public_key;
-use crate::test_utils::keygen_test;
+use crate::test_utils::{create_temp_ssh_keypair_in_dir, keygen_test};
 use secretenv::crypto::types::keys::MasterKey;
 use secretenv::feature::envelope::wrap::WrapFormat;
 use secretenv::feature::envelope::wrap::{
     build_wrap_item_for_file, build_wrap_item_for_kv, build_wraps_for_recipients,
 };
+use tempfile::TempDir;
 use uuid::Uuid;
 
 fn create_test_master_key() -> MasterKey {
@@ -22,7 +23,10 @@ fn create_test_master_key() -> MasterKey {
 
 #[test]
 fn test_build_wrap_item_for_file() {
-    let (_private_key, public_key) = keygen_test(ALICE_MEMBER_ID).unwrap();
+    let ssh_temp = TempDir::new().unwrap();
+    let (ssh_priv, _ssh_pub_path, ssh_pub_content) = create_temp_ssh_keypair_in_dir(&ssh_temp);
+    let (_private_key, public_key) =
+        keygen_test(ALICE_MEMBER_ID, &ssh_priv, &ssh_pub_content).unwrap();
     let sid = Uuid::new_v4();
     let master_key = create_test_master_key();
     let kid = public_key.protected.kid.clone();
@@ -38,7 +42,10 @@ fn test_build_wrap_item_for_file() {
 
 #[test]
 fn test_build_wrap_item_for_kv() {
-    let (_private_key, public_key) = keygen_test(ALICE_MEMBER_ID).unwrap();
+    let ssh_temp = TempDir::new().unwrap();
+    let (ssh_priv, _ssh_pub_path, ssh_pub_content) = create_temp_ssh_keypair_in_dir(&ssh_temp);
+    let (_private_key, public_key) =
+        keygen_test(ALICE_MEMBER_ID, &ssh_priv, &ssh_pub_content).unwrap();
     let sid = Uuid::new_v4();
     let master_key = create_test_master_key();
     let kid = public_key.protected.kid.clone();
@@ -54,8 +61,12 @@ fn test_build_wrap_item_for_kv() {
 
 #[test]
 fn test_build_wraps_for_recipients_file() {
-    let (_private_key1, public_key1) = keygen_test(ALICE_MEMBER_ID).unwrap();
-    let (_private_key2, public_key2) = keygen_test("bob@example.com").unwrap();
+    let ssh_temp = TempDir::new().unwrap();
+    let (ssh_priv, _ssh_pub_path, ssh_pub_content) = create_temp_ssh_keypair_in_dir(&ssh_temp);
+    let (_private_key1, public_key1) =
+        keygen_test(ALICE_MEMBER_ID, &ssh_priv, &ssh_pub_content).unwrap();
+    let (_private_key2, public_key2) =
+        keygen_test("bob@example.com", &ssh_priv, &ssh_pub_content).unwrap();
     let sid = Uuid::new_v4();
     let attested_members = vec![
         make_attested_public_key(public_key1.clone()),
@@ -79,8 +90,12 @@ fn test_build_wraps_for_recipients_file() {
 
 #[test]
 fn test_build_wraps_for_recipients_kv() {
-    let (_private_key1, public_key1) = keygen_test(ALICE_MEMBER_ID).unwrap();
-    let (_private_key2, public_key2) = keygen_test("bob@example.com").unwrap();
+    let ssh_temp = TempDir::new().unwrap();
+    let (ssh_priv, _ssh_pub_path, ssh_pub_content) = create_temp_ssh_keypair_in_dir(&ssh_temp);
+    let (_private_key1, public_key1) =
+        keygen_test(ALICE_MEMBER_ID, &ssh_priv, &ssh_pub_content).unwrap();
+    let (_private_key2, public_key2) =
+        keygen_test("bob@example.com", &ssh_priv, &ssh_pub_content).unwrap();
     let sid = Uuid::new_v4();
     let attested_members = vec![
         make_attested_public_key(public_key1.clone()),

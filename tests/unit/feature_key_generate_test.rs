@@ -35,7 +35,11 @@ use x25519_dalek::{PublicKey as X25519PublicKey, StaticSecret as X25519SecretKey
 
 #[test]
 fn test_build_private_key_plaintext_fields() {
-    let (plaintext, _public_key) = keygen_test(ALICE_MEMBER_ID).unwrap();
+    let ssh_temp = tempfile::TempDir::new().unwrap();
+    let (ssh_priv, _ssh_pub_path, ssh_pub_content) =
+        crate::test_utils::create_temp_ssh_keypair_in_dir(&ssh_temp);
+    let (plaintext, _public_key) =
+        keygen_test(ALICE_MEMBER_ID, &ssh_priv, &ssh_pub_content).unwrap();
 
     // Verify KEM key fields
     assert_eq!(plaintext.keys.kem.kty, "OKP");
@@ -52,7 +56,11 @@ fn test_build_private_key_plaintext_fields() {
 
 #[test]
 fn test_build_private_key_plaintext_base64url_encoded() {
-    let (plaintext, _public_key) = keygen_test(ALICE_MEMBER_ID).unwrap();
+    let ssh_temp = tempfile::TempDir::new().unwrap();
+    let (ssh_priv, _ssh_pub_path, ssh_pub_content) =
+        crate::test_utils::create_temp_ssh_keypair_in_dir(&ssh_temp);
+    let (plaintext, _public_key) =
+        keygen_test(ALICE_MEMBER_ID, &ssh_priv, &ssh_pub_content).unwrap();
 
     // All x and d fields must be valid base64url
     let kem_x = URL_SAFE_NO_PAD.decode(&plaintext.keys.kem.x);
@@ -74,7 +82,11 @@ fn test_build_private_key_plaintext_base64url_encoded() {
 
 #[test]
 fn test_build_private_key_plaintext_key_consistency() {
-    let (plaintext, public_key) = keygen_test(ALICE_MEMBER_ID).unwrap();
+    let ssh_temp = tempfile::TempDir::new().unwrap();
+    let (ssh_priv, _ssh_pub_path, ssh_pub_content) =
+        crate::test_utils::create_temp_ssh_keypair_in_dir(&ssh_temp);
+    let (plaintext, public_key) =
+        keygen_test(ALICE_MEMBER_ID, &ssh_priv, &ssh_pub_content).unwrap();
 
     // The public key's x field in kem should match the private key's x field in kem
     assert_eq!(
@@ -282,12 +294,24 @@ fn test_derive_key_from_ssh_maps_non_deterministic_error() {
 fn test_save_and_activate_activates() {
     let temp_dir = setup_test_keystore(ALICE_MEMBER_ID);
     let keystore_root = temp_dir.path().join("keys");
+    let ssh_pub_content = std::fs::read_to_string(temp_dir.path().join(".ssh/test_ed25519.pub"))
+        .unwrap()
+        .trim()
+        .to_string();
+    let ssh_priv = temp_dir.path().join(".ssh/test_ed25519");
 
     // Generate a new key pair
-    let (plaintext, public_key) = keygen_test(ALICE_MEMBER_ID).unwrap();
+    let (plaintext, public_key) =
+        keygen_test(ALICE_MEMBER_ID, &ssh_priv, &ssh_pub_content).unwrap();
     let new_kid = &public_key.protected.kid;
-    let private_key =
-        crate::test_utils::create_test_private_key(&plaintext, ALICE_MEMBER_ID, new_kid).unwrap();
+    let private_key = crate::test_utils::create_test_private_key(
+        &plaintext,
+        ALICE_MEMBER_ID,
+        new_kid,
+        &ssh_priv,
+        &ssh_pub_content,
+    )
+    .unwrap();
 
     // Simulate save_and_activate with no_activate=false
     save_key_pair_atomic(
@@ -316,11 +340,21 @@ fn test_save_and_activate_no_activate() {
     let keystore_root = temp_dir.path().join("keys");
     std::fs::create_dir_all(&keystore_root).unwrap();
 
+    let (ssh_priv, _ssh_pub_path, ssh_pub_content) =
+        crate::test_utils::create_temp_ssh_keypair_in_dir(&temp_dir);
+
     // Generate a new key pair
-    let (plaintext, public_key) = keygen_test(ALICE_MEMBER_ID).unwrap();
+    let (plaintext, public_key) =
+        keygen_test(ALICE_MEMBER_ID, &ssh_priv, &ssh_pub_content).unwrap();
     let new_kid = &public_key.protected.kid;
-    let private_key =
-        crate::test_utils::create_test_private_key(&plaintext, ALICE_MEMBER_ID, new_kid).unwrap();
+    let private_key = crate::test_utils::create_test_private_key(
+        &plaintext,
+        ALICE_MEMBER_ID,
+        new_kid,
+        &ssh_priv,
+        &ssh_pub_content,
+    )
+    .unwrap();
 
     // Simulate save_and_activate with no_activate=true
     // Only save, do NOT set active

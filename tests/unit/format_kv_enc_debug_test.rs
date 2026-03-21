@@ -5,7 +5,7 @@
 
 use crate::cli_common::ALICE_MEMBER_ID;
 use crate::keygen_helpers::{make_decrypted_private_key_plaintext, make_verified_members};
-use crate::test_utils::keygen_test;
+use crate::test_utils::{create_temp_ssh_keypair_in_dir, keygen_test};
 use ed25519_dalek::SigningKey;
 use secretenv::feature::encrypt::SigningContext;
 use secretenv::feature::kv::decrypt::decrypt_kv_document;
@@ -15,6 +15,7 @@ use secretenv::format::kv::parse_kv_document;
 use secretenv::format::token::TokenCodec;
 use secretenv::model::kv_enc::VerifiedKvEncDocument;
 use secretenv::model::verification::{SignatureVerificationProof, VerifyingKeySource};
+use tempfile::TempDir;
 
 /// Generate Ed25519 signing key from seed for tests
 fn generate_ed25519_keypair(seed: [u8; 32]) -> SigningKey {
@@ -27,7 +28,9 @@ fn test_debug_hpke_single_recipient() {
     let signing_key = generate_ed25519_keypair([2u8; 32]);
 
     // Generate single test key
-    let (private, public) = keygen_test(ALICE_MEMBER_ID).unwrap();
+    let ssh_temp = TempDir::new().unwrap();
+    let (ssh_priv, _ssh_pub_path, ssh_pub_content) = create_temp_ssh_keypair_in_dir(&ssh_temp);
+    let (private, public) = keygen_test(ALICE_MEMBER_ID, &ssh_priv, &ssh_pub_content).unwrap();
 
     println!("Generated key:");
     println!("  member_id: {}", public.protected.member_id);

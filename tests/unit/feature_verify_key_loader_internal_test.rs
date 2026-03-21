@@ -1,20 +1,66 @@
 use super::*;
-use crate::feature::key::generate::{build_identity_keys, build_public_key, generate_keypairs};
-use crate::model::public_key::{Attestation, Identity};
+use crate::config::types::SshSigner;
+use crate::feature::context::ssh::SshSigningContext;
+use crate::feature::key::generate::{build_identity_keys, generate_keypairs};
+use crate::feature::key::public_key_document::{
+    build_attestation, build_public_key, PublicKeyBuildParams,
+};
+use crate::io::ssh::backend::ssh_keygen::SshKeygenBackend;
+use crate::io::ssh::backend::SignatureBackend;
+use crate::io::ssh::external::keygen::DefaultSshKeygen;
+use crate::io::ssh::protocol::{build_sha256_fingerprint, SshKeyDescriptor};
+use crate::model::public_key::{Identity, PublicKey};
+use crate::model::ssh::SshDeterminismStatus;
 use crate::model::verification::VerifyingKeySource;
+use std::path::Path;
+
+/// Build SSH signing context from test SSH keypair
+fn build_test_ssh_context(ssh_key_path: &Path, ssh_pubkey: &str) -> SshSigningContext {
+    let fingerprint = build_sha256_fingerprint(ssh_pubkey).unwrap();
+    let backend: Box<dyn SignatureBackend> = Box::new(SshKeygenBackend::new(
+        Box::new(DefaultSshKeygen::new("ssh-keygen")),
+        SshKeyDescriptor::from_path(ssh_key_path.to_path_buf()),
+    ));
+    SshSigningContext {
+        signing_method: SshSigner::SshKeygen,
+        public_key: ssh_pubkey.to_string(),
+        fingerprint,
+        backend,
+        determinism: SshDeterminismStatus::Verified,
+    }
+}
+
+/// Create a temp SSH keypair and return (private_key_path, public_key_content)
+fn create_ssh_keypair() -> (tempfile::TempDir, std::path::PathBuf, String) {
+    let temp_dir = tempfile::TempDir::new().unwrap();
+    let ssh_dir = temp_dir.path().join(".ssh");
+    std::fs::create_dir_all(&ssh_dir).unwrap();
+    let private_key_path = ssh_dir.join("test_ed25519");
+    std::process::Command::new("ssh-keygen")
+        .args(["-t", "ed25519", "-f"])
+        .arg(&private_key_path)
+        .args(["-N", "", "-C", "test@example.com"])
+        .output()
+        .expect("Failed to generate SSH keypair");
+    let public_key_content = std::fs::read_to_string(ssh_dir.join("test_ed25519.pub"))
+        .unwrap()
+        .trim()
+        .to_string();
+    (temp_dir, private_key_path, public_key_content)
+}
 
 fn create_test_public_key(expires_at: &str) -> (PublicKey, String) {
+    let (ssh_temp, ssh_priv, ssh_pub_content) = create_ssh_keypair();
+    let ssh_context = build_test_ssh_context(&ssh_priv, &ssh_pub_content);
+
     let (kid, _kem_sk, kem_pk, sig_sk, sig_pk) = generate_keypairs().unwrap();
     let identity_keys = build_identity_keys(&kem_pk, &sig_pk).unwrap();
+    let attestation = build_attestation(&ssh_context, &identity_keys).unwrap();
     let identity = Identity {
         keys: identity_keys,
-        attestation: Attestation {
-            method: "test".to_string(),
-            pub_: String::new(),
-            sig: String::new(),
-        },
+        attestation,
     };
-    let params = crate::feature::key::generate::PublicKeyBuildParams {
+    let params = PublicKeyBuildParams {
         member_id: "test@example.com",
         kid: &kid,
         identity,
@@ -25,6 +71,8 @@ fn create_test_public_key(expires_at: &str) -> (PublicKey, String) {
         github_account: None,
     };
     let public_key = build_public_key(&params).unwrap();
+    // Keep ssh_temp alive until public_key is built
+    drop(ssh_temp);
     (public_key, kid)
 }
 
