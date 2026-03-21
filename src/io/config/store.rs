@@ -6,7 +6,7 @@
 //! Provides functions to read and write configuration files as flat TOML key-value pairs.
 //! This follows PRD v3 specification for config.toml format.
 
-use crate::support::fs::{atomic, load_text, lock};
+use crate::support::fs::{atomic, check_permission, load_text, lock};
 use crate::support::path::display_path_relative_to_cwd;
 use crate::{Error, Result};
 use std::collections::BTreeMap;
@@ -28,6 +28,10 @@ use std::path::Path;
 pub fn load_config_file(path: &Path) -> Result<BTreeMap<String, String>> {
     if !path.exists() {
         return Ok(BTreeMap::new());
+    }
+
+    if let Some(msg) = check_permission(path) {
+        tracing::warn!("{}", msg);
     }
 
     let content = load_text(path)?;

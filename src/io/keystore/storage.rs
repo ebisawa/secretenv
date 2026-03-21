@@ -94,6 +94,9 @@ pub fn load_private_key(keystore_root: &Path, member_id: &str, kid: &str) -> Res
 /// Load PublicKey from keystore
 pub fn load_public_key(keystore_root: &Path, member_id: &str, kid: &str) -> Result<PublicKey> {
     let path = key_dir(keystore_root, member_id, kid).join("public.json");
+    if let Some(msg) = check_permission(&path) {
+        tracing::warn!("{}", msg);
+    }
     load_json_file(&path, "public key")
 }
 
