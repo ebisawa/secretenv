@@ -47,7 +47,7 @@ fn test_resolve_config_value_global() {
     set_config_value(&global_config_path, "member_id", "global@example.com").unwrap();
 
     // Resolve config value
-    let (value, scope) = resolve_config_value("member_id").unwrap();
+    let (value, scope) = resolve_config_value("member_id", Some(_temp_dir.path())).unwrap();
 
     assert_eq!(value, Some("global@example.com".to_string()));
     assert_eq!(scope, Some("global".to_string()));
@@ -58,7 +58,7 @@ fn test_get_config_path_and_scope_global() {
     let _guard = EnvGuard::new(&["SECRETENV_HOME"]);
     let _temp_dir = TempDir::new().unwrap();
     std::env::set_var("SECRETENV_HOME", _temp_dir.path().to_str().unwrap());
-    let (path, scope) = get_config_path_and_scope().unwrap();
+    let (path, scope) = get_config_path_and_scope(Some(_temp_dir.path())).unwrap();
 
     match scope {
         ConfigScope::Global => {}
@@ -83,7 +83,7 @@ fn test_load_global_config() {
     set_config_value(&global_config_path, "member_id", "global@example.com").unwrap();
 
     // Load global config
-    let config = load_global_config().unwrap();
+    let config = load_global_config(Some(_temp_dir.path())).unwrap();
 
     // May contain the value or be empty depending on test environment
     let _ = config;

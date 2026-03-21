@@ -6,7 +6,7 @@
 use crate::io::config;
 use crate::{Error, Result};
 use std::collections::BTreeMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 // NOTE: Keep in sync with PRD config.toml documentation (global config.toml keys).
 pub(crate) const VALID_KEYS: &[&str] = &[
@@ -48,22 +48,29 @@ pub fn validate_key(key: &str) -> Result<()> {
     Ok(())
 }
 
-pub fn resolve_config_value(key: &str) -> Result<(Option<String>, Option<String>)> {
-    if let Some(value) = load_global_config()?.get(key) {
+pub fn resolve_config_value(
+    key: &str,
+    base_dir: Option<&Path>,
+) -> Result<(Option<String>, Option<String>)> {
+    if let Some(value) = load_global_config(base_dir)?.get(key) {
         return Ok((Some(value.clone()), Some("global".to_string())));
     }
 
     Ok((None, None))
 }
 
-pub fn get_config_path_and_scope() -> Result<(PathBuf, ConfigScope)> {
-    Ok((
-        config::paths::get_global_config_path()?,
-        ConfigScope::Global,
-    ))
+pub fn get_config_path_and_scope(base_dir: Option<&Path>) -> Result<(PathBuf, ConfigScope)> {
+    let config_path = match base_dir {
+        Some(dir) => config::paths::get_global_config_path_from_base(dir),
+        None => config::paths::get_global_config_path()?,
+    };
+    Ok((config_path, ConfigScope::Global))
 }
 
-pub fn load_global_config() -> Result<BTreeMap<String, String>> {
-    let config_path = config::paths::get_global_config_path()?;
+pub fn load_global_config(base_dir: Option<&Path>) -> Result<BTreeMap<String, String>> {
+    let config_path = match base_dir {
+        Some(dir) => config::paths::get_global_config_path_from_base(dir),
+        None => config::paths::get_global_config_path()?,
+    };
     config::store::load_config_file(&config_path)
 }

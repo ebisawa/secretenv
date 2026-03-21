@@ -26,19 +26,19 @@ pub struct ConfigUnsetResult {
 
 pub fn get_config(key: &str) -> Result<String> {
     let normalized = config::normalize_key(key)?;
-    let value = config::resolve_config_value(&normalized)?.0;
+    let value = config::resolve_config_value(&normalized, None)?.0;
     value.ok_or_else(|| Error::NotFound {
         message: format!("Configuration key '{}' not found", key),
     })
 }
 
 pub fn list_config() -> Result<BTreeMap<String, String>> {
-    config::load_global_config()
+    config::load_global_config(None)
 }
 
 pub fn set_config(key: &str, value: &str) -> Result<ConfigSetResult> {
     let normalized = config::normalize_key(key)?;
-    let (config_path, scope) = config::get_config_path_and_scope()?;
+    let (config_path, scope) = config::get_config_path_and_scope(None)?;
     set_config_value(&config_path, &normalized, value)?;
     Ok(ConfigSetResult {
         key: key.to_string(),
@@ -49,7 +49,7 @@ pub fn set_config(key: &str, value: &str) -> Result<ConfigSetResult> {
 
 pub fn unset_config(key: &str) -> Result<ConfigUnsetResult> {
     let normalized = config::normalize_key(key)?;
-    let (config_path, scope) = config::get_config_path_and_scope()?;
+    let (config_path, scope) = config::get_config_path_and_scope(None)?;
     unset_config_value(&config_path, &normalized)?;
     Ok(ConfigUnsetResult {
         key: key.to_string(),
