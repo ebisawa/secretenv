@@ -58,8 +58,8 @@ pub fn generate_key_command(
     let keystore_root = options.resolve_keystore_root()?;
     let member_id = require_member_id(resolve_member_id_with_fallback(
         member_id_arg,
-        None,
         &keystore_root,
+        options.home.as_deref(),
     )?)?;
     let github_user = resolve_github_user_with_fallback(github_user_arg, options.home.as_deref())?;
     let (created_at, expires_at) = resolve_key_timestamps(expires_at_arg, valid_for_arg)?;
@@ -96,8 +96,8 @@ pub fn activate_key_command(
     let keystore_root = options.resolve_keystore_root()?;
     let member_id = require_member_id(resolve_member_id_with_fallback(
         member_id,
-        None,
         &keystore_root,
+        options.home.as_deref(),
     )?)?;
     activate_key(options.home.clone(), member_id, kid).map(KeyActivateResult::from)
 }
@@ -110,8 +110,8 @@ pub fn remove_key_command(
 ) -> Result<KeyRemoveResult> {
     let resolved_member_id = match resolve_member_id_with_fallback(
         member_id.clone(),
-        None,
         &options.resolve_keystore_root()?,
+        options.home.as_deref(),
     ) {
         Ok(Some(member_id)) => member_id,
         Ok(None) if member_id.is_none() => {
@@ -136,8 +136,8 @@ pub fn export_key_command(
     let keystore_root = options.resolve_keystore_root()?;
     let member_id = require_member_id(resolve_member_id_with_fallback(
         member_id,
-        None,
         &keystore_root,
+        options.home.as_deref(),
     )?)?;
     let result = export_key(options.home.clone(), member_id, kid)?;
     save_exported_public_key(out, &result.public_key)?;

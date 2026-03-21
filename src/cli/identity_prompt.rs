@@ -5,7 +5,7 @@
 
 use dialoguer::{Confirm, Input};
 use std::io::IsTerminal;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use crate::app::identity::{resolve_github_user_with_fallback, resolve_member_id_with_fallback};
 use crate::support::validation;
@@ -13,10 +13,10 @@ use crate::{Error, Result};
 
 pub fn resolve_member_id(
     member_id: Option<String>,
-    workspace: Option<&PathBuf>,
     keystore_root: &Path,
+    base_dir: Option<&Path>,
 ) -> Result<String> {
-    if let Some(member_id) = resolve_member_id_with_fallback(member_id, workspace, keystore_root)? {
+    if let Some(member_id) = resolve_member_id_with_fallback(member_id, keystore_root, base_dir)? {
         return Ok(member_id);
     }
 

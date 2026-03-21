@@ -15,8 +15,11 @@ use super::NewArgs;
 pub fn run(args: NewArgs) -> Result<()> {
     let options = CommonCommandOptions::from(&args.common);
     let keystore_root = options.resolve_keystore_root()?;
-    let member_id =
-        identity_prompt::resolve_member_id(args.member_id.clone(), None, &keystore_root)?;
+    let member_id = identity_prompt::resolve_member_id(
+        args.member_id.clone(),
+        &keystore_root,
+        options.home.as_deref(),
+    )?;
     let github_user =
         identity_prompt::resolve_github_user(args.github_user.clone(), options.home.as_deref())?;
     let result = generate_key_command(

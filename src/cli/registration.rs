@@ -24,7 +24,7 @@ pub(crate) fn execute_registration_command(
     let options = CommonCommandOptions::from(&common);
     let keystore_root = options.resolve_keystore_root()?;
     let member_id =
-        identity_prompt::resolve_member_id(member_id, options.workspace.as_ref(), &keystore_root)?;
+        identity_prompt::resolve_member_id(member_id, &keystore_root, options.home.as_deref())?;
     let key_plan = resolve_registration_key_plan(&member_id, &keystore_root)?;
     if key_plan.requires_github_user() {
         print_missing_key_notice(&member_id);
