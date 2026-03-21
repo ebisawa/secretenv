@@ -108,7 +108,9 @@ The `.secretenv/` directory inside a Git repository is the Workspace. It stores 
 └── config.toml       ← local configuration (optional)
 ```
 
-secretenv automatically searches for `.secretenv/` from the current directory upward, stopping at the Git repository root.
+secretenv automatically searches for `.secretenv/` from the current directory upward, stopping at the Git repository root. This means workspace auto-detection **only works when the current directory is inside a Git repository**. To use secretenv outside a Git repository, specify the workspace explicitly with the `-w` / `--workspace` option or the `SECRETENV_WORKSPACE` environment variable.
+
+The command examples in this guide assume that **the current directory is inside the target Git repository** unless otherwise noted.
 
 ### Member ID
 
@@ -273,6 +275,8 @@ Follow these steps when introducing secretenv to your team for the first time.
 
 ### Step 1: Prepare a repository
 
+Workspace auto-detection works inside a Git repository. Start by navigating to your Git repository directory.
+
 ```bash
 # Start with an existing repository
 cd /path/to/your-repo
@@ -340,6 +344,8 @@ When a member submits a PR, approve it following the [member addition workflow i
 Follow these steps to join an existing Workspace.
 
 ### Step 1: Clone the repository
+
+Clone the repository and navigate into the directory. This allows secretenv to auto-detect the workspace.
 
 ```bash
 git clone <repo-url>
