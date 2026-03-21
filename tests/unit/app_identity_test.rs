@@ -31,8 +31,12 @@ fn write_global_config(temp_home: &TempDir, member_id: &str) {
     fs::write(config_path, format!("member_id = \"{}\"\n", member_id)).unwrap();
 }
 
-fn call(cli: Option<&str>, keystore_root: &Path) -> secretenv::Result<Option<String>> {
-    resolve_member_id_with_fallback(cli.map(str::to_string), None, keystore_root)
+fn call(
+    cli: Option<&str>,
+    keystore_root: &Path,
+    base_dir: Option<&Path>,
+) -> secretenv::Result<Option<String>> {
+    resolve_member_id_with_fallback(cli.map(str::to_string), keystore_root, base_dir)
 }
 
 // ===== Priority 1: CLI argument =====
@@ -48,7 +52,7 @@ fn test_resolve_member_id_from_cli_argument() {
     write_global_config(&temp_home, "config-member");
     let keystore_root = setup_keystore(&temp_dir, &["keystore-member"]);
 
-    let result = call(Some("cli-member"), &keystore_root).unwrap();
+    let result = call(Some("cli-member"), &keystore_root, Some(temp_home.path())).unwrap();
 
     assert_eq!(result, Some("cli-member".to_string()));
 }
@@ -62,7 +66,11 @@ fn test_resolve_member_id_cli_invalid_returns_error() {
     env::set_var("SECRETENV_HOME", temp_home.path());
     let keystore_root = setup_keystore(&temp_dir, &[]);
 
-    let result = call(Some("invalid member id!"), &keystore_root);
+    let result = call(
+        Some("invalid member id!"),
+        &keystore_root,
+        Some(temp_home.path()),
+    );
 
     assert!(result.is_err());
 }
@@ -80,7 +88,7 @@ fn test_resolve_member_id_from_env_var() {
     write_global_config(&temp_home, "config-member");
     let keystore_root = setup_keystore(&temp_dir, &["keystore-member"]);
 
-    let result = call(None, &keystore_root).unwrap();
+    let result = call(None, &keystore_root, Some(temp_home.path())).unwrap();
 
     assert_eq!(result, Some("env-member".to_string()));
 }
@@ -95,7 +103,7 @@ fn test_resolve_member_id_env_invalid_returns_error() {
     env::set_var("SECRETENV_MEMBER_ID", "invalid member!");
     let keystore_root = setup_keystore(&temp_dir, &[]);
 
-    let result = call(None, &keystore_root);
+    let result = call(None, &keystore_root, Some(temp_home.path()));
 
     assert!(result.is_err());
 }
@@ -113,7 +121,7 @@ fn test_resolve_member_id_from_global_config() {
     write_global_config(&temp_home, "config-member");
     let keystore_root = setup_keystore(&temp_dir, &["keystore-member"]);
 
-    let result = call(None, &keystore_root).unwrap();
+    let result = call(None, &keystore_root, Some(temp_home.path())).unwrap();
 
     assert_eq!(result, Some("config-member".to_string()));
 }
@@ -129,7 +137,7 @@ fn test_resolve_member_id_config_invalid_returns_error() {
     write_global_config(&temp_home, "invalid member!");
     let keystore_root = setup_keystore(&temp_dir, &[]);
 
-    let result = call(None, &keystore_root);
+    let result = call(None, &keystore_root, Some(temp_home.path()));
 
     assert!(result.is_err());
 }
@@ -146,7 +154,7 @@ fn test_resolve_member_id_from_keystore_single_member() {
     env::remove_var("SECRETENV_MEMBER_ID");
     let keystore_root = setup_keystore(&temp_dir, &["keystore-member"]);
 
-    let result = call(None, &keystore_root).unwrap();
+    let result = call(None, &keystore_root, Some(temp_home.path())).unwrap();
 
     assert_eq!(result, Some("keystore-member".to_string()));
 }
@@ -161,7 +169,7 @@ fn test_resolve_member_id_keystore_multiple_members_returns_none() {
     env::remove_var("SECRETENV_MEMBER_ID");
     let keystore_root = setup_keystore(&temp_dir, &["alice", "bob"]);
 
-    let result = call(None, &keystore_root).unwrap();
+    let result = call(None, &keystore_root, Some(temp_home.path())).unwrap();
 
     assert_eq!(result, None);
 }
@@ -176,7 +184,7 @@ fn test_resolve_member_id_keystore_empty_returns_none() {
     env::remove_var("SECRETENV_MEMBER_ID");
     let keystore_root = setup_keystore(&temp_dir, &[]);
 
-    let result = call(None, &keystore_root).unwrap();
+    let result = call(None, &keystore_root, Some(temp_home.path())).unwrap();
 
     assert_eq!(result, None);
 }
@@ -193,7 +201,7 @@ fn test_resolve_member_id_priority_cli_over_env() {
     env::set_var("SECRETENV_MEMBER_ID", "env-member");
     let keystore_root = setup_keystore(&temp_dir, &[]);
 
-    let result = call(Some("cli-member"), &keystore_root).unwrap();
+    let result = call(Some("cli-member"), &keystore_root, Some(temp_home.path())).unwrap();
 
     assert_eq!(result, Some("cli-member".to_string()));
 }
@@ -209,7 +217,7 @@ fn test_resolve_member_id_priority_env_over_config() {
     write_global_config(&temp_home, "config-member");
     let keystore_root = setup_keystore(&temp_dir, &[]);
 
-    let result = call(None, &keystore_root).unwrap();
+    let result = call(None, &keystore_root, Some(temp_home.path())).unwrap();
 
     assert_eq!(result, Some("env-member".to_string()));
 }
@@ -225,7 +233,7 @@ fn test_resolve_member_id_priority_config_over_keystore() {
     write_global_config(&temp_home, "config-member");
     let keystore_root = setup_keystore(&temp_dir, &["keystore-member"]);
 
-    let result = call(None, &keystore_root).unwrap();
+    let result = call(None, &keystore_root, Some(temp_home.path())).unwrap();
 
     assert_eq!(result, Some("config-member".to_string()));
 }

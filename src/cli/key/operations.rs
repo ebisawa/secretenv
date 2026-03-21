@@ -15,8 +15,11 @@ use super::{ActivateArgs, ExportArgs, RemoveArgs};
 pub fn run_activate(args: ActivateArgs) -> Result<()> {
     let options = CommonCommandOptions::from(&args.common);
     let keystore_root = options.resolve_keystore_root()?;
-    let member_id =
-        identity_prompt::resolve_member_id(args.member_id.clone(), None, &keystore_root)?;
+    let member_id = identity_prompt::resolve_member_id(
+        args.member_id.clone(),
+        &keystore_root,
+        options.home.as_deref(),
+    )?;
     let result = activate_key_command(&options, Some(member_id), args.kid.clone())?;
     eprintln!("Activated key for '{}':", result.member_id);
     eprintln!("  Kid: {}", result.kid);
@@ -30,8 +33,8 @@ pub fn run_remove(args: RemoveArgs) -> Result<()> {
         let keystore_root = options.resolve_keystore_root()?;
         Some(identity_prompt::resolve_member_id(
             args.member_id.clone(),
-            None,
             &keystore_root,
+            options.home.as_deref(),
         )?)
     } else {
         None
@@ -49,8 +52,11 @@ pub fn run_remove(args: RemoveArgs) -> Result<()> {
 pub fn run_export(args: ExportArgs) -> Result<()> {
     let options = CommonCommandOptions::from(&args.common);
     let keystore_root = options.resolve_keystore_root()?;
-    let member_id =
-        identity_prompt::resolve_member_id(args.member_id.clone(), None, &keystore_root)?;
+    let member_id = identity_prompt::resolve_member_id(
+        args.member_id.clone(),
+        &keystore_root,
+        options.home.as_deref(),
+    )?;
     let result = export_key_command(&options, Some(member_id), args.kid.clone(), &args.out)?;
     eprintln!("Exported public key for '{}':", result.member_id);
     eprintln!("  Kid:    {}", result.kid);

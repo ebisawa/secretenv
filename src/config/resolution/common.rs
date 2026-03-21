@@ -11,7 +11,7 @@ use crate::io::config::paths::{get_global_config_path, get_global_config_path_fr
 use crate::io::config::store::load_config_file;
 
 /// Load a config field from global config (SECRETENV_HOME/config.toml)
-pub(super) fn load_field_from_global_config(
+pub(crate) fn load_field_from_global_config(
     field_name: &str,
     base_dir: Option<&Path>,
 ) -> Result<Option<String>> {

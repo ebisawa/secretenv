@@ -3,18 +3,18 @@
 
 //! Application-layer identity resolution helpers.
 
+use crate::config::resolution::common::load_field_from_global_config;
 use crate::config::resolution::github_user::resolve_github_user;
-use crate::io::config as io_config;
 use crate::io::keystore::member;
 use crate::support::validation;
 use crate::Error;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 /// Resolve member ID from non-interactive sources.
 pub fn resolve_member_id_with_fallback(
     member_id: Option<String>,
-    workspace: Option<&PathBuf>,
     keystore_root: &Path,
+    base_dir: Option<&Path>,
 ) -> Result<Option<String>, Error> {
     if let Some(id) = resolve_member_id_from_cli(member_id)? {
         return Ok(Some(id));
@@ -24,7 +24,7 @@ pub fn resolve_member_id_with_fallback(
         return Ok(Some(id));
     }
 
-    if let Some(id) = resolve_member_id_from_config(workspace)? {
+    if let Some(id) = resolve_member_id_from_config(base_dir)? {
         return Ok(Some(id));
     }
 
@@ -61,10 +61,8 @@ fn resolve_member_id_from_env() -> Result<Option<String>, Error> {
     }
 }
 
-fn resolve_member_id_from_config(_workspace: Option<&PathBuf>) -> Result<Option<String>, Error> {
-    let config_path = io_config::paths::get_global_config_path()?;
-    let config = io_config::store::load_config_file(&config_path)?;
-    if let Some(id) = config.get("member_id").cloned() {
+fn resolve_member_id_from_config(base_dir: Option<&Path>) -> Result<Option<String>, Error> {
+    if let Some(id) = load_field_from_global_config("member_id", base_dir)? {
         validation::validate_member_id(&id)?;
         Ok(Some(id))
     } else {
