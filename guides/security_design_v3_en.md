@@ -860,7 +860,7 @@ Both file-enc and kv-enc use a common signature structure called `signature_v3`.
 - **Explicit key generation**: Containing `kid` (key generation ID) makes it clear which generation of key was used for signing.
 - **Ed25519 raw signature**: The signature value is base64url-encoded Ed25519 raw signature bytes (64 bytes) — a fixed length of 86 characters.
 
-When the signature token contains `signer_pub`, it can also chain-verify the PublicKey's self-signature and SSH attestation, forming an offline trust chain (`attestation.method == "test"` type dummy specifications are not accepted in release (non-debug) builds).
+When the signature token contains `signer_pub`, it can also chain-verify the PublicKey's self-signature and SSH attestation, forming an offline trust chain.
 
 ### 8.1 Comparison of Signing Methods
 
