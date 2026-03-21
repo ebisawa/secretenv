@@ -69,42 +69,30 @@ pub fn set_ssh_key_from_temp_dir(common_opts: &mut CommonOptions, temp_dir: &Tem
 ///
 /// Returns: (workspace_dir, home_dir, ssh_temp, ssh_priv_path)
 pub fn setup_workspace() -> (TempDir, TempDir, TempDir, PathBuf) {
-    const MAX_INIT_ATTEMPTS: usize = 3;
+    let workspace_dir = TempDir::new().unwrap();
+    let home_dir = TempDir::new().unwrap();
+    let (ssh_temp, ssh_priv, _ssh_pub, _ssh_pub_content) = create_temp_ssh_keypair();
 
-    for attempt in 1..=MAX_INIT_ATTEMPTS {
-        let workspace_dir = TempDir::new().unwrap();
-        let home_dir = TempDir::new().unwrap();
-        let (ssh_temp, ssh_priv, _ssh_pub, _ssh_pub_content) = create_temp_ssh_keypair();
+    std::fs::create_dir_all(workspace_dir.path().join("members")).unwrap();
+    std::fs::create_dir_all(workspace_dir.path().join("secrets")).unwrap();
 
-        std::fs::create_dir_all(workspace_dir.path().join("members")).unwrap();
-        std::fs::create_dir_all(workspace_dir.path().join("secrets")).unwrap();
+    let output = cmd()
+        .arg("init")
+        .arg("--workspace")
+        .arg(workspace_dir.path())
+        .arg("--member-id")
+        .arg(TEST_MEMBER_ID)
+        .env("SECRETENV_HOME", home_dir.path())
+        .env("SECRETENV_SSH_KEY", ssh_priv.to_str().unwrap())
+        .output()
+        .unwrap();
 
-        let output = cmd()
-            .arg("init")
-            .arg("--workspace")
-            .arg(workspace_dir.path())
-            .arg("--member-id")
-            .arg(TEST_MEMBER_ID)
-            .env("SECRETENV_HOME", home_dir.path())
-            .env("SECRETENV_SSH_KEY", ssh_priv.to_str().unwrap())
-            .output()
-            .unwrap();
-
-        if output.status.success() {
-            return (workspace_dir, home_dir, ssh_temp, ssh_priv);
-        }
-
+    if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        let is_retryable = stderr.contains("W_SSH_NONDETERMINISTIC");
-        if !is_retryable || attempt == MAX_INIT_ATTEMPTS {
-            panic!(
-                "failed to initialize test workspace (attempt {attempt}/{MAX_INIT_ATTEMPTS}): {}",
-                stderr.trim()
-            );
-        }
+        panic!("failed to initialize test workspace: {}", stderr.trim());
     }
 
-    unreachable!("setup_workspace should return or panic within retry loop")
+    (workspace_dir, home_dir, ssh_temp, ssh_priv)
 }
 
 /// Helper to create a temporary SSH Ed25519 keypair for testing

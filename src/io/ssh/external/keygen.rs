@@ -132,6 +132,13 @@ fn run_sign_command(
     namespace: &str,
     msg_file: &tempfile::NamedTempFile,
 ) -> Result<std::process::Output> {
+    // Remove any pre-existing .sig file to prevent ssh-keygen from prompting
+    // "Overwrite (y/n)?". When stdin is closed (as with Command::output()),
+    // ssh-keygen silently skips writing on EOF, returning exit 0 with stale
+    // content — which can cause false non-determinism errors.
+    let sig_path = build_sig_path(msg_file);
+    let _ = std::fs::remove_file(&sig_path);
+
     Command::new(ssh_keygen_path)
         .args(["-Y", "sign"])
         .args(["-f", key_path_str])
@@ -149,6 +156,12 @@ fn run_sign_command(
                 e,
             ))
         })
+}
+
+fn build_sig_path(msg_file: &tempfile::NamedTempFile) -> std::path::PathBuf {
+    let mut sig_path_str = msg_file.path().to_string_lossy().into_owned();
+    sig_path_str.push_str(".sig");
+    std::path::PathBuf::from(sig_path_str)
 }
 
 fn check_sign_output(output: &std::process::Output, is_public_key: bool) -> Result<()> {
@@ -172,10 +185,7 @@ fn check_sign_output(output: &std::process::Output, is_public_key: bool) -> Resu
 }
 
 fn load_signature_file(msg_file: &tempfile::NamedTempFile) -> Result<String> {
-    let mut sig_path_str = msg_file.path().to_string_lossy().into_owned();
-    sig_path_str.push_str(".sig");
-    let sig_path = std::path::PathBuf::from(sig_path_str);
-    load_text(&sig_path)
+    load_text(&build_sig_path(msg_file))
 }
 
 fn check_verify_output(output: std::process::Output) -> Result<()> {
