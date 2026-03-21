@@ -258,6 +258,9 @@ secretenv config set github_user alice-gh
 # ssh-agent: use SSH agent
 # ssh-keygen: use ssh-keygen command
 secretenv config set ssh_signer auto
+
+# Set SSH key (select a specific key when multiple keys are loaded in ssh-agent)
+secretenv config set ssh_key ~/.ssh/id_ed25519_work
 ```
 
 The configuration file is located at `~/.config/secretenv/config.toml`.
@@ -798,6 +801,12 @@ secretenv private keys (HPKE private keys) are protected by an SSH Ed25519 key i
 
 In environments where an SSH agent is unavailable, you can switch to signing with the `ssh-keygen` command using the `--ssh-keygen` option.
 
+When multiple keys are loaded in the SSH agent, you can explicitly specify which key to use with the `-i` option or the `ssh_key` configuration:
+
+```bash
+secretenv encrypt -i ~/.ssh/id_ed25519_work secret.env
+```
+
 ### Q: How do I manage separate secrets for multiple projects?
 
 Each Git repository can have its own independent `.secretenv/`. Run `secretenv init` in each project to manage them as independent Workspaces.
@@ -823,7 +832,7 @@ Even if the same member participates in multiple projects, their HPKE key is reg
 | `--home <path>` | Specify base directory (default: `~/.config/secretenv/`) |
 | `-w` / `--workspace <path>` | Specify Workspace Root |
 | `-m` / `--member-id <id>` | Specify member_id |
-| `-i` / `--identity <path>` | Specify SSH private key file path |
+| `-i` / `--identity <path>` | Specify SSH key file path (also used for key selection with ssh-agent) |
 | `--ssh-agent` | Use SSH agent |
 | `--ssh-keygen` | Use ssh-keygen command |
 | `--json` | Output in JSON format |
