@@ -60,19 +60,3 @@ fn test_check_determinism_via_context() {
     // Result may be ok or err depending on backend implementation
     let _ = result;
 }
-
-#[test]
-fn test_resolve_ssh_signing_context_explicit_key_prefers_ssh_keygen_in_auto_mode() {
-    let temp_dir = setup_test_keystore("test@example.com");
-    let ssh_key_path = temp_dir.path().join(".ssh").join("test_ed25519");
-
-    let params = SshSigningParams {
-        ssh_key: Some(ssh_key_path),
-        signing_method: None,
-        base_dir: Some(temp_dir.path().to_path_buf()),
-        verbose: false,
-    };
-    let ctx = resolve_ssh_signing_context(&params).unwrap();
-
-    assert_eq!(ctx.signing_method, SshSigner::SshKeygen);
-}

@@ -11,9 +11,7 @@ use crate::config::resolution::common::{resolve_ssh_add_path, resolve_ssh_keygen
 use crate::config::resolution::ssh_key::{
     resolve_ssh_key_candidate, resolve_ssh_key_descriptor, SshKeySource,
 };
-use crate::config::resolution::ssh_signer::{
-    resolve_ssh_signer_config, resolve_ssh_signer_with_key,
-};
+use crate::config::resolution::ssh_signer::{resolve_ssh_signer, resolve_ssh_signer_config};
 use crate::config::types::SshSigner;
 use crate::io::ssh::backend::{build_backend, SignatureBackend};
 use crate::io::ssh::external::add::DefaultSshAdd;
@@ -95,8 +93,7 @@ fn resolve_signing_method(
     base_dir: Option<&std::path::Path>,
 ) -> Result<SshSigner> {
     let signing_method_config = resolve_ssh_signer_config(params.signing_method, base_dir)?;
-    let signing_method =
-        resolve_ssh_signer_with_key(signing_method_config, params.ssh_key.is_some());
+    let signing_method = resolve_ssh_signer(signing_method_config);
 
     if params.verbose {
         debug!("[SSH] Signing method: {}", signing_method);

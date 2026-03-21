@@ -12,7 +12,6 @@
 use crate::test_utils::EnvGuard;
 use secretenv::config::resolution::ssh_signer::{
     parse_ssh_signer_config, resolve_ssh_signer, resolve_ssh_signer_config,
-    resolve_ssh_signer_with_key,
 };
 use secretenv::config::types::{SshSigner, SshSignerConfig};
 use serial_test::serial;
@@ -146,16 +145,16 @@ fn test_resolve_ssh_signer_auto_without_agent() {
 
 #[test]
 #[serial]
-fn test_resolve_ssh_signer_auto_with_explicit_key_prefers_ssh_keygen() {
+fn test_resolve_ssh_signer_auto_with_explicit_key_prefers_agent_when_available() {
     let _guard = EnvGuard::new(&["HOME", "SSH_AUTH_SOCK"]);
 
     let temp_dir = TempDir::new().unwrap();
     std::env::set_var("HOME", temp_dir.path());
     std::env::set_var("SSH_AUTH_SOCK", "/tmp/dummy-agent.sock");
 
-    let result = resolve_ssh_signer_with_key(SshSignerConfig::Auto, true);
+    let result = resolve_ssh_signer(SshSignerConfig::Auto);
 
-    assert_eq!(result, SshSigner::SshKeygen);
+    assert_eq!(result, SshSigner::SshAgent);
 }
 
 #[test]
