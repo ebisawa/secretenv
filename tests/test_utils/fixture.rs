@@ -1,12 +1,16 @@
 // Copyright 2026 Satoshi Ebisawa
 // SPDX-License-Identifier: Apache-2.0
 
+use std::collections::HashMap;
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::sync::LazyLock;
+
 use super::keygen_helpers::{create_test_private_key, keygen_test};
 use secretenv::io::keystore::active::set_active_kid;
 use secretenv::io::keystore::storage::save_key_pair_atomic;
+use secretenv::model::private_key::{PrivateKey, PrivateKeyPlaintext};
 use secretenv::model::public_key::PublicKey;
-use std::fs;
-use std::path::{Path, PathBuf};
 use tempfile::TempDir;
 
 // ============================================================================
@@ -16,6 +20,68 @@ use tempfile::TempDir;
 const FIXTURES_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures");
 pub const FIXTURE_ALICE_KID: &str = "01KM8R41Y7J9VXGE6VM8AHR452";
 pub const FIXTURE_BOB_KID: &str = "01KM8R41YW44AVEP1NBSG2VQFC";
+
+// ============================================================================
+// Shared fixture (runtime-generated test keys)
+// ============================================================================
+
+struct MemberFixture {
+    member_id: String,
+    kid: String,
+    public_key: PublicKey,
+    private_key: PrivateKey,
+    #[allow(dead_code)]
+    private_key_plaintext: PrivateKeyPlaintext,
+}
+
+struct SharedFixture {
+    ssh_private_key_bytes: Vec<u8>,
+    ssh_public_key_content: String,
+    members: HashMap<String, MemberFixture>,
+}
+
+static SHARED_FIXTURE: LazyLock<SharedFixture> = LazyLock::new(build_shared_fixture);
+
+fn build_shared_fixture() -> SharedFixture {
+    let temp_dir = TempDir::new().expect("Failed to create temp dir for fixture generation");
+    let (ssh_priv, _ssh_pub, ssh_pub_content) = create_temp_ssh_keypair_in_dir(&temp_dir);
+
+    let ssh_private_key_bytes =
+        fs::read(&ssh_priv).expect("Failed to read generated SSH private key");
+
+    let mut members = HashMap::new();
+    for member_id in ["alice@example.com", "bob@example.com"] {
+        let (plaintext, public_key) = keygen_test(member_id, &ssh_priv, &ssh_pub_content)
+            .expect("Failed to generate test key pair");
+        let private_key = create_test_private_key(
+            &plaintext,
+            &public_key.protected.member_id,
+            &public_key.protected.kid,
+            &ssh_priv,
+            &ssh_pub_content,
+        )
+        .expect("Failed to create test private key");
+
+        let kid = public_key.protected.kid.clone();
+        members.insert(
+            member_id.to_string(),
+            MemberFixture {
+                member_id: member_id.to_string(),
+                kid,
+                public_key,
+                private_key,
+                private_key_plaintext: plaintext,
+            },
+        );
+    }
+
+    // temp_dir is dropped here, cleaning up the ssh-keygen output
+    SharedFixture {
+        ssh_private_key_bytes,
+        ssh_public_key_content: ssh_pub_content,
+        members,
+    }
+}
 
 // ============================================================================
 // Fixture loaders
