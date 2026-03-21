@@ -91,3 +91,8 @@ KV 暗号化: KV マップ → エントリごとに CEK で暗号化 → トー
 - テストファイル名: `<module_path>_test.rs`（例: `feature/encrypt/wrap.rs` → `feature_encrypt_wrap_test.rs`）
 - 動詞規則: `build_*`（組み立て）、`load_*`（読み込み）、`save_*`（書き込み）、`resolve_*`（動的解決）。`create_*`, `prepare_*`, `read_*`, `write_*` は使用禁止
 - CLI 専用動詞: `setup_*`（実行前準備）、`run_*`（エントリポイント）、`print_*`（表示）— `cli/` 以外での使用禁止
+
+## Subagent Review Rules
+
+- `crypto/`, `feature/envelope/`, `feature/key/`, `model/private_key.rs` など暗号関連コードを変更した場合は、`security-reviewer` サブエージェントでレビューを実施する
+- レイヤーをまたぐ変更（新規モジュール追加、`use crate::` の追加・変更）を行った場合は、`architecture-reviewer` サブエージェントでレイヤー依存ルール違反がないことを確認する
