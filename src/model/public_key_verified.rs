@@ -35,7 +35,7 @@ impl VerifiedBindingClaims {
 /// Proof of SSH attestation verification.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AttestationProof {
-    /// Attestation method (e.g., "ssh" or "test")
+    /// Attestation method (e.g., "ssh-sign")
     pub method: String,
     /// SSH public key used for attestation (from attestation.pub)
     pub ssh_pub: String,
