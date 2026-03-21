@@ -10,8 +10,6 @@ pub mod crypto_context;
 pub mod ed25519_backend;
 #[path = "../tests/test_utils/fixture.rs"]
 mod fixture;
-#[path = "../tests/test_utils/fixture_generator.rs"]
-pub mod fixture_generator;
 pub mod keygen_helpers;
 #[allow(unused_imports)]
 pub use crypto_context::setup_member_key_context;
