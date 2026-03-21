@@ -121,5 +121,5 @@ fn save_toml_table(path: &Path, table: &toml::Table) -> Result<()> {
         message: format!("Failed to serialize config: {}", e),
         source: Some(Box::new(e)),
     })?;
-    atomic::save_text(path, &content)
+    atomic::save_text_restricted(path, &content)
 }
