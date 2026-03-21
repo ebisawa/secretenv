@@ -11,9 +11,7 @@ use crate::config::resolution::common::{resolve_ssh_add_path, resolve_ssh_keygen
 use crate::config::resolution::ssh_key::{
     resolve_ssh_key_candidate, resolve_ssh_key_descriptor, SshKeySource,
 };
-use crate::config::resolution::ssh_signer::{
-    resolve_ssh_signer_config, resolve_ssh_signer_with_key,
-};
+use crate::config::resolution::ssh_signer::{resolve_ssh_signer, resolve_ssh_signer_config};
 use crate::config::types::SshSigner;
 use crate::io::ssh::backend::{build_backend, SignatureBackend};
 use crate::io::ssh::external::add::DefaultSshAdd;
@@ -21,7 +19,7 @@ use crate::io::ssh::external::keygen::DefaultSshKeygen;
 use crate::io::ssh::external::pubkey::{
     load_ssh_public_key_from_agent_with_ssh_add, load_ssh_public_key_with_descriptor_trait,
 };
-use crate::io::ssh::external::traits::SshKeygen;
+use crate::io::ssh::external::traits::{SshAdd, SshKeygen};
 use crate::io::ssh::protocol::constants as ssh;
 use crate::io::ssh::protocol::{build_sha256_fingerprint, SshKeyDescriptor};
 use crate::model::identifiers::context::SSH_DETERMINISM_CHECK_MESSAGE;
@@ -95,8 +93,7 @@ fn resolve_signing_method(
     base_dir: Option<&std::path::Path>,
 ) -> Result<SshSigner> {
     let signing_method_config = resolve_ssh_signer_config(params.signing_method, base_dir)?;
-    let signing_method =
-        resolve_ssh_signer_with_key(signing_method_config, params.ssh_key.is_some());
+    let signing_method = resolve_ssh_signer(signing_method_config);
 
     if params.verbose {
         debug!("[SSH] Signing method: {}", signing_method);
@@ -185,11 +182,13 @@ fn resolve_key_and_pubkey(
     signing_method: SshSigner,
     ssh_key: &Option<PathBuf>,
     ssh_keygen: &dyn SshKeygen,
-    ssh_add: &DefaultSshAdd,
+    ssh_add: &dyn SshAdd,
     base_dir: Option<&std::path::Path>,
 ) -> Result<(SshKeyDescriptor, String)> {
     match signing_method {
-        SshSigner::SshAgent => resolve_key_and_pubkey_agent(ssh_key.clone(), ssh_add, base_dir),
+        SshSigner::SshAgent => {
+            resolve_key_and_pubkey_agent(ssh_key.clone(), ssh_keygen, ssh_add, base_dir)
+        }
         SshSigner::SshKeygen => {
             resolve_key_and_pubkey_keygen(ssh_key.clone(), ssh_keygen, base_dir)
         }
@@ -197,34 +196,43 @@ fn resolve_key_and_pubkey(
 }
 
 /// Resolve key and public key for ssh-agent mode.
+///
+/// When an explicit key is specified (via CLI, env, or config), load the public
+/// key from the key file rather than from the agent. This allows the user to
+/// select which key to use for signing while still using ssh-agent for the
+/// actual signing operation.
 fn resolve_key_and_pubkey_agent(
     ssh_key: Option<PathBuf>,
-    ssh_add: &DefaultSshAdd,
+    ssh_keygen: &dyn SshKeygen,
+    ssh_add: &dyn SshAdd,
     base_dir: Option<&std::path::Path>,
 ) -> Result<(SshKeyDescriptor, String)> {
     let candidate = resolve_ssh_key_candidate(ssh_key, base_dir)?;
+    let descriptor = SshKeyDescriptor::from_path(candidate.path.clone());
+    let is_explicit = candidate.source != SshKeySource::Default;
 
-    // If explicitly specified but file doesn't exist, error
-    if !candidate.exists && candidate.source != SshKeySource::Default {
-        let source_str = match candidate.source {
-            SshKeySource::Cli => "CLI option",
-            SshKeySource::Env => "SECRETENV_SSH_KEY",
-            SshKeySource::GlobalConfig => "global config",
-            SshKeySource::Default => unreachable!(),
-        };
-        return Err(Error::NotFound {
-            message: format!(
-                "SSH key file from {} does not exist: {}",
-                source_str,
-                display_path_relative_to_cwd(&candidate.path)
-            ),
-        });
+    if is_explicit {
+        if !candidate.exists {
+            let source_str = match candidate.source {
+                SshKeySource::Cli => "CLI option",
+                SshKeySource::Env => "SECRETENV_SSH_KEY",
+                SshKeySource::GlobalConfig => "global config",
+                SshKeySource::Default => unreachable!(),
+            };
+            return Err(Error::NotFound {
+                message: format!(
+                    "SSH key file from {} does not exist: {}",
+                    source_str,
+                    display_path_relative_to_cwd(&candidate.path)
+                ),
+            });
+        }
+        let ssh_pub = load_ssh_public_key_with_descriptor_trait(ssh_keygen, &descriptor)?;
+        Ok((descriptor, ssh_pub))
+    } else {
+        let ssh_pub = load_ssh_public_key_from_agent_with_ssh_add(ssh_add)?;
+        Ok((descriptor, ssh_pub))
     }
-
-    let ssh_pub = load_ssh_public_key_from_agent_with_ssh_add(ssh_add)?;
-    let descriptor = SshKeyDescriptor::from_path(candidate.path);
-
-    Ok((descriptor, ssh_pub))
 }
 
 /// Resolve key and public key for ssh-keygen mode.

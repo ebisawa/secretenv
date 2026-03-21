@@ -63,26 +63,15 @@ pub fn resolve_ssh_signer_config(
 }
 
 /// Resolve SshSignerConfig to concrete SshSigner.
-pub fn resolve_ssh_signer(config: types::SshSignerConfig) -> types::SshSigner {
-    resolve_ssh_signer_with_key(config, false)
-}
-
-/// Resolve SshSignerConfig to concrete SshSigner.
 ///
-/// For `Auto`, an explicit SSH key path forces `ssh-keygen` so the resolved
-/// signing backend and public key are guaranteed to match the requested key.
-/// Otherwise, ssh-agent is preferred only when an agent socket is available.
-pub fn resolve_ssh_signer_with_key(
-    config: types::SshSignerConfig,
-    has_explicit_ssh_key: bool,
-) -> types::SshSigner {
+/// For `Auto`, ssh-agent is preferred when an agent socket is available;
+/// otherwise falls back to ssh-keygen.
+pub fn resolve_ssh_signer(config: types::SshSignerConfig) -> types::SshSigner {
     match config {
         types::SshSignerConfig::SshAgent => types::SshSigner::SshAgent,
         types::SshSignerConfig::SshKeygen => types::SshSigner::SshKeygen,
         types::SshSignerConfig::Auto => {
-            if has_explicit_ssh_key {
-                types::SshSigner::SshKeygen
-            } else if crate::io::ssh::agent::socket::is_agent_socket_available() {
+            if crate::io::ssh::agent::socket::is_agent_socket_available() {
                 types::SshSigner::SshAgent
             } else {
                 types::SshSigner::SshKeygen

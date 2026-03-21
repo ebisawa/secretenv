@@ -6,11 +6,13 @@
 use crate::io::ssh::SshError;
 use crate::support::path::display_path_relative_to_cwd;
 use crate::Result;
-use ssh_agent_client_rs::Client;
 use ssh_key::PublicKey;
 
 /// Validate that the agent has at least one key loaded
-pub fn validate_agent_has_keys(client: &mut Client, socket_path: &std::path::Path) -> Result<()> {
+pub fn validate_agent_has_keys(
+    client: &mut ssh_agent_client_rs::Client,
+    socket_path: &std::path::Path,
+) -> Result<()> {
     let identities = client.list_all_identities().map_err(|e| {
         crate::Error::from(SshError::operation_failed_with_source(
             format!("ssh-agent list identities failed: {}", e),
@@ -39,15 +41,17 @@ Note: This agent socket was resolved from ~/.ssh/config IdentityAgent or SSH_AUT
 }
 
 /// Find if the target public key is present in the agent
+///
+/// Compares key data only, ignoring comments which may differ between
+/// the local .pub file and the agent's stored identity.
 pub fn find_key_in_agent(
-    _client: &Client,
     identities: &[ssh_agent_client_rs::Identity],
     public_key: &PublicKey,
 ) -> Result<bool> {
     for ident in identities {
         match ident {
             ssh_agent_client_rs::Identity::PublicKey(pk) => {
-                if pk.as_ref().as_ref() == public_key {
+                if pk.as_ref().as_ref().key_data() == public_key.key_data() {
                     return Ok(true);
                 }
             }

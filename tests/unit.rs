@@ -163,6 +163,8 @@ pub mod model_verified_test;
 pub mod schema_validator_test;
 #[path = "unit/ssh_agent_socket_test.rs"]
 pub mod ssh_agent_socket_test;
+#[path = "unit/ssh_agent_validation_test.rs"]
+pub mod ssh_agent_validation_test;
 #[path = "unit/ssh_external_pubkey_test.rs"]
 pub mod ssh_external_pubkey_test;
 #[path = "unit/ssh_fingerprint_test.rs"]

@@ -52,7 +52,7 @@ impl AgentSigner for DefaultAgentSigner {
         validate_agent_has_keys(&mut client, &socket_path)?;
 
         // Check if target key is present
-        let target_key_present = find_key_in_agent(&client, &identities, &public_key)?;
+        let target_key_present = find_key_in_agent(&identities, &public_key)?;
         validate_key_present(target_key_present, &socket_path)?;
 
         // Sign message
