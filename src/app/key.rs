@@ -10,37 +10,43 @@ mod types;
 
 use crate::app::context::CommonCommandOptions;
 use crate::app::identity::{resolve_github_user_with_fallback, resolve_member_id_with_fallback};
+use crate::feature::context::ssh::{resolve_ssh_signing_context, SshSigningParams};
 use crate::feature::key::generate::{generate_key, KeyGenerationOptions};
 use crate::feature::key::manage::{activate_key, export_key, list_keys, remove_key};
 use crate::io::keystore::storage;
 use crate::{Error, Result};
 use export::save_exported_public_key;
-pub(crate) use github::{resolve_github_account, verify_generated_key_github_binding};
+pub(crate) use github::{
+    resolve_github_account, verify_generated_key_github_binding, verify_preflight_github_binding,
+};
 use timestamp::resolve_key_timestamps;
 pub use types::{
     KeyActivateResult, KeyExportResult, KeyInfo, KeyListResult, KeyNewResult, KeyRemoveResult,
 };
 
-/// Resolve GitHub account metadata, generate a key, and verify the online binding.
+/// Resolve GitHub account metadata, verify SSH key on GitHub, then generate a key.
 pub fn generate_key_with_github_user(
     mut options: KeyGenerationOptions,
     github_user: Option<String>,
 ) -> Result<KeyNewResult> {
-    let verbose = options.verbose;
     let github_account = resolve_github_account(github_user, options.verbose)?;
     options.github_account = github_account.clone();
 
-    let result = generate_key(options)?;
+    let ssh_context = resolve_ssh_signing_context(&SshSigningParams {
+        ssh_key: options.ssh_key.clone(),
+        signing_method: options.ssh_signer,
+        base_dir: options.home.clone(),
+        verbose: options.verbose,
+    })?;
+
     let github_verification = if let Some(account) = github_account.as_ref() {
-        let public_key = crate::io::keystore::storage::load_public_key(
-            &result.keystore_root,
-            &result.member_id,
-            &result.kid,
-        )?;
-        verify_generated_key_github_binding(&public_key, Some(account), verbose)?
+        verify_preflight_github_binding(&ssh_context.public_key, account, options.verbose)?
     } else {
         crate::io::verify_online::VerificationStatus::NotConfigured
     };
+
+    options.ssh_context = Some(ssh_context);
+    let result = generate_key(options)?;
 
     let mut key_result: KeyNewResult = result.into();
     key_result.github_verification = github_verification;

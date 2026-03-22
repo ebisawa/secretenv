@@ -1,6 +1,7 @@
 // Copyright 2026 Satoshi Ebisawa
 // SPDX-License-Identifier: Apache-2.0
 
+use crate::io::verify_online::github::preflight::verify_ssh_key_on_github;
 use crate::io::verify_online::github::{resolve_github_id_by_username, verify_github_account};
 use crate::io::verify_online::VerificationStatus;
 use crate::model::public_key::{GithubAccount, PublicKey};
@@ -19,6 +20,19 @@ pub(crate) fn resolve_github_account(
     Ok(Some(GithubAccount { id, login }))
 }
 
+/// Verify SSH public key is registered on GitHub before key generation.
+pub(crate) fn verify_preflight_github_binding(
+    ssh_pub_key: &str,
+    account: &GithubAccount,
+    verbose: bool,
+) -> Result<VerificationStatus> {
+    let status = run_blocking_result(verify_ssh_key_on_github(ssh_pub_key, account, verbose))?;
+    Ok(status)
+}
+
+/// Verify a generated key against GitHub account binding.
+///
+/// Used by registration flows that verify after key generation.
 pub(crate) fn verify_generated_key_github_binding(
     public_key: &PublicKey,
     github_account: Option<&GithubAccount>,
