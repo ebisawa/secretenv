@@ -95,6 +95,17 @@ fn test_save_text_restricted_creates_parent_with_0700() {
 
 #[cfg(unix)]
 #[test]
+fn test_save_text_restricted_creates_file_with_0600() {
+    use std::os::unix::fs::PermissionsExt;
+    let temp_dir = TempDir::new().unwrap();
+    let file_path = temp_dir.path().join("restricted_dir").join("test.txt");
+    save_text_restricted(&file_path, "content").unwrap();
+    let file_mode = fs::metadata(&file_path).unwrap().permissions().mode() & 0o777;
+    assert_eq!(file_mode, 0o600);
+}
+
+#[cfg(unix)]
+#[test]
 fn test_save_json_restricted_creates_parent_with_0700() {
     use std::os::unix::fs::PermissionsExt;
     let temp_dir = TempDir::new().unwrap();
@@ -111,4 +122,19 @@ fn test_save_json_restricted_creates_parent_with_0700() {
         .mode()
         & 0o777;
     assert_eq!(parent_mode, 0o700);
+}
+
+#[cfg(unix)]
+#[test]
+fn test_save_json_restricted_creates_file_with_0600() {
+    use std::os::unix::fs::PermissionsExt;
+    let temp_dir = TempDir::new().unwrap();
+    let file_path = temp_dir.path().join("restricted_dir").join("test.json");
+    let data = TestData {
+        name: "test".to_string(),
+        value: 42,
+    };
+    save_json_restricted(&file_path, &data).unwrap();
+    let file_mode = fs::metadata(&file_path).unwrap().permissions().mode() & 0o777;
+    assert_eq!(file_mode, 0o600);
 }
