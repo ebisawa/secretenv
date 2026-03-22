@@ -27,6 +27,7 @@ fn generate_real_ssh_attested_public_key(
         debug: false,
         github_account: None,
         verbose: false,
+        ssh_context: None,
     })
     .unwrap();
 

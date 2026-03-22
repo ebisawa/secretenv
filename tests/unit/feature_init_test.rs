@@ -196,6 +196,7 @@ fn test_ensure_key_exists_creates_new_key() {
         Some(SshSigner::SshKeygen),
         false,
         None,
+        None,
     )
     .unwrap();
 
@@ -243,6 +244,7 @@ fn test_ensure_key_exists_reuses_existing_key() {
         Some(SshSigner::SshKeygen),
         false,
         None,
+        None,
     )
     .unwrap();
     assert!(first_result.created, "First call should create a new key");
@@ -256,6 +258,7 @@ fn test_ensure_key_exists_reuses_existing_key() {
         Some(ssh_key_path),
         Some(SshSigner::SshKeygen),
         false,
+        None,
         None,
     )
     .unwrap();

@@ -35,6 +35,8 @@ pub struct KeyGenerationOptions {
     pub debug: bool,
     pub github_account: Option<GithubAccount>,
     pub verbose: bool,
+    /// Pre-resolved SSH signing context. When provided, skips runtime resolution.
+    pub ssh_context: Option<SshSigningContext>,
 }
 
 /// Pipeline for key generation.
@@ -115,9 +117,13 @@ impl KeyGenerationPipeline {
     }
 
     /// Execute the pipeline.
-    fn execute(self) -> Result<KeyNewResult> {
+    fn execute(mut self) -> Result<KeyNewResult> {
         let keystore_root = self.ensure_keystore()?;
-        let ssh_context = self.resolve_ssh()?;
+        let pre_resolved = self.opts.ssh_context.take();
+        let ssh_context = match pre_resolved {
+            Some(ctx) => ctx,
+            None => self.resolve_ssh()?,
+        };
         Self::ensure_determinism(&ssh_context.determinism)?;
         let (kid, kem_sk, kem_pk, sig_sk, sig_pk) = material::generate_keypairs()?;
 

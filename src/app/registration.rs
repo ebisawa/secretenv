@@ -286,6 +286,7 @@ fn resolve_generated_member_setup(
         common.ssh_signer,
         common.verbose,
         github_account.clone(),
+        None,
     )?);
 
     let github_verification = verify_member_key_binding(

@@ -76,6 +76,7 @@ pub fn generate_key_command(
             debug: options.verbose,
             github_account: None,
             verbose: options.verbose,
+            ssh_context: None,
         },
         github_user,
     )
