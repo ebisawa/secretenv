@@ -3,13 +3,13 @@
 
 //! Unified SSH signing context resolution.
 //!
-//! Provides a single entry point (`resolve_ssh_signing_context`) for resolving
-//! all SSH signing configuration, replacing the previously duplicated logic in
-//! `cli/common/setup/ssh.rs` and `feature/key/ssh.rs`.
+//! Provides `resolve_ssh_key_candidates` to discover available SSH keys,
+//! and `build_ssh_signing_context` to build a signing context from a
+//! selected key.
 
 use crate::config::resolution::common::{resolve_ssh_add_path, resolve_ssh_keygen_path};
 use crate::config::resolution::ssh_key::{
-    resolve_ssh_key_candidate, resolve_ssh_key_descriptor, SshKeySource,
+    resolve_ssh_key_candidate, resolve_ssh_key_descriptor, ResolvedSshKey, SshKeySource,
 };
 use crate::config::resolution::ssh_signer::{resolve_ssh_signer, resolve_ssh_signer_config};
 use crate::config::types::SshSigner;
@@ -17,9 +17,8 @@ use crate::io::ssh::backend::{build_backend, SignatureBackend};
 use crate::io::ssh::external::add::DefaultSshAdd;
 use crate::io::ssh::external::keygen::DefaultSshKeygen;
 use crate::io::ssh::external::pubkey::{
-    load_ssh_public_key_from_agent_with_ssh_add, load_ssh_public_key_with_descriptor_trait,
+    load_ed25519_keys_from_agent, load_ssh_key_candidate_from_file, SshKeyCandidate,
 };
-use crate::io::ssh::external::traits::{SshAdd, SshKeygen};
 use crate::io::ssh::protocol::constants as ssh;
 use crate::io::ssh::protocol::{build_sha256_fingerprint, SshKeyDescriptor};
 use crate::model::identifiers::context::SSH_DETERMINISM_CHECK_MESSAGE;
@@ -54,38 +53,110 @@ struct ResolvedSshCommands {
     ssh_add_path: String,
 }
 
-struct ResolvedSshKeyMaterial {
-    signing_method: SshSigner,
-    key_descriptor: SshKeyDescriptor,
-    public_key: String,
-    fingerprint: String,
-}
-
-/// Resolve a complete SSH signing context from the given parameters.
+/// Resolve SSH key candidates from the given parameters.
 ///
-/// 1. Resolves signing method (auto / ssh-agent / ssh-keygen)
-/// 2. Resolves SSH command paths (ssh-keygen, ssh-add)
-/// 3. Resolves SSH key and loads public key
-/// 4. Validates Ed25519 key type
-/// 5. Computes fingerprint
-/// 6. Builds signature backend
-/// 7. Checks determinism
-pub fn resolve_ssh_signing_context(params: &SshSigningParams) -> Result<SshSigningContext> {
+/// Returns a list of candidate keys that can be used for signing.
+/// For explicit key or ssh-keygen mode, returns a single candidate.
+/// For ssh-agent mode without an explicit key, returns all Ed25519 keys
+/// found in the agent.
+pub fn resolve_ssh_key_candidates(params: &SshSigningParams) -> Result<Vec<SshKeyCandidate>> {
     let base_dir = params.base_dir.as_deref();
     let signing_method = resolve_signing_method(params, base_dir)?;
     let commands = resolve_ssh_commands(base_dir)?;
-    let key_material = resolve_ssh_key_material(params, signing_method, &commands, base_dir)?;
-    let backend = build_signature_backend(&key_material, &commands);
-    let determinism =
-        probe_determinism(backend.as_ref(), &key_material.public_key, params.verbose)?;
+    let ssh_keygen = DefaultSshKeygen::new(commands.ssh_keygen_path.clone());
+    let ssh_add = DefaultSshAdd::new(commands.ssh_add_path.clone());
+
+    match signing_method {
+        SshSigner::SshKeygen => {
+            let descriptor = resolve_ssh_key_descriptor(params.ssh_key.clone(), base_dir)?;
+            let candidate = load_ssh_key_candidate_from_file(&ssh_keygen, &descriptor)?;
+            Ok(vec![candidate])
+        }
+        SshSigner::SshAgent => {
+            let resolved = resolve_ssh_key_candidate(params.ssh_key.clone(), base_dir)?;
+            let is_explicit = resolved.source != SshKeySource::Default;
+
+            if is_explicit {
+                if !resolved.exists {
+                    return Err(build_not_found_error(&resolved));
+                }
+                let descriptor = SshKeyDescriptor::from_path(resolved.path);
+                let candidate = load_ssh_key_candidate_from_file(&ssh_keygen, &descriptor)?;
+                Ok(vec![candidate])
+            } else {
+                load_ed25519_keys_from_agent(&ssh_add)
+            }
+        }
+    }
+}
+
+/// Build an SSH signing context from already-selected public key.
+///
+/// Re-resolves signing method and SSH commands (cheap config lookups),
+/// validates the key, computes fingerprint, builds backend, and probes
+/// determinism.
+pub fn build_ssh_signing_context(
+    params: &SshSigningParams,
+    selected_pubkey: &str,
+) -> Result<SshSigningContext> {
+    let base_dir = params.base_dir.as_deref();
+    let signing_method = resolve_signing_method(params, base_dir)?;
+    let commands = resolve_ssh_commands(base_dir)?;
+
+    validate_ssh_key_type(selected_pubkey)?;
+    let fingerprint = build_sha256_fingerprint(selected_pubkey)?;
+
+    let key_descriptor = resolve_key_descriptor_lenient(&params.ssh_key, base_dir);
+
+    let backend = {
+        let ssh_keygen = Box::new(DefaultSshKeygen::new(commands.ssh_keygen_path.clone()));
+        build_backend(signing_method, ssh_keygen, key_descriptor)
+    };
+
+    let determinism = probe_determinism(backend.as_ref(), selected_pubkey, params.verbose)?;
 
     Ok(SshSigningContext {
-        signing_method: key_material.signing_method,
-        public_key: key_material.public_key,
-        fingerprint: key_material.fingerprint,
+        signing_method,
+        public_key: selected_pubkey.to_string(),
+        fingerprint,
         backend,
         determinism,
     })
+}
+
+/// Resolve key descriptor, falling back to the config-resolved candidate path.
+///
+/// For agent mode without an explicit key, `resolve_ssh_key_descriptor` may
+/// fail because the default key file doesn't exist. In that case we still
+/// need a descriptor for the backend, so we fall back to the candidate path.
+fn resolve_key_descriptor_lenient(
+    ssh_key: &Option<PathBuf>,
+    base_dir: Option<&std::path::Path>,
+) -> SshKeyDescriptor {
+    resolve_ssh_key_descriptor(ssh_key.clone(), base_dir).unwrap_or_else(|_| {
+        let candidate = resolve_ssh_key_candidate(ssh_key.clone(), base_dir);
+        let path = candidate
+            .map(|c| c.path)
+            .unwrap_or_else(|_| PathBuf::from("~/.ssh/id_ed25519"));
+        SshKeyDescriptor::from_path(path)
+    })
+}
+
+/// Build a NotFound error for a non-existent explicit SSH key.
+fn build_not_found_error(candidate: &ResolvedSshKey) -> Error {
+    let source_str = match candidate.source {
+        SshKeySource::Cli => "CLI option",
+        SshKeySource::Env => "SECRETENV_SSH_KEY",
+        SshKeySource::GlobalConfig => "global config",
+        SshKeySource::Default => unreachable!(),
+    };
+    Error::NotFound {
+        message: format!(
+            "SSH key file from {} does not exist: {}",
+            source_str,
+            display_path_relative_to_cwd(&candidate.path)
+        ),
+    }
 }
 
 fn resolve_signing_method(
@@ -107,45 +178,6 @@ fn resolve_ssh_commands(base_dir: Option<&std::path::Path>) -> Result<ResolvedSs
         ssh_keygen_path: resolve_ssh_keygen_path(base_dir)?,
         ssh_add_path: resolve_ssh_add_path(base_dir)?,
     })
-}
-
-fn resolve_ssh_key_material(
-    params: &SshSigningParams,
-    signing_method: SshSigner,
-    commands: &ResolvedSshCommands,
-    base_dir: Option<&std::path::Path>,
-) -> Result<ResolvedSshKeyMaterial> {
-    let ssh_keygen = DefaultSshKeygen::new(commands.ssh_keygen_path.clone());
-    let ssh_add = DefaultSshAdd::new(commands.ssh_add_path.clone());
-    let (key_descriptor, public_key) = resolve_key_and_pubkey(
-        signing_method,
-        &params.ssh_key,
-        &ssh_keygen,
-        &ssh_add,
-        base_dir,
-    )?;
-
-    validate_ssh_key_type(&public_key)?;
-    let fingerprint = build_sha256_fingerprint(&public_key)?;
-
-    Ok(ResolvedSshKeyMaterial {
-        signing_method,
-        key_descriptor,
-        public_key,
-        fingerprint,
-    })
-}
-
-fn build_signature_backend(
-    key_material: &ResolvedSshKeyMaterial,
-    commands: &ResolvedSshCommands,
-) -> Box<dyn SignatureBackend> {
-    let ssh_keygen = Box::new(DefaultSshKeygen::new(commands.ssh_keygen_path.clone()));
-    build_backend(
-        key_material.signing_method,
-        ssh_keygen,
-        key_material.key_descriptor.clone(),
-    )
 }
 
 fn probe_determinism(
@@ -175,76 +207,6 @@ fn is_non_deterministic_signature_error(error: &Error) -> bool {
     error
         .to_string()
         .contains(NON_DETERMINISTIC_SIGNATURE_MESSAGE)
-}
-
-/// Resolve SSH key descriptor and load the public key.
-fn resolve_key_and_pubkey(
-    signing_method: SshSigner,
-    ssh_key: &Option<PathBuf>,
-    ssh_keygen: &dyn SshKeygen,
-    ssh_add: &dyn SshAdd,
-    base_dir: Option<&std::path::Path>,
-) -> Result<(SshKeyDescriptor, String)> {
-    match signing_method {
-        SshSigner::SshAgent => {
-            resolve_key_and_pubkey_agent(ssh_key.clone(), ssh_keygen, ssh_add, base_dir)
-        }
-        SshSigner::SshKeygen => {
-            resolve_key_and_pubkey_keygen(ssh_key.clone(), ssh_keygen, base_dir)
-        }
-    }
-}
-
-/// Resolve key and public key for ssh-agent mode.
-///
-/// When an explicit key is specified (via CLI, env, or config), load the public
-/// key from the key file rather than from the agent. This allows the user to
-/// select which key to use for signing while still using ssh-agent for the
-/// actual signing operation.
-fn resolve_key_and_pubkey_agent(
-    ssh_key: Option<PathBuf>,
-    ssh_keygen: &dyn SshKeygen,
-    ssh_add: &dyn SshAdd,
-    base_dir: Option<&std::path::Path>,
-) -> Result<(SshKeyDescriptor, String)> {
-    let candidate = resolve_ssh_key_candidate(ssh_key, base_dir)?;
-    let descriptor = SshKeyDescriptor::from_path(candidate.path.clone());
-    let is_explicit = candidate.source != SshKeySource::Default;
-
-    if is_explicit {
-        if !candidate.exists {
-            let source_str = match candidate.source {
-                SshKeySource::Cli => "CLI option",
-                SshKeySource::Env => "SECRETENV_SSH_KEY",
-                SshKeySource::GlobalConfig => "global config",
-                SshKeySource::Default => unreachable!(),
-            };
-            return Err(Error::NotFound {
-                message: format!(
-                    "SSH key file from {} does not exist: {}",
-                    source_str,
-                    display_path_relative_to_cwd(&candidate.path)
-                ),
-            });
-        }
-        let ssh_pub = load_ssh_public_key_with_descriptor_trait(ssh_keygen, &descriptor)?;
-        Ok((descriptor, ssh_pub))
-    } else {
-        let ssh_pub = load_ssh_public_key_from_agent_with_ssh_add(ssh_add)?;
-        Ok((descriptor, ssh_pub))
-    }
-}
-
-/// Resolve key and public key for ssh-keygen mode.
-fn resolve_key_and_pubkey_keygen(
-    ssh_key: Option<PathBuf>,
-    ssh_keygen: &dyn SshKeygen,
-    base_dir: Option<&std::path::Path>,
-) -> Result<(SshKeyDescriptor, String)> {
-    let descriptor = resolve_ssh_key_descriptor(ssh_key, base_dir)?;
-    let ssh_pub = load_ssh_public_key_with_descriptor_trait(ssh_keygen, &descriptor)?;
-
-    Ok((descriptor, ssh_pub))
 }
 
 /// Validate that SSH key type is Ed25519.

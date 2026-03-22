@@ -8,9 +8,8 @@ mod github;
 mod timestamp;
 mod types;
 
-use crate::app::context::CommonCommandOptions;
+use crate::app::context::{CommonCommandOptions, SshSigningContext};
 use crate::app::identity::{resolve_github_user_with_fallback, resolve_member_id_with_fallback};
-use crate::feature::context::ssh::{resolve_ssh_signing_context, SshSigningParams};
 use crate::feature::key::generate::{generate_key, KeyGenerationOptions};
 use crate::feature::key::manage::{activate_key, export_key, list_keys, remove_key};
 use crate::io::keystore::storage;
@@ -30,20 +29,12 @@ pub fn generate_key_with_github_user(
     let github_account = resolve_github_account(github_user, options.verbose)?;
     options.github_account = github_account.clone();
 
-    let ssh_context = resolve_ssh_signing_context(&SshSigningParams {
-        ssh_key: options.ssh_key.clone(),
-        signing_method: options.ssh_signer,
-        base_dir: options.home.clone(),
-        verbose: options.verbose,
-    })?;
-
     let github_verification = if let Some(account) = github_account.as_ref() {
-        verify_preflight_github_binding(&ssh_context.public_key, account, options.verbose)?
+        verify_preflight_github_binding(&options.ssh_context.public_key, account, options.verbose)?
     } else {
         crate::io::verify_online::VerificationStatus::NotConfigured
     };
 
-    options.ssh_context = Some(ssh_context);
     let result = generate_key(options)?;
 
     let mut key_result: KeyNewResult = result.into();
@@ -58,6 +49,7 @@ pub fn generate_key_command(
     expires_at_arg: &Option<String>,
     valid_for_arg: &Option<String>,
     no_activate: bool,
+    ssh_ctx: SshSigningContext,
 ) -> Result<KeyNewResult> {
     let keystore_root = options.resolve_keystore_root()?;
     let member_id = require_member_id(resolve_member_id_with_fallback(
@@ -72,15 +64,13 @@ pub fn generate_key_command(
         KeyGenerationOptions {
             member_id,
             home: options.home.clone(),
-            ssh_key: options.identity.clone(),
-            ssh_signer: options.ssh_signer,
             created_at,
             expires_at,
             no_activate,
             debug: options.verbose,
             github_account: None,
             verbose: options.verbose,
-            ssh_context: None,
+            ssh_context: ssh_ctx,
         },
         github_user,
     )

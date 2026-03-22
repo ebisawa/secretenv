@@ -3,7 +3,7 @@
 
 //! Application-layer KV file sessions.
 
-use crate::app::context::{CommonCommandOptions, ExecutionContext};
+use crate::app::context::{CommonCommandOptions, ExecutionContext, SshSigningContext};
 use crate::app::errors::default_kv_file_not_found_error;
 use crate::app::errors::handle_kv_key_not_found_error;
 use crate::feature::kv::KvWriteContext;
@@ -85,9 +85,10 @@ impl KvReadSession {
         options: &CommonCommandOptions,
         member_id: Option<String>,
         file_name: Option<&str>,
+        ssh_ctx: SshSigningContext,
     ) -> Result<Self> {
         let file = KvFileSession::load(options, file_name)?;
-        let execution = ExecutionContext::load(options, member_id, None)?;
+        let execution = ExecutionContext::load(options, member_id, None, ssh_ctx)?;
         Ok(Self { file, execution })
     }
 }
@@ -98,6 +99,7 @@ struct KvWriteSession {
     member_id: Option<String>,
     target: KvFileTarget,
     allow_missing: bool,
+    ssh_ctx: SshSigningContext,
 }
 
 pub struct KvWriteOutcome {
@@ -111,6 +113,7 @@ impl KvWriteSession {
         member_id: Option<String>,
         file_name: Option<&str>,
         allow_missing: bool,
+        ssh_ctx: SshSigningContext,
     ) -> Result<Self> {
         let target = KvFileTarget::resolve(&options, file_name)?;
         Ok(Self {
@@ -118,13 +121,13 @@ impl KvWriteSession {
             member_id,
             target,
             allow_missing,
+            ssh_ctx,
         })
     }
 
-    /// Borrow the resolved target path and workspace.
     /// Execute a write operation under a file lock and save the result atomically.
     fn execute<F>(
-        &self,
+        self,
         no_signer_pub: bool,
         success_message: Option<&str>,
         operation: F,
@@ -132,36 +135,47 @@ impl KvWriteSession {
     where
         F: FnOnce(Option<&KvEncContent>, &KvWriteContext, &KvFileTarget) -> Result<String>,
     {
-        lock::with_file_lock(&self.target.file_path, || {
-            let execution = ExecutionContext::load(&self.options, self.member_id.clone(), None)?;
+        let Self {
+            options,
+            member_id,
+            target,
+            allow_missing,
+            ssh_ctx,
+        } = self;
+        let file_path = target.file_path.clone();
+        lock::with_file_lock(&file_path, move || {
+            let execution = ExecutionContext::load(&options, member_id, None, ssh_ctx)?;
             let write_ctx = KvWriteContext::new(
                 &execution.member_id,
                 execution.key_ctx.clone(),
                 no_signer_pub,
-                self.options.verbose,
+                options.verbose,
             );
 
-            let existing_content = self.load_existing_content()?;
-            let encrypted = operation(existing_content.as_ref(), &write_ctx, &self.target)?;
+            let existing_content = load_existing_content(&target, allow_missing)?;
+            let encrypted = operation(existing_content.as_ref(), &write_ctx, &target)?;
 
-            atomic::save_text(&self.target.file_path, &encrypted)?;
+            atomic::save_text(&target.file_path, &encrypted)?;
             Ok(KvWriteOutcome {
                 message: success_message.map(ToOwned::to_owned),
             })
         })
     }
+}
 
-    fn load_existing_content(&self) -> Result<Option<KvEncContent>> {
-        if self.target.file_path.exists() {
-            let content = load_text(&self.target.file_path)?;
-            Ok(Some(KvEncContent::new_unchecked(content)))
-        } else if self.allow_missing {
-            Ok(None)
-        } else {
-            Err(Error::Config {
-                message: format!("File not found: {}", self.target.file_path.display()),
-            })
-        }
+fn load_existing_content(
+    target: &KvFileTarget,
+    allow_missing: bool,
+) -> Result<Option<KvEncContent>> {
+    if target.file_path.exists() {
+        let content = load_text(&target.file_path)?;
+        Ok(Some(KvEncContent::new_unchecked(content)))
+    } else if allow_missing {
+        Ok(None)
+    } else {
+        Err(Error::Config {
+            message: format!("File not found: {}", target.file_path.display()),
+        })
     }
 }
 
@@ -179,8 +193,9 @@ pub fn get_kv_command(
     file_name: Option<&str>,
     key: Option<&str>,
     all: bool,
+    ssh_ctx: SshSigningContext,
 ) -> Result<BTreeMap<String, String>> {
-    let session = KvReadSession::load(options, member_id, file_name)?;
+    let session = KvReadSession::load(options, member_id, file_name, ssh_ctx)?;
     let content = session.file.kv_content();
 
     if all {
@@ -214,8 +229,9 @@ pub fn set_kv_command(
     entries: Vec<(String, String)>,
     no_signer_pub: bool,
     success_message: Option<&str>,
+    ssh_ctx: SshSigningContext,
 ) -> Result<KvWriteOutcome> {
-    let session = KvWriteSession::new(options, member_id, file_name, true)?;
+    let session = KvWriteSession::new(options, member_id, file_name, true, ssh_ctx)?;
     session.execute(
         no_signer_pub,
         success_message,
@@ -238,8 +254,9 @@ pub fn unset_kv_command(
     key: &str,
     no_signer_pub: bool,
     success_message: Option<&str>,
+    ssh_ctx: SshSigningContext,
 ) -> Result<KvWriteOutcome> {
-    let session = KvWriteSession::new(options, member_id, file_name, false)?;
+    let session = KvWriteSession::new(options, member_id, file_name, false, ssh_ctx)?;
     session.execute(
         no_signer_pub,
         success_message,
@@ -260,6 +277,7 @@ pub fn import_kv_command(
     dotenv_content: &str,
     no_signer_pub: bool,
     success_message: Option<&str>,
+    ssh_ctx: SshSigningContext,
 ) -> Result<(KvWriteOutcome, usize)> {
     validate_dotenv_strict(dotenv_content)?;
     let kv_map = parse_dotenv(dotenv_content)?;
@@ -272,6 +290,7 @@ pub fn import_kv_command(
         entries,
         no_signer_pub,
         success_message,
+        ssh_ctx,
     )?;
     Ok((outcome, entry_count))
 }
@@ -280,8 +299,9 @@ pub fn build_run_env_command(
     options: &CommonCommandOptions,
     member_id: Option<String>,
     file_name: Option<&str>,
+    ssh_ctx: SshSigningContext,
 ) -> Result<BTreeMap<String, String>> {
-    let session = KvReadSession::load(options, member_id, file_name)?;
+    let session = KvReadSession::load(options, member_id, file_name, ssh_ctx)?;
     let content = session.file.content().to_string();
     build_env_from_kv_contents(
         &[&content],

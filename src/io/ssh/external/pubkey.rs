@@ -5,6 +5,7 @@
 
 use crate::io::ssh::external::traits::{SshAdd, SshKeygen};
 use crate::io::ssh::protocol::constants as ssh;
+use crate::io::ssh::protocol::fingerprint::build_sha256_fingerprint;
 use crate::io::ssh::protocol::key_descriptor::SshKeyDescriptor;
 use crate::io::ssh::SshError;
 use crate::support::fs::load_text;
@@ -13,38 +14,19 @@ use crate::{Error, Result};
 use std::path::Path;
 use std::process::Command;
 
+/// Candidate SSH key discovered from the agent or a file.
+pub struct SshKeyCandidate {
+    /// Full public key line: "ssh-ed25519 AAAA... comment"
+    pub public_key: String,
+    /// SHA256 fingerprint: "SHA256:abc123..."
+    pub fingerprint: String,
+    /// Trailing comment extracted from the key line (may be empty)
+    pub comment: String,
+}
+
 /// Create an SSH error (convenience for replacing `utils::error::ssh_error`).
 fn ssh_error(message: impl Into<String>) -> Error {
     SshError::operation_failed(message).into()
-}
-
-/// Load SSH public key from ssh-agent via the `SshAdd` trait.
-///
-/// Calls `ssh_add.list_keys()` and returns the first ssh-ed25519 key found.
-pub fn load_ssh_public_key_from_agent_with_ssh_add(ssh_add: &dyn SshAdd) -> Result<String> {
-    let output = ssh_add.list_keys()?;
-    find_ed25519_key_in_output(&output)
-}
-
-/// Find the first Ed25519 key in ssh-add output lines.
-pub fn find_ed25519_key_in_output(output: &str) -> Result<String> {
-    output
-        .lines()
-        .find(|line| {
-            line.split_whitespace()
-                .next()
-                .map(|key_type| key_type == ssh::KEY_TYPE_ED25519)
-                .unwrap_or(false)
-        })
-        .map(|line| line.trim().to_string())
-        .ok_or_else(|| {
-            ssh_error(format!(
-                "No {} key found in ssh-agent.\n\
-Check available keys: ssh-add -L\n\
-Ensure your SSH agent (e.g., 1Password) has an Ed25519 key available.",
-                ssh::KEY_TYPE_ED25519
-            ))
-        })
 }
 
 /// Load SSH public key in OpenSSH format from a private key file using a specific ssh-keygen path.
@@ -163,4 +145,71 @@ pub fn load_ssh_public_key_with_descriptor_trait(
         }
         SshKeyDescriptor::PublicKey(public_key) => load_ssh_public_key_file(public_key.as_path()),
     }
+}
+
+/// Collect all Ed25519 key lines from ssh-add -L output.
+///
+/// Returns trimmed lines whose key type is `ssh-ed25519`.
+pub fn collect_ed25519_keys_in_output(output: &str) -> Vec<String> {
+    output
+        .lines()
+        .filter(|line| {
+            line.split_whitespace()
+                .next()
+                .is_some_and(|t| t == ssh::KEY_TYPE_ED25519)
+        })
+        .map(|line| line.trim().to_string())
+        .collect()
+}
+
+/// Load all Ed25519 keys from the SSH agent as candidates.
+///
+/// Calls `ssh_add.list_keys()`, filters for Ed25519 keys, and builds
+/// an `SshKeyCandidate` for each by computing the fingerprint and
+/// extracting the comment.
+pub fn load_ed25519_keys_from_agent(ssh_add: &dyn SshAdd) -> Result<Vec<SshKeyCandidate>> {
+    let output = ssh_add.list_keys()?;
+    let lines = collect_ed25519_keys_in_output(&output);
+    lines
+        .into_iter()
+        .map(|line| build_candidate_from_line(&line))
+        .collect()
+}
+
+/// Load an SSH key candidate from a file-based key descriptor.
+///
+/// Derives the public key via `load_ssh_public_key_with_descriptor_trait`,
+/// then computes fingerprint and extracts comment.
+pub fn load_ssh_key_candidate_from_file(
+    ssh_keygen: &dyn SshKeygen,
+    descriptor: &SshKeyDescriptor,
+) -> Result<SshKeyCandidate> {
+    let public_key = load_ssh_public_key_with_descriptor_trait(ssh_keygen, descriptor)?;
+    build_candidate_from_line(&public_key)
+}
+
+/// Build an `SshKeyCandidate` from a single OpenSSH public key line.
+fn build_candidate_from_line(line: &str) -> Result<SshKeyCandidate> {
+    let fingerprint = build_sha256_fingerprint(line)?;
+    let comment = extract_comment(line);
+    Ok(SshKeyCandidate {
+        public_key: line.to_string(),
+        fingerprint,
+        comment,
+    })
+}
+
+/// Extract the trailing comment from an OpenSSH public key line.
+///
+/// Format: `key_type base64_data [comment]`
+/// The comment is everything after the second whitespace-delimited field.
+fn extract_comment(line: &str) -> String {
+    let mut parts = line.splitn(3, char::is_whitespace);
+    // skip key_type and base64_data
+    parts.next();
+    parts.next();
+    parts
+        .next()
+        .map(|c| c.trim().to_string())
+        .unwrap_or_default()
 }

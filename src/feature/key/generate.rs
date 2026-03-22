@@ -4,10 +4,7 @@
 //! Key generation logic.
 
 use super::KeyNewResult;
-use crate::config::types::SshSigner;
-use crate::feature::context::ssh::{
-    resolve_ssh_signing_context, SshSigningContext, SshSigningParams,
-};
+use crate::feature::context::ssh::SshSigningContext;
 pub use crate::feature::key::material::{build_identity_keys, generate_keypairs};
 use crate::feature::key::protection::{self, PrivateKeyEncryptionParams};
 pub use crate::feature::key::public_key_document::{build_public_key, PublicKeyBuildParams};
@@ -27,148 +24,148 @@ use x25519_dalek::{PublicKey as X25519PublicKey, StaticSecret as X25519SecretKey
 pub struct KeyGenerationOptions {
     pub member_id: String,
     pub home: Option<PathBuf>,
-    pub ssh_key: Option<PathBuf>,
-    pub ssh_signer: Option<SshSigner>,
     pub created_at: String,
     pub expires_at: String,
     pub no_activate: bool,
     pub debug: bool,
     pub github_account: Option<GithubAccount>,
     pub verbose: bool,
-    /// Pre-resolved SSH signing context. When provided, skips runtime resolution.
-    pub ssh_context: Option<SshSigningContext>,
-}
-
-/// Pipeline for key generation.
-struct KeyGenerationPipeline {
-    opts: KeyGenerationOptions,
-}
-
-impl KeyGenerationPipeline {
-    fn new(opts: KeyGenerationOptions) -> Self {
-        Self { opts }
-    }
-
-    /// Ensure keystore directory exists.
-    fn ensure_keystore(&self) -> Result<PathBuf> {
-        ensure_keystore_dir(&self.opts.home)
-    }
-
-    /// Resolve SSH context.
-    fn resolve_ssh(&self) -> Result<SshSigningContext> {
-        resolve_ssh_signing_context(&SshSigningParams {
-            ssh_key: self.opts.ssh_key.clone(),
-            signing_method: self.opts.ssh_signer,
-            base_dir: self.opts.home.clone(),
-            verbose: self.opts.verbose,
-        })
-    }
-
-    fn ensure_determinism(status: &SshDeterminismStatus) -> Result<()> {
-        if let SshDeterminismStatus::Failed { message } = status {
-            return Err(crate::Error::Crypto {
-                message: message.clone(),
-                source: None,
-            });
-        }
-        Ok(())
-    }
-
-    /// Encrypt private key.
-    fn encrypt_private_key(
-        &self,
-        kem_sk: &X25519SecretKey,
-        kem_pk: &X25519PublicKey,
-        sig_sk: &SigningKey,
-        sig_pk: &VerifyingKey,
-        kid: &str,
-        ssh_context: &SshSigningContext,
-    ) -> Result<PrivateKey> {
-        let plaintext = material::build_private_key_plaintext(kem_sk, kem_pk, sig_sk, sig_pk);
-        protection::encrypt_private_key(&PrivateKeyEncryptionParams {
-            plaintext: &plaintext,
-            member_id: self.opts.member_id.clone(),
-            kid: kid.to_string(),
-            backend: ssh_context.backend.as_ref(),
-            ssh_pubkey: &ssh_context.public_key,
-            ssh_fpr: ssh_context.fingerprint.clone(),
-            created_at: self.opts.created_at.clone(),
-            expires_at: self.opts.expires_at.clone(),
-            debug: self.opts.debug,
-        })
-    }
-
-    /// Save and activate key.
-    fn save_and_activate(
-        &self,
-        keystore_root: &Path,
-        kid: &str,
-        private_key: &PrivateKey,
-        public_key: &PublicKey,
-    ) -> Result<()> {
-        save_and_activate(
-            keystore_root,
-            &self.opts.member_id,
-            kid,
-            private_key,
-            public_key,
-            self.opts.no_activate,
-        )
-    }
-
-    /// Execute the pipeline.
-    fn execute(mut self) -> Result<KeyNewResult> {
-        let keystore_root = self.ensure_keystore()?;
-        let pre_resolved = self.opts.ssh_context.take();
-        let ssh_context = match pre_resolved {
-            Some(ctx) => ctx,
-            None => self.resolve_ssh()?,
-        };
-        Self::ensure_determinism(&ssh_context.determinism)?;
-        let (kid, kem_sk, kem_pk, sig_sk, sig_pk) = material::generate_keypairs()?;
-
-        let identity_keys = material::build_identity_keys(&kem_pk, &sig_pk)?;
-        let attestation = public_key_document::build_attestation(&ssh_context, &identity_keys)?;
-        let identity = Identity {
-            keys: identity_keys,
-            attestation,
-        };
-
-        let public_key =
-            public_key_document::build_public_key(&public_key_document::PublicKeyBuildParams {
-                member_id: &self.opts.member_id,
-                kid: &kid,
-                identity,
-                created_at: &self.opts.created_at,
-                expires_at: &self.opts.expires_at,
-                sig_sk: &sig_sk,
-                debug: self.opts.debug,
-                github_account: self.opts.github_account.clone(),
-            })?;
-
-        let private_key =
-            self.encrypt_private_key(&kem_sk, &kem_pk, &sig_sk, &sig_pk, &kid, &ssh_context)?;
-        self.save_and_activate(&keystore_root, &kid, &private_key, &public_key)?;
-
-        let key_dir = keystore_root.join(&self.opts.member_id).join(&kid);
-        Ok(KeyNewResult {
-            member_id: self.opts.member_id,
-            kid,
-            created_at: self.opts.created_at,
-            expires_at: self.opts.expires_at,
-            keystore_root,
-            key_dir,
-            activated: !self.opts.no_activate,
-            ssh_fingerprint: ssh_context.fingerprint,
-            ssh_public_key: ssh_context.public_key,
-            ssh_determinism: ssh_context.determinism,
-        })
-    }
+    /// Pre-resolved SSH signing context.
+    pub ssh_context: SshSigningContext,
 }
 
 /// Generate a new key pair and save to keystore.
 pub fn generate_key(opts: KeyGenerationOptions) -> Result<KeyNewResult> {
-    KeyGenerationPipeline::new(opts).execute()
+    let KeyGenerationOptions {
+        member_id,
+        home,
+        created_at,
+        expires_at,
+        no_activate,
+        debug,
+        github_account,
+        verbose: _,
+        ssh_context,
+    } = opts;
+
+    let keystore_root = ensure_keystore_dir(&home)?;
+    ensure_determinism(&ssh_context.determinism)?;
+    let (kid, kem_sk, kem_pk, sig_sk, sig_pk) = material::generate_keypairs()?;
+
+    let identity_keys = material::build_identity_keys(&kem_pk, &sig_pk)?;
+    let attestation = public_key_document::build_attestation(&ssh_context, &identity_keys)?;
+    let public_key = build_public_key_document(
+        &member_id,
+        &kid,
+        identity_keys,
+        attestation,
+        &created_at,
+        &expires_at,
+        &sig_sk,
+        debug,
+        github_account,
+    )?;
+
+    let private_key = encrypt_private_key_document(
+        &kem_sk,
+        &kem_pk,
+        &sig_sk,
+        &sig_pk,
+        &member_id,
+        &kid,
+        &ssh_context,
+        &created_at,
+        &expires_at,
+        debug,
+    )?;
+
+    save_and_activate(
+        &keystore_root,
+        &member_id,
+        &kid,
+        &private_key,
+        &public_key,
+        no_activate,
+    )?;
+
+    let key_dir = keystore_root.join(&member_id).join(&kid);
+    Ok(KeyNewResult {
+        member_id,
+        kid,
+        created_at,
+        expires_at,
+        keystore_root,
+        key_dir,
+        activated: !no_activate,
+        ssh_fingerprint: ssh_context.fingerprint,
+        ssh_public_key: ssh_context.public_key,
+        ssh_determinism: ssh_context.determinism,
+    })
+}
+
+fn ensure_determinism(status: &SshDeterminismStatus) -> Result<()> {
+    if let SshDeterminismStatus::Failed { message } = status {
+        return Err(crate::Error::Crypto {
+            message: message.clone(),
+            source: None,
+        });
+    }
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn build_public_key_document(
+    member_id: &str,
+    kid: &str,
+    identity_keys: crate::model::public_key::IdentityKeys,
+    attestation: crate::model::public_key::Attestation,
+    created_at: &str,
+    expires_at: &str,
+    sig_sk: &SigningKey,
+    debug: bool,
+    github_account: Option<GithubAccount>,
+) -> Result<PublicKey> {
+    let identity = Identity {
+        keys: identity_keys,
+        attestation,
+    };
+    public_key_document::build_public_key(&public_key_document::PublicKeyBuildParams {
+        member_id,
+        kid,
+        identity,
+        created_at,
+        expires_at,
+        sig_sk,
+        debug,
+        github_account,
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+fn encrypt_private_key_document(
+    kem_sk: &X25519SecretKey,
+    kem_pk: &X25519PublicKey,
+    sig_sk: &SigningKey,
+    sig_pk: &VerifyingKey,
+    member_id: &str,
+    kid: &str,
+    ssh_context: &SshSigningContext,
+    created_at: &str,
+    expires_at: &str,
+    debug: bool,
+) -> Result<PrivateKey> {
+    let plaintext = material::build_private_key_plaintext(kem_sk, kem_pk, sig_sk, sig_pk);
+    protection::encrypt_private_key(&PrivateKeyEncryptionParams {
+        plaintext: &plaintext,
+        member_id: member_id.to_string(),
+        kid: kid.to_string(),
+        backend: ssh_context.backend.as_ref(),
+        ssh_pubkey: &ssh_context.public_key,
+        ssh_fpr: ssh_context.fingerprint.clone(),
+        created_at: created_at.to_string(),
+        expires_at: expires_at.to_string(),
+        debug,
+    })
 }
 
 /// Ensure keystore directory exists.

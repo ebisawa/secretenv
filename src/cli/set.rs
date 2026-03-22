@@ -7,8 +7,10 @@ use std::io::{self, Read};
 
 use clap::Args;
 
+use crate::app::context::CommonCommandOptions;
 use crate::app::kv::set_kv_command;
 use crate::cli::common::options::CommonOptions;
+use crate::cli::common::ssh::resolve_ssh_context;
 use crate::{Error, Result};
 
 #[derive(Args)]
@@ -59,8 +61,10 @@ fn resolve_value(value: Option<String>, from_stdin: bool) -> Result<String> {
 
 pub fn run(args: SetArgs) -> Result<()> {
     let value = resolve_value(args.value.clone(), args.stdin)?;
+    let options = CommonCommandOptions::from(&args.common);
+    let ssh_ctx = resolve_ssh_context(&options)?;
     let outcome = set_kv_command(
-        crate::app::context::CommonCommandOptions::from(&args.common),
+        options,
         args.member_id.clone(),
         args.name.as_deref(),
         vec![(args.key.clone(), value)],
@@ -70,6 +74,7 @@ pub fn run(args: SetArgs) -> Result<()> {
             args.key,
             args.name.as_deref().unwrap_or("default")
         )),
+        ssh_ctx,
     )?;
     if let Some(message) = outcome.message {
         if !args.common.quiet {

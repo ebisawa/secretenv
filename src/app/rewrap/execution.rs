@@ -1,7 +1,7 @@
 // Copyright 2026 Satoshi Ebisawa
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::app::context::ExecutionContext;
+use crate::app::context::{ExecutionContext, SshSigningContext};
 use crate::app::member::promote_members;
 use crate::feature::rewrap::file::rewrap_file_document;
 use crate::feature::rewrap::kv::rewrap_kv_document;
@@ -20,12 +20,14 @@ use super::types::{
 pub fn execute_rewrap_batch(
     request: &RewrapBatchRequest,
     plan: &RewrapBatchPlan,
+    ssh_ctx: SshSigningContext,
 ) -> Result<RewrapBatchOutcome> {
     if !request.accepted_promotions.is_empty() {
         promote_members(&plan.workspace_root, &request.accepted_promotions)?;
     }
 
-    let execution = ExecutionContext::load(&request.options, request.member_id.clone(), None)?;
+    let execution =
+        ExecutionContext::load(&request.options, request.member_id.clone(), None, ssh_ctx)?;
     let mut processed_files = Vec::new();
     let mut failed_files = Vec::new();
 

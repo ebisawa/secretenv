@@ -9,6 +9,7 @@ use std::path::PathBuf;
 use crate::app::context::CommonCommandOptions;
 use crate::app::file::{decrypt_file_command, validate_decrypt_input};
 use crate::cli::common::options::CommonOptions;
+use crate::cli::common::ssh::resolve_ssh_context;
 use crate::cli::file_output;
 use crate::{Error, Result};
 
@@ -40,17 +41,20 @@ pub struct DecryptArgs {
 
 pub fn run(args: DecryptArgs) -> Result<()> {
     validate_decrypt_input(&args.input)?;
-    let options = CommonCommandOptions::from(&args.common);
 
     // Require --out option (binary data cannot be written to stdout)
     let out_path = args.out.as_ref().ok_or_else(|| Error::Config {
         message: "requires --out option".to_string(),
     })?;
+
+    let options = CommonCommandOptions::from(&args.common);
+    let ssh_ctx = resolve_ssh_context(&options)?;
     let plaintext_bytes = decrypt_file_command(
         &options,
         args.member_id.clone(),
         args.kid.as_deref(),
         &args.input,
+        ssh_ctx,
     )?;
 
     file_output::save_decrypted_file(plaintext_bytes.as_ref(), out_path, args.common.quiet)

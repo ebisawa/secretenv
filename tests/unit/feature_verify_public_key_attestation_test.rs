@@ -3,6 +3,9 @@
 
 use crate::test_utils::create_temp_ssh_keypair_in_dir;
 use secretenv::config::types::SshSigner;
+use secretenv::feature::context::ssh::{
+    build_ssh_signing_context, resolve_ssh_key_candidates, SshSigningParams,
+};
 use secretenv::feature::key::generate::{generate_key, KeyGenerationOptions};
 use secretenv::feature::verify::public_key::verify_public_key_with_attestation;
 use secretenv::io::keystore::storage::load_public_key;
@@ -16,18 +19,25 @@ fn generate_real_ssh_attested_public_key(
     let home_dir = temp_dir.path().join("home");
     std::fs::create_dir_all(&home_dir).unwrap();
 
+    let params = SshSigningParams {
+        ssh_key: Some(ssh_priv),
+        signing_method: Some(SshSigner::SshKeygen),
+        base_dir: Some(home_dir.clone()),
+        verbose: false,
+    };
+    let candidates = resolve_ssh_key_candidates(&params).unwrap();
+    let ssh_context = build_ssh_signing_context(&params, &candidates[0].public_key).unwrap();
+
     let result = generate_key(KeyGenerationOptions {
         member_id: "attestation-test@example.com".to_string(),
         home: Some(home_dir.clone()),
-        ssh_key: Some(ssh_priv),
-        ssh_signer: Some(SshSigner::SshKeygen),
         created_at: "2026-01-01T00:00:00Z".to_string(),
         expires_at: "2026-12-31T23:59:59Z".to_string(),
         no_activate: false,
         debug: false,
         github_account: None,
         verbose: false,
-        ssh_context: None,
+        ssh_context,
     })
     .unwrap();
 

@@ -12,6 +12,7 @@ use std::path::PathBuf;
 use crate::app::context::CommonCommandOptions;
 use crate::app::file::{encrypt_file_command, resolve_encrypted_output_path};
 use crate::cli::common::options::CommonOptions;
+use crate::cli::common::ssh::resolve_ssh_context;
 use crate::cli::file_output;
 use crate::Result;
 
@@ -39,11 +40,13 @@ pub struct EncryptArgs {
 
 pub fn run(args: EncryptArgs) -> Result<()> {
     let options = CommonCommandOptions::from(&args.common);
+    let ssh_ctx = resolve_ssh_context(&options)?;
     let encrypted = encrypt_file_command(
         &options,
         args.member_id.clone(),
         args.no_signer_pub,
         &args.input,
+        ssh_ctx,
     )?;
     let output_path = resolve_encrypted_output_path(args.out.as_ref(), &args.input)?;
 
