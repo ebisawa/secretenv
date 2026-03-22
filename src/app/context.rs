@@ -6,9 +6,15 @@
 use crate::config::resolution::member_id::resolve_member_id;
 use crate::config::types::SshSigner;
 use crate::feature::context::crypto::CryptoContext;
-use crate::feature::context::ssh::{resolve_ssh_signing_context, SshSigningParams};
+pub use crate::feature::context::ssh::SshSigningContext;
+use crate::feature::context::ssh::{
+    build_ssh_signing_context as feature_build_ssh_signing_context,
+    resolve_ssh_key_candidates as feature_resolve_ssh_key_candidates, resolve_ssh_signing_context,
+    SshSigningParams,
+};
 use crate::io::config::paths::get_base_dir;
 use crate::io::keystore::resolver::KeystoreResolver;
+use crate::io::ssh::external::pubkey::SshKeyCandidate;
 use crate::io::workspace::detection::{resolve_optional_workspace, WorkspaceRoot};
 use crate::{Error, Result};
 use std::path::PathBuf;
@@ -98,4 +104,29 @@ impl ExecutionContext {
             workspace_root,
         })
     }
+}
+
+/// Build SshSigningParams from CommonCommandOptions.
+pub fn build_ssh_signing_params(options: &CommonCommandOptions) -> SshSigningParams {
+    SshSigningParams {
+        ssh_key: options.identity.clone(),
+        signing_method: options.ssh_signer,
+        base_dir: options.home.clone(),
+        verbose: options.verbose,
+    }
+}
+
+/// Resolve SSH key candidates (Phase 1 wrapper).
+pub fn resolve_ssh_key_candidates(options: &CommonCommandOptions) -> Result<Vec<SshKeyCandidate>> {
+    let params = build_ssh_signing_params(options);
+    feature_resolve_ssh_key_candidates(&params)
+}
+
+/// Build SSH signing context from selected public key (Phase 3 wrapper).
+pub fn build_ssh_signing_context(
+    options: &CommonCommandOptions,
+    selected_pubkey: &str,
+) -> Result<SshSigningContext> {
+    let params = build_ssh_signing_params(options);
+    feature_build_ssh_signing_context(&params, selected_pubkey)
 }
