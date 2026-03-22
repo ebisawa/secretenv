@@ -13,7 +13,7 @@ use crate::feature::context::ssh::{
 };
 use crate::io::config::paths::get_base_dir;
 use crate::io::keystore::resolver::KeystoreResolver;
-use crate::io::ssh::external::pubkey::SshKeyCandidate;
+pub use crate::io::ssh::external::pubkey::SshKeyCandidate;
 use crate::io::workspace::detection::{resolve_optional_workspace, WorkspaceRoot};
 use crate::{Error, Result};
 use std::path::PathBuf;
