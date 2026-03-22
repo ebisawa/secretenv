@@ -5,7 +5,10 @@
 
 use crate::test_utils::{setup_test_keystore, stub_ssh_keygen};
 use secretenv::config::types::SshSigner;
-use secretenv::feature::context::ssh::{resolve_ssh_signing_context, SshSigningParams};
+use secretenv::feature::context::ssh::{
+    build_ssh_signing_context, resolve_ssh_key_candidates, resolve_ssh_signing_context,
+    SshSigningParams,
+};
 use secretenv::io::ssh::backend::signature_backend::SignatureBackend;
 use secretenv::io::ssh::backend::ssh_keygen::SshKeygenBackend;
 use secretenv::io::ssh::protocol::key_descriptor::SshKeyDescriptor;
@@ -62,11 +65,49 @@ fn test_check_determinism_via_context() {
 }
 
 #[test]
+fn test_resolve_ssh_key_candidates_with_explicit_key() {
+    let temp_dir = setup_test_keystore("test@example.com");
+    let ssh_key_path = temp_dir.path().join(".ssh").join("test_ed25519");
+
+    let params = SshSigningParams {
+        ssh_key: Some(ssh_key_path),
+        signing_method: Some(SshSigner::SshKeygen),
+        base_dir: Some(temp_dir.path().to_path_buf()),
+        verbose: false,
+    };
+
+    let candidates = resolve_ssh_key_candidates(&params).unwrap();
+    assert_eq!(candidates.len(), 1);
+    assert!(!candidates[0].public_key.is_empty());
+    assert!(candidates[0].public_key.starts_with("ssh-ed25519 "));
+    assert!(candidates[0].fingerprint.starts_with("SHA256:"));
+}
+
+#[test]
+fn test_build_ssh_signing_context_from_selected_key() {
+    let temp_dir = setup_test_keystore("test@example.com");
+    let ssh_key_path = temp_dir.path().join(".ssh").join("test_ed25519");
+    let ssh_pub =
+        std::fs::read_to_string(temp_dir.path().join(".ssh").join("test_ed25519.pub")).unwrap();
+    let ssh_pub = ssh_pub.trim();
+
+    let params = SshSigningParams {
+        ssh_key: Some(ssh_key_path),
+        signing_method: Some(SshSigner::SshKeygen),
+        base_dir: Some(temp_dir.path().to_path_buf()),
+        verbose: false,
+    };
+
+    let ctx = build_ssh_signing_context(&params, ssh_pub).unwrap();
+    assert_eq!(ctx.public_key, ssh_pub);
+    assert!(!ctx.fingerprint.is_empty());
+    assert!(ctx.fingerprint.starts_with("SHA256:"));
+}
+
+#[test]
 fn test_resolve_agent_with_explicit_key_loads_pubkey_from_file() {
     // When ssh-agent mode is selected with an explicit key file,
-    // the public key should be loaded from the file (not from ssh-add -L).
-    // The resolution will fail later at the agent backend (no real agent in CI),
-    // but the error should be agent-related, not a pubkey loading error.
+    // resolve_ssh_key_candidates should load from file, returning 1 candidate.
     let temp_dir = setup_test_keystore("test@example.com");
     let ssh_key_path = temp_dir.path().join(".ssh").join("test_ed25519");
 
@@ -77,26 +118,23 @@ fn test_resolve_agent_with_explicit_key_loads_pubkey_from_file() {
         verbose: false,
     };
 
-    let result = resolve_ssh_signing_context(&params);
-    // In CI without a real SSH agent, this will fail at the determinism check
-    // (agent connection). If the pubkey had NOT been loaded from file, it would
-    // have failed earlier with an ssh-add error. Accept either success (if an
-    // agent happens to be available) or an agent-related error.
+    let candidates = resolve_ssh_key_candidates(&params).unwrap();
+    assert_eq!(candidates.len(), 1);
+    assert!(candidates[0].public_key.starts_with("ssh-ed25519 "));
+
+    // Building context may fail without a real agent for determinism check.
+    let result = build_ssh_signing_context(&params, &candidates[0].public_key);
     match result {
         Ok(ctx) => {
             assert!(!ctx.public_key.is_empty());
             assert!(!ctx.fingerprint.is_empty());
         }
         Err(e) => {
-            let msg = e.to_string();
-            // The error should be from agent signing/determinism check,
-            // NOT from public key loading. If the old behavior (ssh-add -L)
-            // were used, we'd see "No Ed25519 key found" or similar.
-            let msg_lower = msg.to_lowercase();
+            let msg = e.to_string().to_lowercase();
             assert!(
-                msg_lower.contains("agent")
-                    || msg_lower.contains("ssh_auth_sock")
-                    || msg_lower.contains("determinism"),
+                msg.contains("agent")
+                    || msg.contains("ssh_auth_sock")
+                    || msg.contains("determinism"),
                 "Expected agent/determinism error, got: {}",
                 msg
             );
@@ -107,7 +145,7 @@ fn test_resolve_agent_with_explicit_key_loads_pubkey_from_file() {
 #[test]
 fn test_resolve_agent_with_explicit_nonexistent_key_fails() {
     // When ssh-agent mode is selected with an explicit key that doesn't exist,
-    // it should fail with a NotFound error.
+    // resolve_ssh_key_candidates should fail with a NotFound error.
     let temp_dir = setup_test_keystore("test@example.com");
     let nonexistent_key = temp_dir.path().join(".ssh").join("nonexistent_key");
 
@@ -118,7 +156,7 @@ fn test_resolve_agent_with_explicit_nonexistent_key_fails() {
         verbose: false,
     };
 
-    let result = resolve_ssh_signing_context(&params);
+    let result = resolve_ssh_key_candidates(&params);
     let msg = match result {
         Ok(_) => panic!("Expected error for nonexistent key"),
         Err(e) => e.to_string(),
