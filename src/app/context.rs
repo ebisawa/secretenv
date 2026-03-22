@@ -9,8 +9,7 @@ use crate::feature::context::crypto::CryptoContext;
 pub use crate::feature::context::ssh::SshSigningContext;
 use crate::feature::context::ssh::{
     build_ssh_signing_context as feature_build_ssh_signing_context,
-    resolve_ssh_key_candidates as feature_resolve_ssh_key_candidates, resolve_ssh_signing_context,
-    SshSigningParams,
+    resolve_ssh_key_candidates as feature_resolve_ssh_key_candidates, SshSigningParams,
 };
 use crate::io::config::paths::get_base_dir;
 use crate::io::keystore::resolver::KeystoreResolver;
@@ -74,17 +73,11 @@ impl ExecutionContext {
         options: &CommonCommandOptions,
         member_id: Option<String>,
         explicit_kid: Option<&str>,
+        ssh_ctx: SshSigningContext,
     ) -> Result<Self> {
         let workspace_root = load_optional_workspace(options)?;
         let base_dir = options.resolve_base_dir()?;
         let member_id = resolve_member_id(member_id, Some(base_dir.as_path()))?;
-
-        let ssh_ctx = resolve_ssh_signing_context(&SshSigningParams {
-            ssh_key: options.identity.clone(),
-            signing_method: options.ssh_signer,
-            base_dir: Some(base_dir.clone()),
-            verbose: options.verbose,
-        })?;
 
         let keystore_root = options.resolve_keystore_root()?;
         let key_ctx = CryptoContext::load(

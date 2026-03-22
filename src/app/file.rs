@@ -3,7 +3,9 @@
 
 //! Application-layer file workflow sessions.
 
-use crate::app::context::{load_optional_workspace, CommonCommandOptions, ExecutionContext};
+use crate::app::context::{
+    load_optional_workspace, CommonCommandOptions, ExecutionContext, SshSigningContext,
+};
 use crate::feature::decrypt::decrypt_document;
 use crate::feature::encrypt::encrypt_file_document;
 use crate::feature::envelope::signature::{build_signing_context, SigningContext};
@@ -37,8 +39,9 @@ impl EncryptFileSession {
         options: &CommonCommandOptions,
         member_id: Option<String>,
         input_path: &Path,
+        ssh_ctx: SshSigningContext,
     ) -> Result<Self> {
-        let execution = ExecutionContext::load(options, member_id, None)?;
+        let execution = ExecutionContext::load(options, member_id, None, ssh_ctx)?;
         let workspace_root = execution
             .workspace_root
             .clone()
@@ -88,8 +91,9 @@ impl DecryptFileSession {
         options: &CommonCommandOptions,
         member_id: Option<String>,
         kid: Option<&str>,
+        ssh_ctx: SshSigningContext,
     ) -> Result<ExecutionContext> {
-        ExecutionContext::load(options, member_id, kid)
+        ExecutionContext::load(options, member_id, kid, ssh_ctx)
     }
 }
 
@@ -158,8 +162,9 @@ pub fn encrypt_file_command(
     member_id: Option<String>,
     no_signer_pub: bool,
     input_path: &Path,
+    ssh_ctx: SshSigningContext,
 ) -> Result<String> {
-    let session = EncryptFileSession::load(options, member_id, input_path)?;
+    let session = EncryptFileSession::load(options, member_id, input_path, ssh_ctx)?;
     let verified_keys = session.verified_recipient_keys(options.verbose)?;
     let signing = session.signing_context(no_signer_pub, options.verbose)?;
     encrypt_file_document(
@@ -175,9 +180,10 @@ pub fn decrypt_file_command(
     member_id: Option<String>,
     kid: Option<&str>,
     input_path: &Path,
+    ssh_ctx: SshSigningContext,
 ) -> Result<Zeroizing<Vec<u8>>> {
     let session = DecryptFileSession::load_input(input_path)?;
-    let execution = DecryptFileSession::load_execution(options, member_id, kid)?;
+    let execution = DecryptFileSession::load_execution(options, member_id, kid, ssh_ctx)?;
     decrypt_document(
         &session.content,
         &execution.member_id,

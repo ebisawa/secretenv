@@ -8,6 +8,7 @@ use crate::app::registration::{
     PreparedRegistration, RegistrationMode, RegistrationOutcome, RegistrationResult,
 };
 use crate::cli::common::options::CommonOptions;
+use crate::cli::common::ssh::resolve_ssh_context;
 use crate::cli::identity_prompt;
 use crate::cli::key::common::print_key_generation_binding_info;
 use crate::support::path::display_path_relative_to_cwd;
@@ -34,12 +35,17 @@ pub(crate) fn execute_registration_command(
     } else {
         None
     };
+    let ssh_ctx = if key_plan.requires_github_user() {
+        Some(resolve_ssh_context(&options)?)
+    } else {
+        None
+    };
     let prepared = match mode {
         RegistrationMode::Init => {
-            build_init_registration(&options, member_id, github_user, key_plan)?
+            build_init_registration(&options, member_id, github_user, key_plan, ssh_ctx)?
         }
         RegistrationMode::Join => {
-            build_join_registration(&options, member_id, github_user, key_plan)?
+            build_join_registration(&options, member_id, github_user, key_plan, ssh_ctx)?
         }
     };
     let outcome = resolve_registration_outcome(&prepared, force)?;

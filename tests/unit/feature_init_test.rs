@@ -6,6 +6,7 @@
 use crate::cli_common::ALICE_MEMBER_ID;
 use crate::test_utils::setup_test_keystore_from_fixtures;
 use secretenv::config::types::SshSigner;
+use secretenv::feature::context::ssh::{resolve_ssh_signing_context, SshSigningParams};
 use secretenv::feature::init::{
     ensure_key_exists, load_single_member_id_from_keystore, resolve_keystore_root,
     save_member_document,
@@ -188,15 +189,20 @@ fn test_ensure_key_exists_creates_new_key() {
         .expect("Failed to generate SSH key");
 
     // Ensure key exists (should create new key)
+    let ssh_context = resolve_ssh_signing_context(&SshSigningParams {
+        ssh_key: Some(ssh_key_path.clone()),
+        signing_method: Some(SshSigner::SshKeygen),
+        base_dir: Some(home_dir.path().to_path_buf()),
+        verbose: false,
+    })
+    .unwrap();
     let result = ensure_key_exists(
         member_id,
         &keystore_root,
         Some(home_dir.path().to_path_buf()),
-        Some(ssh_key_path.clone()),
-        Some(SshSigner::SshKeygen),
         false,
         None,
-        None,
+        ssh_context,
     )
     .unwrap();
 
@@ -236,30 +242,40 @@ fn test_ensure_key_exists_reuses_existing_key() {
         .expect("Failed to generate SSH key");
 
     // First call: create a new key
+    let ssh_context = resolve_ssh_signing_context(&SshSigningParams {
+        ssh_key: Some(ssh_key_path.clone()),
+        signing_method: Some(SshSigner::SshKeygen),
+        base_dir: Some(home_dir.path().to_path_buf()),
+        verbose: false,
+    })
+    .unwrap();
     let first_result = ensure_key_exists(
         member_id,
         &keystore_root,
         Some(home_dir.path().to_path_buf()),
-        Some(ssh_key_path.clone()),
-        Some(SshSigner::SshKeygen),
         false,
         None,
-        None,
+        ssh_context,
     )
     .unwrap();
     assert!(first_result.created, "First call should create a new key");
     let first_kid = first_result.kid.clone();
 
     // Second call: should reuse existing key
+    let ssh_context2 = resolve_ssh_signing_context(&SshSigningParams {
+        ssh_key: Some(ssh_key_path),
+        signing_method: Some(SshSigner::SshKeygen),
+        base_dir: Some(home_dir.path().to_path_buf()),
+        verbose: false,
+    })
+    .unwrap();
     let second_result = ensure_key_exists(
         member_id,
         &keystore_root,
         Some(home_dir.path().to_path_buf()),
-        Some(ssh_key_path),
-        Some(SshSigner::SshKeygen),
         false,
         None,
-        None,
+        ssh_context2,
     )
     .unwrap();
 

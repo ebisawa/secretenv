@@ -5,9 +5,8 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::app::context::CommonCommandOptions;
+use crate::app::context::{CommonCommandOptions, SshSigningContext};
 use crate::app::key::{resolve_github_account, verify_preflight_github_binding};
-use crate::feature::context::ssh::{resolve_ssh_signing_context, SshSigningParams};
 use crate::feature::init::generate_new_key;
 use crate::io::keystore::member::find_active_key_document;
 use crate::io::keystore::resolver::KeystoreResolver;
@@ -113,6 +112,7 @@ pub fn build_init_registration(
     member_id: String,
     github_user: Option<String>,
     key_plan: RegistrationKeyPlan,
+    ssh_ctx: Option<SshSigningContext>,
 ) -> Result<PreparedRegistration> {
     build_registration(
         common,
@@ -120,6 +120,7 @@ pub fn build_init_registration(
         github_user,
         key_plan,
         RegistrationMode::Init,
+        ssh_ctx,
     )
 }
 
@@ -128,6 +129,7 @@ pub fn build_join_registration(
     member_id: String,
     github_user: Option<String>,
     key_plan: RegistrationKeyPlan,
+    ssh_ctx: Option<SshSigningContext>,
 ) -> Result<PreparedRegistration> {
     build_registration(
         common,
@@ -135,6 +137,7 @@ pub fn build_join_registration(
         github_user,
         key_plan,
         RegistrationMode::Join,
+        ssh_ctx,
     )
 }
 
@@ -223,8 +226,9 @@ fn build_registration(
     github_user: Option<String>,
     key_plan: RegistrationKeyPlan,
     mode: RegistrationMode,
+    ssh_ctx: Option<SshSigningContext>,
 ) -> Result<PreparedRegistration> {
-    let setup = resolve_member_setup(common, member_id, github_user, key_plan)?;
+    let setup = resolve_member_setup(common, member_id, github_user, key_plan, ssh_ctx)?;
     let workspace_path = resolve_workspace_creation_path(common.workspace.clone())?;
     let is_new_workspace = resolve_workspace_for_registration(mode, &workspace_path)?;
     let keystore_root = KeystoreResolver::resolve(common.home.as_ref())?;
@@ -262,13 +266,15 @@ fn resolve_member_setup(
     member_id: String,
     github_user: Option<String>,
     key_plan: RegistrationKeyPlan,
+    ssh_ctx: Option<SshSigningContext>,
 ) -> Result<MemberSetupResult> {
     match key_plan {
         RegistrationKeyPlan::UseExisting { kid, expires_at } => {
             Ok(build_existing_member_setup(member_id, kid, expires_at))
         }
         RegistrationKeyPlan::GenerateNew => {
-            resolve_generated_member_setup(common, &member_id, github_user)
+            let ssh_ctx = ssh_ctx.expect("SshSigningContext is required for GenerateNew");
+            resolve_generated_member_setup(common, &member_id, github_user, ssh_ctx)
         }
     }
 }
@@ -277,18 +283,12 @@ fn resolve_generated_member_setup(
     common: &CommonCommandOptions,
     member_id: &str,
     github_user: Option<String>,
+    ssh_ctx: SshSigningContext,
 ) -> Result<MemberSetupResult> {
     let github_account = resolve_github_account(github_user, common.verbose)?;
 
-    let ssh_context = resolve_ssh_signing_context(&SshSigningParams {
-        ssh_key: common.identity.clone(),
-        signing_method: common.ssh_signer,
-        base_dir: common.home.clone(),
-        verbose: common.verbose,
-    })?;
-
     let github_verification = if let Some(account) = github_account.as_ref() {
-        verify_preflight_github_binding(&ssh_context.public_key, account, common.verbose)?
+        verify_preflight_github_binding(&ssh_ctx.public_key, account, common.verbose)?
     } else {
         VerificationStatus::NotConfigured
     };
@@ -296,11 +296,9 @@ fn resolve_generated_member_setup(
     let mut key_result = MemberKeySetupResult::from(generate_new_key(
         member_id,
         common.home.clone(),
-        common.identity.clone(),
-        common.ssh_signer,
         common.verbose,
         github_account,
-        Some(ssh_context),
+        ssh_ctx,
     )?);
     key_result.github_verification = github_verification;
 

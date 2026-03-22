@@ -11,6 +11,7 @@ use crate::app::context::CommonCommandOptions;
 use crate::app::kv::{get_kv_command, list_kv_command};
 use crate::cli::common::options::CommonOptions;
 use crate::cli::common::output::json::print_json_output;
+use crate::cli::common::ssh::resolve_ssh_context;
 use crate::Result;
 
 #[derive(Args)]
@@ -52,12 +53,14 @@ pub fn run(args: GetArgs) -> Result<()> {
     }
 
     let options = CommonCommandOptions::from(&args.common);
+    let ssh_ctx = resolve_ssh_context(&options)?;
     let kv_map = get_kv_command(
         &options,
         args.member_id.clone(),
         args.name.as_deref(),
         args.key.as_deref(),
         args.all,
+        ssh_ctx,
     )?;
     let disclosed = list_kv_command(&options, args.name.as_deref())?;
 

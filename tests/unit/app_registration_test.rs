@@ -53,8 +53,14 @@ fn test_build_join_registration_reuses_existing_key_without_github_user() {
     let keystore_root = home_dir.path().join("keys");
     let key_plan = resolve_registration_key_plan("alice@example.com", &keystore_root).unwrap();
 
-    let prepared =
-        build_join_registration(&common, "alice@example.com".to_string(), None, key_plan).unwrap();
+    let prepared = build_join_registration(
+        &common,
+        "alice@example.com".to_string(),
+        None,
+        key_plan,
+        None,
+    )
+    .unwrap();
 
     assert_eq!(prepared.mode, RegistrationMode::Join);
     assert!(!prepared.setup.key_result.created);

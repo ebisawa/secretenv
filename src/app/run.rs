@@ -3,7 +3,7 @@
 
 //! Application-layer orchestration for `run` command execution.
 
-use crate::app::context::CommonCommandOptions;
+use crate::app::context::{CommonCommandOptions, SshSigningContext};
 use crate::app::kv::build_run_env_command;
 use crate::io::process::execute_command_with_env;
 use crate::{Error, Result};
@@ -14,9 +14,10 @@ pub fn execute_env_command(
     member_id: Option<String>,
     file_name: Option<&str>,
     command_args: &[String],
+    ssh_ctx: SshSigningContext,
 ) -> Result<i32> {
     let (cmd, cmd_args) = split_command_args(command_args)?;
-    let env_vars = build_run_env_command(options, member_id, file_name)?;
+    let env_vars = build_run_env_command(options, member_id, file_name, ssh_ctx)?;
     execute_command_with_env(&cmd, &cmd_args, &env_vars)
 }
 
