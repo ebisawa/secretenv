@@ -24,6 +24,7 @@ fn generate_real_ssh_attested_public_key(
         signing_method: Some(SshSigner::SshKeygen),
         base_dir: Some(home_dir.clone()),
         verbose: false,
+        check_determinism: true,
     };
     let candidates = resolve_ssh_key_candidates(&params).unwrap();
     let ssh_context = build_ssh_signing_context(&params, &candidates[0].public_key).unwrap();

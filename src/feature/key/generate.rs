@@ -104,13 +104,17 @@ pub fn generate_key(opts: KeyGenerationOptions) -> Result<KeyNewResult> {
 }
 
 fn ensure_determinism(status: &SshDeterminismStatus) -> Result<()> {
-    if let SshDeterminismStatus::Failed { message } = status {
-        return Err(crate::Error::Crypto {
+    match status {
+        SshDeterminismStatus::Verified => Ok(()),
+        SshDeterminismStatus::Skipped => Err(crate::Error::Crypto {
+            message: "SSH determinism check was not performed; key generation requires it".into(),
+            source: None,
+        }),
+        SshDeterminismStatus::Failed { message } => Err(crate::Error::Crypto {
             message: message.clone(),
             source: None,
-        });
+        }),
     }
-    Ok(())
 }
 
 #[allow(clippy::too_many_arguments)]

@@ -7,6 +7,7 @@
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum SshDeterminismStatus {
     Verified,
+    Skipped,
     Failed { message: String },
 }
 impl SshDeterminismStatus {
@@ -16,7 +17,7 @@ impl SshDeterminismStatus {
 
     pub fn message(&self) -> Option<&str> {
         match self {
-            Self::Verified => None,
+            Self::Verified | Self::Skipped => None,
             Self::Failed { message } => Some(message.as_str()),
         }
     }

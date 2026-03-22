@@ -196,6 +196,7 @@ fn test_ensure_key_exists_creates_new_key() {
         signing_method: Some(SshSigner::SshKeygen),
         base_dir: Some(home_dir.path().to_path_buf()),
         verbose: false,
+        check_determinism: true,
     };
     let candidates = resolve_ssh_key_candidates(&params).unwrap();
     let ssh_context = build_ssh_signing_context(&params, &candidates[0].public_key).unwrap();
@@ -250,6 +251,7 @@ fn test_ensure_key_exists_reuses_existing_key() {
         signing_method: Some(SshSigner::SshKeygen),
         base_dir: Some(home_dir.path().to_path_buf()),
         verbose: false,
+        check_determinism: true,
     };
     let candidates = resolve_ssh_key_candidates(&params).unwrap();
     let ssh_context = build_ssh_signing_context(&params, &candidates[0].public_key).unwrap();
@@ -271,6 +273,7 @@ fn test_ensure_key_exists_reuses_existing_key() {
         signing_method: Some(SshSigner::SshKeygen),
         base_dir: Some(home_dir.path().to_path_buf()),
         verbose: false,
+        check_determinism: true,
     };
     let candidates2 = resolve_ssh_key_candidates(&params2).unwrap();
     let ssh_context2 = build_ssh_signing_context(&params2, &candidates2[0].public_key).unwrap();
