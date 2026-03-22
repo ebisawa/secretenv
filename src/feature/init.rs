@@ -4,6 +4,7 @@
 //! Init feature - workspace setup and member registration.
 
 use crate::config::types::SshSigner;
+use crate::feature::context::ssh::SshSigningContext;
 use crate::feature::key::generate::{generate_key, KeyGenerationOptions};
 use crate::io::keystore::member::find_active_key_document;
 use crate::io::keystore::member::load_single_member_id_from_keystore as load_single_member_id;
@@ -61,6 +62,7 @@ pub fn find_active_key(
 }
 
 /// Generate a new key for member_id.
+#[allow(clippy::too_many_arguments)]
 pub fn generate_new_key(
     member_id: &str,
     home: Option<PathBuf>,
@@ -68,6 +70,7 @@ pub fn generate_new_key(
     ssh_signer: Option<SshSigner>,
     verbose: bool,
     github_account: Option<GithubAccount>,
+    ssh_context: Option<SshSigningContext>,
 ) -> Result<EnsureKeyExistsResult> {
     let (created_at, expires_at) = default_key_timestamps()?;
     let result = generate_key(KeyGenerationOptions {
@@ -81,6 +84,7 @@ pub fn generate_new_key(
         debug: verbose,
         github_account,
         verbose,
+        ssh_context,
     })?;
 
     Ok(EnsureKeyExistsResult {
@@ -93,6 +97,7 @@ pub fn generate_new_key(
 }
 
 /// Ensure key exists for member_id - generate if missing.
+#[allow(clippy::too_many_arguments)]
 pub fn ensure_key_exists(
     member_id: &str,
     keystore_root: &Path,
@@ -101,6 +106,7 @@ pub fn ensure_key_exists(
     ssh_signer: Option<SshSigner>,
     verbose: bool,
     github_account: Option<GithubAccount>,
+    ssh_context: Option<SshSigningContext>,
 ) -> Result<EnsureKeyExistsResult> {
     if let Some(result) = find_active_key(member_id, keystore_root)? {
         return Ok(result);
@@ -112,6 +118,7 @@ pub fn ensure_key_exists(
         ssh_signer,
         verbose,
         github_account,
+        ssh_context,
     )
 }
 

@@ -1,11 +1,12 @@
 // Copyright 2026 Satoshi Ebisawa
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::io::verify_online::github::{resolve_github_id_by_username, verify_github_account};
+use crate::io::verify_online::github::preflight::verify_ssh_key_on_github;
+use crate::io::verify_online::github::resolve_github_id_by_username;
 use crate::io::verify_online::VerificationStatus;
-use crate::model::public_key::{GithubAccount, PublicKey};
+use crate::model::public_key::GithubAccount;
 use crate::support::runtime::run_blocking_result;
-use crate::{Error, Result};
+use crate::Result;
 
 pub(crate) fn resolve_github_account(
     github_user: Option<String>,
@@ -19,26 +20,12 @@ pub(crate) fn resolve_github_account(
     Ok(Some(GithubAccount { id, login }))
 }
 
-pub(crate) fn verify_generated_key_github_binding(
-    public_key: &PublicKey,
-    github_account: Option<&GithubAccount>,
+/// Verify SSH public key is registered on GitHub before key generation.
+pub(crate) fn verify_preflight_github_binding(
+    ssh_pub_key: &str,
+    account: &GithubAccount,
     verbose: bool,
 ) -> Result<VerificationStatus> {
-    let Some(account) = github_account else {
-        return Ok(VerificationStatus::NotConfigured);
-    };
-
-    let result = run_blocking_result(verify_github_account(
-        public_key,
-        verbose,
-        Some((account.id, account.login.clone())),
-    ))?;
-    if !result.is_verified() {
-        return Err(Error::Verify {
-            rule: "V-GITHUB-KEY-NEW".to_string(),
-            message: result.message,
-        });
-    }
-
-    Ok(VerificationStatus::Verified)
+    let status = run_blocking_result(verify_ssh_key_on_github(ssh_pub_key, account, verbose))?;
+    Ok(status)
 }

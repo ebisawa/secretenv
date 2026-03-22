@@ -6,7 +6,8 @@
 use std::path::{Path, PathBuf};
 
 use crate::app::context::CommonCommandOptions;
-use crate::app::key::{resolve_github_account, verify_generated_key_github_binding};
+use crate::app::key::{resolve_github_account, verify_preflight_github_binding};
+use crate::feature::context::ssh::{resolve_ssh_signing_context, SshSigningParams};
 use crate::feature::init::generate_new_key;
 use crate::io::keystore::member::find_active_key_document;
 use crate::io::keystore::resolver::KeystoreResolver;
@@ -277,45 +278,36 @@ fn resolve_generated_member_setup(
     member_id: &str,
     github_user: Option<String>,
 ) -> Result<MemberSetupResult> {
-    let keystore_root = KeystoreResolver::resolve(common.home.as_ref())?;
     let github_account = resolve_github_account(github_user, common.verbose)?;
+
+    let ssh_context = resolve_ssh_signing_context(&SshSigningParams {
+        ssh_key: common.identity.clone(),
+        signing_method: common.ssh_signer,
+        base_dir: common.home.clone(),
+        verbose: common.verbose,
+    })?;
+
+    let github_verification = if let Some(account) = github_account.as_ref() {
+        verify_preflight_github_binding(&ssh_context.public_key, account, common.verbose)?
+    } else {
+        VerificationStatus::NotConfigured
+    };
+
     let mut key_result = MemberKeySetupResult::from(generate_new_key(
         member_id,
         common.home.clone(),
         common.identity.clone(),
         common.ssh_signer,
         common.verbose,
-        github_account.clone(),
+        github_account,
+        Some(ssh_context),
     )?);
-
-    let github_verification = verify_member_key_binding(
-        &keystore_root,
-        member_id,
-        &key_result.kid,
-        github_account.as_ref(),
-        common.verbose,
-    )?;
     key_result.github_verification = github_verification;
 
     Ok(MemberSetupResult {
         member_id: member_id.to_string(),
         key_result,
     })
-}
-
-fn verify_member_key_binding(
-    keystore_root: &Path,
-    member_id: &str,
-    kid: &str,
-    github_account: Option<&crate::model::public_key::GithubAccount>,
-    verbose: bool,
-) -> Result<VerificationStatus> {
-    let Some(account) = github_account else {
-        return Ok(VerificationStatus::NotConfigured);
-    };
-
-    let public_key = load_public_key(keystore_root, member_id, kid)?;
-    verify_generated_key_github_binding(&public_key, Some(account), verbose)
 }
 
 fn build_existing_member_setup(

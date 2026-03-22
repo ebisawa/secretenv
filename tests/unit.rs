@@ -135,6 +135,8 @@ pub mod io_keystore_test;
 pub mod io_ssh_backend_test;
 #[path = "unit/io_ssh_protocol_wire_test.rs"]
 pub mod io_ssh_protocol_wire_test;
+#[path = "unit/io_verify_online_github_preflight_test.rs"]
+pub mod io_verify_online_github_preflight_test;
 #[path = "unit/io_workspace_setup_test.rs"]
 pub mod io_workspace_setup_test;
 #[path = "unit/jcs_test.rs"]
