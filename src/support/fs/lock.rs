@@ -3,7 +3,7 @@
 
 //! File locking utilities.
 
-use crate::support::fs::ensure_dir;
+use crate::support::fs::ensure_dir_restricted;
 use crate::support::path::display_path_relative_to_cwd;
 use crate::{Error, Result};
 use fd_lock::RwLock;
@@ -35,7 +35,7 @@ where
     // This is required for cases like `secretenv config set ...` where
     // SECRETENV_HOME/config.toml's parent directory may not be created yet.
     if let Some(lock_parent) = lock_path.parent() {
-        ensure_dir(lock_parent).map_err(|e| Error::Io {
+        ensure_dir_restricted(lock_parent).map_err(|e| Error::Io {
             message: format!(
                 "Failed to create directory for lock file '{}': {}",
                 display_path_relative_to_cwd(lock_parent),
@@ -45,15 +45,19 @@ where
         })?;
     }
 
-    let lock_file = OpenOptions::new()
-        .write(true)
-        .create(true)
-        .truncate(true)
-        .open(&lock_path)
-        .map_err(|e| Error::Io {
+    let lock_file = {
+        let mut opts = OpenOptions::new();
+        opts.write(true).create(true).truncate(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            opts.mode(0o600);
+        }
+        opts.open(&lock_path).map_err(|e| Error::Io {
             message: format!("Failed to open lock file: {}", e),
             source: Some(e),
-        })?;
+        })?
+    };
 
     let mut lock = RwLock::new(lock_file);
     let _guard = lock.write().map_err(|e| Error::Io {

@@ -3,7 +3,9 @@
 
 //! Unit tests for support/fs module.
 
-use secretenv::support::fs::{ensure_dir, list_dir, load_text};
+use secretenv::support::fs::{
+    check_permission, ensure_dir, ensure_dir_restricted, list_dir, load_text,
+};
 use std::fs;
 use tempfile::TempDir;
 
@@ -66,4 +68,78 @@ fn test_ensure_dir() {
 
     assert!(dir_path.exists());
     assert!(dir_path.is_dir());
+}
+
+#[cfg(unix)]
+#[test]
+fn test_ensure_dir_restricted_sets_mode_0700() {
+    use std::os::unix::fs::PermissionsExt;
+    let temp_dir = TempDir::new().unwrap();
+    let dir_path = temp_dir.path().join("a/b/c");
+    ensure_dir_restricted(&dir_path).unwrap();
+    assert!(dir_path.exists());
+    let mode = fs::metadata(&dir_path).unwrap().permissions().mode() & 0o777;
+    assert_eq!(mode, 0o700);
+}
+
+#[cfg(unix)]
+#[test]
+fn test_ensure_dir_restricted_fixes_existing_dir_permissions() {
+    use std::os::unix::fs::PermissionsExt;
+    let temp_dir = TempDir::new().unwrap();
+    let dir_path = temp_dir.path().join("existing");
+    fs::create_dir(&dir_path).unwrap();
+    fs::set_permissions(&dir_path, fs::Permissions::from_mode(0o755)).unwrap();
+    ensure_dir_restricted(&dir_path).unwrap();
+    let mode = fs::metadata(&dir_path).unwrap().permissions().mode() & 0o777;
+    assert_eq!(mode, 0o700);
+}
+
+#[cfg(unix)]
+#[test]
+fn test_check_permission_detects_insecure_file() {
+    use std::os::unix::fs::PermissionsExt;
+    let temp_dir = TempDir::new().unwrap();
+    let file_path = temp_dir.path().join("test.txt");
+    fs::write(&file_path, "secret").unwrap();
+    fs::set_permissions(&file_path, fs::Permissions::from_mode(0o644)).unwrap();
+    let result = check_permission(&file_path);
+    assert!(result.is_some());
+    let msg = result.unwrap();
+    assert!(msg.contains("0644"));
+    assert!(msg.contains("expected 0600"));
+}
+
+#[cfg(unix)]
+#[test]
+fn test_check_permission_accepts_secure_file() {
+    use std::os::unix::fs::PermissionsExt;
+    let temp_dir = TempDir::new().unwrap();
+    let file_path = temp_dir.path().join("test.txt");
+    fs::write(&file_path, "secret").unwrap();
+    fs::set_permissions(&file_path, fs::Permissions::from_mode(0o600)).unwrap();
+    assert!(check_permission(&file_path).is_none());
+}
+
+#[cfg(unix)]
+#[test]
+fn test_check_permission_detects_insecure_directory() {
+    use std::os::unix::fs::PermissionsExt;
+    let temp_dir = TempDir::new().unwrap();
+    let dir_path = temp_dir.path().join("testdir");
+    fs::create_dir(&dir_path).unwrap();
+    fs::set_permissions(&dir_path, fs::Permissions::from_mode(0o755)).unwrap();
+    let result = check_permission(&dir_path);
+    assert!(result.is_some());
+    assert!(result.unwrap().contains("expected 0700"));
+}
+
+#[cfg(unix)]
+#[test]
+fn test_check_permission_nonexistent_path_returns_warning() {
+    let temp_dir = TempDir::new().unwrap();
+    let missing = temp_dir.path().join("nonexistent");
+    let result = check_permission(&missing);
+    assert!(result.is_some());
+    assert!(result.unwrap().contains("Cannot check permissions"));
 }

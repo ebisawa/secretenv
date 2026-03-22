@@ -3,6 +3,7 @@
 
 //! Atomic file write operations.
 
+use crate::support::fs::ensure_dir_restricted;
 use crate::support::path::display_path_relative_to_cwd;
 use crate::{Error, Result};
 use serde::Serialize;
@@ -26,6 +27,14 @@ fn ensure_parent_dir(path: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Ensure parent directory exists with restricted permissions (mode 0700)
+fn ensure_parent_dir_restricted(path: &Path) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        ensure_dir_restricted(parent)?;
+    }
+    Ok(())
+}
+
 /// Save JSON data atomically (write-then-rename)
 pub fn save_json<T: Serialize>(path: &Path, data: &T) -> Result<()> {
     ensure_parent_dir(path)?;
@@ -39,6 +48,22 @@ pub fn save_json<T: Serialize>(path: &Path, data: &T) -> Result<()> {
 /// Save text content atomically
 pub fn save_text(path: &Path, content: &str) -> Result<()> {
     ensure_parent_dir(path)?;
+    save_bytes(path, content.as_bytes())
+}
+
+/// Save JSON data atomically with restricted parent directory (mode 0700)
+pub fn save_json_restricted<T: Serialize>(path: &Path, data: &T) -> Result<()> {
+    ensure_parent_dir_restricted(path)?;
+    let json = serde_json::to_string_pretty(data).map_err(|e| Error::Parse {
+        message: format!("JSON serialization failed: {}", e),
+        source: Some(Box::new(e)),
+    })?;
+    save_bytes(path, json.as_bytes())
+}
+
+/// Save text content atomically with restricted parent directory (mode 0700)
+pub fn save_text_restricted(path: &Path, content: &str) -> Result<()> {
+    ensure_parent_dir_restricted(path)?;
     save_bytes(path, content.as_bytes())
 }
 

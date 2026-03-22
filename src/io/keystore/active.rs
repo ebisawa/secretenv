@@ -3,7 +3,7 @@
 
 //! Active key management
 
-use crate::support::fs::{atomic, load_text};
+use crate::support::fs::{atomic, check_permission, load_text};
 use crate::Error;
 use std::fs;
 use std::path::Path;
@@ -16,6 +16,10 @@ pub fn load_active_kid(member_id: &str, keystore_root: &Path) -> Result<Option<S
 
     if !active_path.exists() {
         return Ok(None);
+    }
+
+    if let Some(msg) = check_permission(&active_path) {
+        tracing::warn!("{}", msg);
     }
 
     let content = load_text(&active_path)?;
@@ -57,7 +61,7 @@ pub fn set_active_kid(member_id: &str, kid: &str, keystore_root: &Path) -> Resul
     let active_path = keystore_root.join(member_id).join("active");
 
     // Write kid to active file atomically (with trailing newline)
-    atomic::save_text(&active_path, &format!("{}\n", kid))
+    atomic::save_text_restricted(&active_path, &format!("{}\n", kid))
 }
 
 /// Clear the active kid for a member

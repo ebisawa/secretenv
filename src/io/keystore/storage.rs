@@ -8,7 +8,7 @@
 use crate::io::json::load_json_file;
 use crate::model::private_key::PrivateKey;
 use crate::model::public_key::PublicKey;
-use crate::support::fs::{atomic, ensure_dir, list_dir};
+use crate::support::fs::{atomic, check_permission, ensure_dir_restricted, list_dir};
 use crate::support::path::display_path_relative_to_cwd;
 use crate::{Error, Result};
 use std::fs;
@@ -30,8 +30,8 @@ fn save_key_pair_to_tmp(
     public_key: &PublicKey,
 ) -> Result<()> {
     let result: Result<()> = (|| {
-        atomic::save_json(&tmp_dir.join("private.json"), private_key)?;
-        atomic::save_json(&tmp_dir.join("public.json"), public_key)?;
+        atomic::save_json_restricted(&tmp_dir.join("private.json"), private_key)?;
+        atomic::save_json_restricted(&tmp_dir.join("public.json"), public_key)?;
         Ok(())
     })();
 
@@ -57,11 +57,11 @@ pub fn save_key_pair_atomic(
     public_key: &PublicKey,
 ) -> Result<()> {
     let member_dir = keystore_root.join(member_id);
-    ensure_dir(&member_dir)?;
+    ensure_dir_restricted(&member_dir)?;
 
     let tmp_name = format!(".tmp-{}", uuid::Uuid::new_v4());
     let tmp_dir = member_dir.join(&tmp_name);
-    ensure_dir(&tmp_dir)?;
+    ensure_dir_restricted(&tmp_dir)?;
 
     save_key_pair_to_tmp(&tmp_dir, private_key, public_key)?;
 
@@ -82,12 +82,21 @@ pub fn save_key_pair_atomic(
 /// Load PrivateKey from keystore
 pub fn load_private_key(keystore_root: &Path, member_id: &str, kid: &str) -> Result<PrivateKey> {
     let path = key_dir(keystore_root, member_id, kid).join("private.json");
+    if let Some(msg) = check_permission(&path) {
+        return Err(Error::Io {
+            message: msg,
+            source: None,
+        });
+    }
     load_json_file(&path, "private key")
 }
 
 /// Load PublicKey from keystore
 pub fn load_public_key(keystore_root: &Path, member_id: &str, kid: &str) -> Result<PublicKey> {
     let path = key_dir(keystore_root, member_id, kid).join("public.json");
+    if let Some(msg) = check_permission(&path) {
+        tracing::warn!("{}", msg);
+    }
     load_json_file(&path, "public key")
 }
 

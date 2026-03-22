@@ -71,3 +71,21 @@ fn test_with_file_lock_creates_parent_dir() {
     assert!(parent_dir.exists());
     assert!(file_path.exists());
 }
+
+#[cfg(unix)]
+#[test]
+fn test_lock_file_created_with_0600() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let temp_dir = TempDir::new().unwrap();
+    let file_path = temp_dir.path().join("test.toml");
+
+    with_file_lock(&file_path, || {
+        let lock_path = temp_dir.path().join(".test.toml.lock");
+        assert!(lock_path.exists());
+        let mode = fs::metadata(&lock_path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600);
+        Ok(())
+    })
+    .unwrap();
+}

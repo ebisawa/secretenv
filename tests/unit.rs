@@ -127,6 +127,8 @@ pub mod io_json_test;
 pub mod io_keystore_member_test;
 #[path = "unit/io_keystore_resolver_test.rs"]
 pub mod io_keystore_resolver_test;
+#[path = "unit/io_keystore_storage_permission_test.rs"]
+pub mod io_keystore_storage_permission_test;
 #[path = "unit/io_keystore_test.rs"]
 pub mod io_keystore_test;
 #[path = "unit/io_ssh_backend_test.rs"]
