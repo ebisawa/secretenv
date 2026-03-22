@@ -209,6 +209,25 @@ fn is_non_deterministic_signature_error(error: &Error) -> bool {
         .contains(NON_DETERMINISTIC_SIGNATURE_MESSAGE)
 }
 
+/// Find an SSH key candidate matching the given fingerprint.
+///
+/// Returns the first candidate whose fingerprint matches, or an error
+/// if no candidate matches.
+pub fn find_candidate_by_fingerprint<'a>(
+    candidates: &'a [SshKeyCandidate],
+    fingerprint: &str,
+) -> Result<&'a SshKeyCandidate> {
+    candidates
+        .iter()
+        .find(|c| c.fingerprint == fingerprint)
+        .ok_or_else(|| Error::NotFound {
+            message: format!(
+                "SSH key for active key ({fingerprint}) not found in ssh-agent. \
+                 Load it with ssh-add or specify with -i"
+            ),
+        })
+}
+
 /// Validate that SSH key type is Ed25519.
 fn validate_ssh_key_type(ssh_pub: &str) -> Result<()> {
     let key_type = ssh_pub.split_whitespace().next().unwrap_or("unknown");
