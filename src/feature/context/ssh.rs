@@ -37,6 +37,7 @@ pub struct SshSigningParams {
     pub signing_method: Option<SshSigner>,
     pub base_dir: Option<PathBuf>,
     pub verbose: bool,
+    pub check_determinism: bool,
 }
 
 /// Resolved SSH signing context.
@@ -113,7 +114,11 @@ pub fn build_ssh_signing_context(
         build_backend(signing_method, ssh_keygen, key_descriptor)
     };
 
-    let determinism = probe_determinism(backend.as_ref(), selected_pubkey, params.verbose)?;
+    let determinism = if params.check_determinism {
+        probe_determinism(backend.as_ref(), selected_pubkey, params.verbose)?
+    } else {
+        SshDeterminismStatus::Skipped
+    };
 
     Ok(SshSigningContext {
         signing_method,

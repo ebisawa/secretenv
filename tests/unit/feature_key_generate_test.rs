@@ -14,8 +14,11 @@ use crate::test_utils::{keygen_test, setup_test_keystore_from_fixtures};
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
 use ed25519_dalek::{SigningKey, VerifyingKey};
+use secretenv::config::types::SshSigner;
+use secretenv::feature::context::ssh::SshSigningContext;
 use secretenv::feature::key::generate::{
-    build_identity_keys, build_public_key, generate_keypairs, PublicKeyBuildParams,
+    build_identity_keys, build_public_key, generate_keypairs, KeyGenerationOptions,
+    PublicKeyBuildParams,
 };
 use secretenv::io::keystore::active::load_active_kid;
 use secretenv::io::keystore::resolver::KeystoreResolver;
@@ -26,6 +29,7 @@ use secretenv::io::ssh::protocol::constants::ATTESTATION_METHOD_SSH_SIGN;
 use secretenv::io::ssh::protocol::types::Ed25519RawSignature;
 use secretenv::model::identifiers::jwk::{CRV_ED25519, CRV_X25519};
 use secretenv::model::public_key::{Attestation, GithubAccount, Identity};
+use secretenv::model::ssh::SshDeterminismStatus;
 use tempfile::TempDir;
 use x25519_dalek::{PublicKey as X25519PublicKey, StaticSecret as X25519SecretKey};
 
@@ -509,4 +513,60 @@ fn test_load_signer_public_key_if_needed_no_signer_pub() {
         load_signer_public_key_if_needed(&keystore_root, ALICE_MEMBER_ID, kid, true).unwrap();
 
     assert!(result.is_none());
+}
+
+#[test]
+fn test_generate_key_rejects_skipped_determinism() {
+    let temp_dir = TempDir::new().unwrap();
+    let ssh_temp = TempDir::new().unwrap();
+    let (ssh_priv, _ssh_pub_path, ssh_pub_content) =
+        crate::test_utils::create_temp_ssh_keypair_in_dir(&ssh_temp);
+
+    let ssh_keygen =
+        secretenv::io::ssh::external::keygen::DefaultSshKeygen::new("ssh-keygen".to_string());
+    let descriptor =
+        secretenv::io::ssh::protocol::key_descriptor::SshKeyDescriptor::from_path(ssh_priv);
+    let backend: Box<dyn SignatureBackend> = Box::new(
+        secretenv::io::ssh::backend::ssh_keygen::SshKeygenBackend::new(
+            Box::new(ssh_keygen),
+            descriptor,
+        ),
+    );
+    let fingerprint =
+        secretenv::io::ssh::protocol::build_sha256_fingerprint(ssh_pub_content.trim()).unwrap();
+
+    let ssh_context = SshSigningContext {
+        signing_method: SshSigner::SshKeygen,
+        public_key: ssh_pub_content.trim().to_string(),
+        fingerprint,
+        backend,
+        determinism: SshDeterminismStatus::Skipped,
+    };
+
+    let now = time::OffsetDateTime::now_utc();
+    let created_at = secretenv::support::time::build_timestamp_display(now).unwrap();
+    let expires_at =
+        secretenv::support::time::build_timestamp_display(now + time::Duration::days(365)).unwrap();
+
+    let result = secretenv::feature::key::generate::generate_key(KeyGenerationOptions {
+        member_id: ALICE_MEMBER_ID.to_string(),
+        home: Some(temp_dir.path().to_path_buf()),
+        created_at,
+        expires_at,
+        no_activate: false,
+        debug: false,
+        github_account: None,
+        verbose: false,
+        ssh_context,
+    });
+
+    let err_msg = match result {
+        Ok(_) => panic!("generate_key must reject Skipped determinism"),
+        Err(e) => e.to_string(),
+    };
+    assert!(
+        err_msg.contains("determinism check was not performed"),
+        "Error should mention missing determinism check, got: {}",
+        err_msg
+    );
 }

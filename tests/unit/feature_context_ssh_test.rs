@@ -11,6 +11,7 @@ use secretenv::feature::context::ssh::{
 use secretenv::io::ssh::backend::signature_backend::SignatureBackend;
 use secretenv::io::ssh::backend::ssh_keygen::SshKeygenBackend;
 use secretenv::io::ssh::protocol::key_descriptor::SshKeyDescriptor;
+use secretenv::model::ssh::SshDeterminismStatus;
 
 #[test]
 fn test_resolve_and_build_ssh_signing_context_default() {
@@ -22,6 +23,7 @@ fn test_resolve_and_build_ssh_signing_context_default() {
         signing_method: Some(SshSigner::SshKeygen),
         base_dir: Some(temp_dir.path().to_path_buf()),
         verbose: false,
+        check_determinism: true,
     };
     let candidates = resolve_ssh_key_candidates(&params).unwrap();
     let ctx = build_ssh_signing_context(&params, &candidates[0].public_key).unwrap();
@@ -40,6 +42,7 @@ fn test_resolve_and_build_ssh_signing_context_verbose() {
         signing_method: Some(SshSigner::SshKeygen),
         base_dir: Some(temp_dir.path().to_path_buf()),
         verbose: true,
+        check_determinism: true,
     };
     let candidates = resolve_ssh_key_candidates(&params).unwrap();
     let ctx = build_ssh_signing_context(&params, &candidates[0].public_key).unwrap();
@@ -75,6 +78,7 @@ fn test_resolve_ssh_key_candidates_with_explicit_key() {
         signing_method: Some(SshSigner::SshKeygen),
         base_dir: Some(temp_dir.path().to_path_buf()),
         verbose: false,
+        check_determinism: true,
     };
 
     let candidates = resolve_ssh_key_candidates(&params).unwrap();
@@ -97,6 +101,7 @@ fn test_build_ssh_signing_context_from_selected_key() {
         signing_method: Some(SshSigner::SshKeygen),
         base_dir: Some(temp_dir.path().to_path_buf()),
         verbose: false,
+        check_determinism: true,
     };
 
     let ctx = build_ssh_signing_context(&params, ssh_pub).unwrap();
@@ -117,6 +122,7 @@ fn test_resolve_agent_with_explicit_key_loads_pubkey_from_file() {
         signing_method: Some(SshSigner::SshAgent),
         base_dir: Some(temp_dir.path().to_path_buf()),
         verbose: false,
+        check_determinism: true,
     };
 
     let candidates = resolve_ssh_key_candidates(&params).unwrap();
@@ -155,6 +161,7 @@ fn test_resolve_agent_with_explicit_nonexistent_key_fails() {
         signing_method: Some(SshSigner::SshAgent),
         base_dir: Some(temp_dir.path().to_path_buf()),
         verbose: false,
+        check_determinism: true,
     };
 
     let result = resolve_ssh_key_candidates(&params);
@@ -167,4 +174,44 @@ fn test_resolve_agent_with_explicit_nonexistent_key_fails() {
         "Expected 'does not exist' error, got: {}",
         msg
     );
+}
+
+#[test]
+fn test_build_ssh_signing_context_skips_determinism_check_when_disabled() {
+    let temp_dir = setup_test_keystore("test@example.com");
+    let ssh_key_path = temp_dir.path().join(".ssh").join("test_ed25519");
+    let ssh_pub =
+        std::fs::read_to_string(temp_dir.path().join(".ssh").join("test_ed25519.pub")).unwrap();
+    let ssh_pub = ssh_pub.trim();
+
+    let params = SshSigningParams {
+        ssh_key: Some(ssh_key_path),
+        signing_method: Some(SshSigner::SshKeygen),
+        base_dir: Some(temp_dir.path().to_path_buf()),
+        verbose: false,
+        check_determinism: false,
+    };
+
+    let ctx = build_ssh_signing_context(&params, ssh_pub).unwrap();
+    assert_eq!(ctx.determinism, SshDeterminismStatus::Skipped);
+}
+
+#[test]
+fn test_build_ssh_signing_context_checks_determinism_when_enabled() {
+    let temp_dir = setup_test_keystore("test@example.com");
+    let ssh_key_path = temp_dir.path().join(".ssh").join("test_ed25519");
+    let ssh_pub =
+        std::fs::read_to_string(temp_dir.path().join(".ssh").join("test_ed25519.pub")).unwrap();
+    let ssh_pub = ssh_pub.trim();
+
+    let params = SshSigningParams {
+        ssh_key: Some(ssh_key_path),
+        signing_method: Some(SshSigner::SshKeygen),
+        base_dir: Some(temp_dir.path().to_path_buf()),
+        verbose: false,
+        check_determinism: true,
+    };
+
+    let ctx = build_ssh_signing_context(&params, ssh_pub).unwrap();
+    assert_eq!(ctx.determinism, SshDeterminismStatus::Verified);
 }

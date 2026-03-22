@@ -103,12 +103,16 @@ impl ExecutionContext {
 }
 
 /// Build SshSigningParams from CommonCommandOptions.
+///
+/// Determinism check is disabled by default. Key generation commands
+/// should call `with_determinism_check` to enable it.
 pub fn build_ssh_signing_params(options: &CommonCommandOptions) -> SshSigningParams {
     SshSigningParams {
         ssh_key: options.identity.clone(),
         signing_method: options.ssh_signer,
         base_dir: options.home.clone(),
         verbose: options.verbose,
+        check_determinism: false,
     }
 }
 
@@ -122,8 +126,10 @@ pub fn resolve_ssh_key_candidates(options: &CommonCommandOptions) -> Result<Vec<
 pub fn build_ssh_signing_context(
     options: &CommonCommandOptions,
     selected_pubkey: &str,
+    check_determinism: bool,
 ) -> Result<SshSigningContext> {
-    let params = build_ssh_signing_params(options);
+    let mut params = build_ssh_signing_params(options);
+    params.check_determinism = check_determinism;
     feature_build_ssh_signing_context(&params, selected_pubkey)
 }
 
@@ -144,5 +150,5 @@ pub fn resolve_ssh_context_by_active_key(
 
     let candidates = resolve_ssh_key_candidates(options)?;
     let matched = find_candidate_by_fingerprint(&candidates, target_fpr)?;
-    build_ssh_signing_context(options, &matched.public_key)
+    build_ssh_signing_context(options, &matched.public_key, false)
 }

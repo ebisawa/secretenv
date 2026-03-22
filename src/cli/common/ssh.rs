@@ -11,14 +11,14 @@ use crate::cli::identity_prompt::select_ssh_key;
 use crate::Result;
 use tracing::debug;
 
-/// Run the 3-phase SSH signing context resolution.
+/// Run the 3-phase SSH signing context resolution for key generation.
 /// Phase 1: Discover key candidates (via app layer)
 /// Phase 2: Select key (auto for 1, interactive for multiple, error for 0)
-/// Phase 3: Build signing context (via app layer)
+/// Phase 3: Build signing context with determinism check (via app layer)
 pub fn resolve_ssh_context(options: &CommonCommandOptions) -> Result<SshSigningContext> {
     let candidates = resolve_ssh_key_candidates(options)?;
     let selected = select_ssh_key(&candidates)?;
-    build_ssh_signing_context(options, &candidates[selected].public_key)
+    build_ssh_signing_context(options, &candidates[selected].public_key, true)
 }
 
 /// Resolve SSH context using the active key's fingerprint.
