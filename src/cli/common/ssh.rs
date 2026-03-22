@@ -9,6 +9,7 @@ use crate::app::context::{
 };
 use crate::cli::identity_prompt::select_ssh_key;
 use crate::Result;
+use tracing::debug;
 
 /// Run the 3-phase SSH signing context resolution.
 /// Phase 1: Discover key candidates (via app layer)
@@ -26,8 +27,6 @@ pub fn resolve_ssh_context_for_active_key(
     options: &CommonCommandOptions,
 ) -> Result<SshSigningContext> {
     let ctx = resolve_ssh_context_by_active_key(options)?;
-    if options.verbose {
-        eprintln!("Using SSH key: {}", ctx.fingerprint);
-    }
+    debug!("[SSH] Using SSH key: {}", ctx.fingerprint);
     Ok(ctx)
 }

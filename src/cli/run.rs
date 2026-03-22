@@ -16,7 +16,7 @@ use clap::Args;
 use crate::app::context::CommonCommandOptions;
 use crate::app::run::execute_env_command;
 use crate::cli::common::options::CommonOptions;
-use crate::cli::common::ssh::resolve_ssh_context;
+use crate::cli::common::ssh::resolve_ssh_context_for_active_key;
 use crate::Result;
 
 #[derive(Args)]
@@ -40,7 +40,7 @@ pub struct RunArgs {
 
 pub fn run(args: RunArgs) -> Result<()> {
     let options = CommonCommandOptions::from(&args.common);
-    let ssh_ctx = resolve_ssh_context(&options)?;
+    let ssh_ctx = resolve_ssh_context_for_active_key(&options)?;
     let exit_code = execute_env_command(
         &options,
         args.member_id.clone(),

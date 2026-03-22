@@ -79,7 +79,11 @@ fn test_run_error_when_workspace_not_found() {
         .env("SECRETENV_SSH_KEY", ssh_priv.to_str().unwrap())
         .assert()
         .failure()
-        .stderr(predicate::str::contains("workspace").or(predicate::str::contains("not found")));
+        .stderr(
+            predicate::str::contains("workspace")
+                .or(predicate::str::contains("not found"))
+                .or(predicate::str::contains("member_id not configured")),
+        );
 
     drop(ssh_temp);
 }

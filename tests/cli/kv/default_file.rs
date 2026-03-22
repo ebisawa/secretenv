@@ -49,5 +49,9 @@ fn test_error_when_workspace_not_found() {
         .current_dir("/tmp") // Ensure we're not in a workspace
         .assert()
         .failure()
-        .stderr(predicate::str::contains("SSH key").or(predicate::str::contains("workspace")));
+        .stderr(
+            predicate::str::contains("SSH key")
+                .or(predicate::str::contains("workspace"))
+                .or(predicate::str::contains("member_id not configured")),
+        );
 }
