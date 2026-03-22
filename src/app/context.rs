@@ -6,13 +6,16 @@
 use crate::config::resolution::member_id::resolve_member_id;
 use crate::config::types::SshSigner;
 use crate::feature::context::crypto::CryptoContext;
+use crate::feature::context::ssh::find_candidate_by_fingerprint;
 pub use crate::feature::context::ssh::SshSigningContext;
 use crate::feature::context::ssh::{
     build_ssh_signing_context as feature_build_ssh_signing_context,
     resolve_ssh_key_candidates as feature_resolve_ssh_key_candidates, SshSigningParams,
 };
 use crate::io::config::paths::get_base_dir;
+use crate::io::keystore::active::load_active_kid;
 use crate::io::keystore::resolver::KeystoreResolver;
+use crate::io::keystore::storage::load_private_key;
 pub use crate::io::ssh::external::pubkey::SshKeyCandidate;
 use crate::io::workspace::detection::{resolve_optional_workspace, WorkspaceRoot};
 use crate::{Error, Result};
@@ -122,4 +125,24 @@ pub fn build_ssh_signing_context(
 ) -> Result<SshSigningContext> {
     let params = build_ssh_signing_params(options);
     feature_build_ssh_signing_context(&params, selected_pubkey)
+}
+
+/// Resolve SSH signing context by matching the active key's SSH fingerprint
+/// against ssh-agent candidates. No interactive selection.
+pub fn resolve_ssh_context_by_active_key(
+    options: &CommonCommandOptions,
+) -> Result<SshSigningContext> {
+    let base_dir = options.resolve_base_dir()?;
+    let member_id = resolve_member_id(None, Some(base_dir.as_path()))?;
+    let keystore_root = options.resolve_keystore_root()?;
+
+    let kid = load_active_kid(&member_id, &keystore_root)?.ok_or_else(|| Error::NotFound {
+        message: format!("No active key for member: {}", member_id),
+    })?;
+    let private_key = load_private_key(&keystore_root, &member_id, &kid)?;
+    let target_fpr = &private_key.protected.alg.fpr;
+
+    let candidates = resolve_ssh_key_candidates(options)?;
+    let matched = find_candidate_by_fingerprint(&candidates, target_fpr)?;
+    build_ssh_signing_context(options, &matched.public_key)
 }

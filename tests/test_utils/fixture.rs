@@ -286,6 +286,13 @@ pub fn setup_test_workspace(member_ids: &[&str]) -> (TempDir, PathBuf) {
         )
         .unwrap();
 
+        set_active_kid(
+            &public_key.protected.member_id,
+            &public_key.protected.kid,
+            &base_keystore,
+        )
+        .unwrap();
+
         save_public_key(
             &workspace_keystore,
             &public_key.protected.member_id,
@@ -298,6 +305,16 @@ pub fn setup_test_workspace(member_ids: &[&str]) -> (TempDir, PathBuf) {
         fs::write(
             &member_file,
             serde_json::to_string_pretty(&public_key).unwrap(),
+        )
+        .unwrap();
+    }
+
+    // Write config.toml with first member_id for auto-resolution
+    if let Some(first_member_id) = member_ids.first() {
+        let config_path = temp_dir.path().join("config.toml");
+        fs::write(
+            &config_path,
+            format!("member_id = \"{}\"\n", first_member_id),
         )
         .unwrap();
     }

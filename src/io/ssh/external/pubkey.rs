@@ -15,6 +15,7 @@ use std::path::Path;
 use std::process::Command;
 
 /// Candidate SSH key discovered from the agent or a file.
+#[derive(Debug)]
 pub struct SshKeyCandidate {
     /// Full public key line: "ssh-ed25519 AAAA... comment"
     pub public_key: String,

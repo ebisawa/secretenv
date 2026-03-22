@@ -127,7 +127,11 @@ fn test_set_without_workspace_fails() {
         .current_dir("/tmp")
         .assert()
         .failure()
-        .stderr(predicate::str::contains("SSH key").or(predicate::str::contains("workspace")));
+        .stderr(
+            predicate::str::contains("SSH key")
+                .or(predicate::str::contains("workspace"))
+                .or(predicate::str::contains("member_id not configured")),
+        );
 }
 
 #[test]

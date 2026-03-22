@@ -9,7 +9,7 @@ use crate::app::context::CommonCommandOptions;
 use crate::app::kv::import_kv_command;
 use crate::cli::common::options::CommonOptions;
 use crate::cli::common::output::json::print_json_output;
-use crate::cli::common::ssh::resolve_ssh_context;
+use crate::cli::common::ssh::resolve_ssh_context_for_active_key;
 use crate::support::fs::load_text;
 use crate::Result;
 
@@ -38,7 +38,7 @@ pub struct ImportArgs {
 pub fn run(args: ImportArgs) -> Result<()> {
     let content = load_text(std::path::Path::new(&args.filename))?;
     let options = CommonCommandOptions::from(&args.common);
-    let ssh_ctx = resolve_ssh_context(&options)?;
+    let ssh_ctx = resolve_ssh_context_for_active_key(&options)?;
     let (outcome, entry_count) = import_kv_command(
         options,
         args.member_id.clone(),
