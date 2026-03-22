@@ -19,15 +19,14 @@ pub use test_utils::keygen_helpers;
 #[path = "../tests/cli/common.rs"]
 pub mod cli_common;
 
-#[path = "unit/cli_identity_prompt_test.rs"]
-pub mod cli_identity_prompt_test;
-
 #[path = "unit/app_identity_test.rs"]
 pub mod app_identity_test;
 #[path = "unit/app_key_github_test.rs"]
 pub mod app_key_github_test;
 #[path = "unit/app_registration_test.rs"]
 pub mod app_registration_test;
+#[path = "unit/cli_identity_prompt_test.rs"]
+pub mod cli_identity_prompt_test;
 #[path = "unit/config_resolution_ssh_signer_test.rs"]
 pub mod config_resolution_ssh_signer_test;
 #[path = "unit/config_resolution_test.rs"]
