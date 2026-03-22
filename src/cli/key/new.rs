@@ -23,6 +23,8 @@ pub fn run(args: NewArgs) -> Result<()> {
     )?;
     let github_user =
         identity_prompt::resolve_github_user(args.github_user.clone(), options.home.as_deref())?;
+
+    eprintln!();
     let ssh_ctx = resolve_ssh_context(&options)?;
     let result = generate_key_command(
         &options,
@@ -39,6 +41,7 @@ pub fn run(args: NewArgs) -> Result<()> {
         &result.ssh_determinism,
         result.github_verification,
     )?;
+
     eprintln!();
     if result.activated {
         eprintln!("Generated and activated key for '{}':", result.member_id);

@@ -35,6 +35,8 @@ pub(crate) fn execute_registration_command(
     } else {
         None
     };
+
+    eprintln!();
     let ssh_ctx = if key_plan.requires_github_user() {
         Some(resolve_ssh_context(&options)?)
     } else {
