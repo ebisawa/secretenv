@@ -6,15 +6,14 @@
 use crate::test_utils::{setup_test_keystore, stub_ssh_keygen};
 use secretenv::config::types::SshSigner;
 use secretenv::feature::context::ssh::{
-    build_ssh_signing_context, resolve_ssh_key_candidates, resolve_ssh_signing_context,
-    SshSigningParams,
+    build_ssh_signing_context, resolve_ssh_key_candidates, SshSigningParams,
 };
 use secretenv::io::ssh::backend::signature_backend::SignatureBackend;
 use secretenv::io::ssh::backend::ssh_keygen::SshKeygenBackend;
 use secretenv::io::ssh::protocol::key_descriptor::SshKeyDescriptor;
 
 #[test]
-fn test_resolve_ssh_signing_context_default() {
+fn test_resolve_and_build_ssh_signing_context_default() {
     let temp_dir = setup_test_keystore("test@example.com");
     let ssh_key_path = temp_dir.path().join(".ssh").join("test_ed25519");
 
@@ -24,14 +23,15 @@ fn test_resolve_ssh_signing_context_default() {
         base_dir: Some(temp_dir.path().to_path_buf()),
         verbose: false,
     };
-    let ctx = resolve_ssh_signing_context(&params).unwrap();
+    let candidates = resolve_ssh_key_candidates(&params).unwrap();
+    let ctx = build_ssh_signing_context(&params, &candidates[0].public_key).unwrap();
 
     assert!(!ctx.public_key.is_empty());
     assert!(!ctx.fingerprint.is_empty());
 }
 
 #[test]
-fn test_resolve_ssh_signing_context_verbose() {
+fn test_resolve_and_build_ssh_signing_context_verbose() {
     let temp_dir = setup_test_keystore("test@example.com");
     let ssh_key_path = temp_dir.path().join(".ssh").join("test_ed25519");
 
@@ -41,7 +41,8 @@ fn test_resolve_ssh_signing_context_verbose() {
         base_dir: Some(temp_dir.path().to_path_buf()),
         verbose: true,
     };
-    let ctx = resolve_ssh_signing_context(&params).unwrap();
+    let candidates = resolve_ssh_key_candidates(&params).unwrap();
+    let ctx = build_ssh_signing_context(&params, &candidates[0].public_key).unwrap();
 
     assert!(!ctx.public_key.is_empty());
 }

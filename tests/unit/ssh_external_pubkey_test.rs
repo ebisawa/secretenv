@@ -6,8 +6,8 @@
 //! Tests for SSH public key retrieval utilities.
 
 use secretenv::io::ssh::external::pubkey::{
-    collect_ed25519_keys_in_output, find_ed25519_key_in_output, load_ed25519_keys_from_agent,
-    load_ssh_public_key_file, load_ssh_public_key_with_descriptor, SshKeyCandidate,
+    collect_ed25519_keys_in_output, load_ed25519_keys_from_agent, load_ssh_public_key_file,
+    load_ssh_public_key_with_descriptor, SshKeyCandidate,
 };
 use secretenv::io::ssh::external::traits::SshAdd;
 use secretenv::io::ssh::protocol::key_descriptor::SshKeyDescriptor;
@@ -228,20 +228,4 @@ fn test_ssh_key_candidate_fields() {
     assert_eq!(candidate.public_key, VALID_ED25519_KEY);
     assert_eq!(candidate.fingerprint, "SHA256:abc123");
     assert_eq!(candidate.comment, "test@example.com");
-}
-
-// --- Legacy tests (kept for backward compat until removal) ---
-
-#[test]
-fn test_find_ed25519_key_in_output() {
-    let output = "ssh-rsa AAAA rsa-key\nssh-ed25519 BBBB ed25519-key\n";
-    let result = find_ed25519_key_in_output(output).unwrap();
-    assert!(result.starts_with("ssh-ed25519"));
-}
-
-#[test]
-fn test_find_ed25519_key_in_output_not_found() {
-    let output = "ssh-rsa AAAA rsa-key\n";
-    let result = find_ed25519_key_in_output(output);
-    assert!(result.is_err());
 }

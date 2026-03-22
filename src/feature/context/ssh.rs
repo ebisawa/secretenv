@@ -3,9 +3,9 @@
 
 //! Unified SSH signing context resolution.
 //!
-//! Provides a single entry point (`resolve_ssh_signing_context`) for resolving
-//! all SSH signing configuration, replacing the previously duplicated logic in
-//! `cli/common/setup/ssh.rs` and `feature/key/ssh.rs`.
+//! Provides `resolve_ssh_key_candidates` to discover available SSH keys,
+//! and `build_ssh_signing_context` to build a signing context from a
+//! selected key.
 
 use crate::config::resolution::common::{resolve_ssh_add_path, resolve_ssh_keygen_path};
 use crate::config::resolution::ssh_key::{
@@ -122,17 +122,6 @@ pub fn build_ssh_signing_context(
         backend,
         determinism,
     })
-}
-
-/// Resolve a complete SSH signing context from the given parameters.
-///
-/// Temporary wrapper that resolves candidates and picks the first one.
-pub fn resolve_ssh_signing_context(params: &SshSigningParams) -> Result<SshSigningContext> {
-    let candidates = resolve_ssh_key_candidates(params)?;
-    let first = candidates.first().ok_or_else(|| Error::NotFound {
-        message: "No SSH Ed25519 keys found. Check ssh-agent or specify a key with -i.".to_string(),
-    })?;
-    build_ssh_signing_context(params, &first.public_key)
 }
 
 /// Resolve key descriptor, falling back to the config-resolved candidate path.

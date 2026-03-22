@@ -29,35 +29,6 @@ fn ssh_error(message: impl Into<String>) -> Error {
     SshError::operation_failed(message).into()
 }
 
-/// Load SSH public key from ssh-agent via the `SshAdd` trait.
-///
-/// Calls `ssh_add.list_keys()` and returns the first ssh-ed25519 key found.
-pub fn load_ssh_public_key_from_agent_with_ssh_add(ssh_add: &dyn SshAdd) -> Result<String> {
-    let output = ssh_add.list_keys()?;
-    find_ed25519_key_in_output(&output)
-}
-
-/// Find the first Ed25519 key in ssh-add output lines.
-pub fn find_ed25519_key_in_output(output: &str) -> Result<String> {
-    output
-        .lines()
-        .find(|line| {
-            line.split_whitespace()
-                .next()
-                .map(|key_type| key_type == ssh::KEY_TYPE_ED25519)
-                .unwrap_or(false)
-        })
-        .map(|line| line.trim().to_string())
-        .ok_or_else(|| {
-            ssh_error(format!(
-                "No {} key found in ssh-agent.\n\
-Check available keys: ssh-add -L\n\
-Ensure your SSH agent (e.g., 1Password) has an Ed25519 key available.",
-                ssh::KEY_TYPE_ED25519
-            ))
-        })
-}
-
 /// Load SSH public key in OpenSSH format from a private key file using a specific ssh-keygen path.
 pub fn load_ssh_public_key_from_keygen(
     ssh_keygen_path: &str,

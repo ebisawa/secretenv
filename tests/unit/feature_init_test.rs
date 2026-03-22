@@ -6,7 +6,9 @@
 use crate::cli_common::ALICE_MEMBER_ID;
 use crate::test_utils::setup_test_keystore_from_fixtures;
 use secretenv::config::types::SshSigner;
-use secretenv::feature::context::ssh::{resolve_ssh_signing_context, SshSigningParams};
+use secretenv::feature::context::ssh::{
+    build_ssh_signing_context, resolve_ssh_key_candidates, SshSigningParams,
+};
 use secretenv::feature::init::{
     ensure_key_exists, load_single_member_id_from_keystore, resolve_keystore_root,
     save_member_document,
@@ -189,13 +191,14 @@ fn test_ensure_key_exists_creates_new_key() {
         .expect("Failed to generate SSH key");
 
     // Ensure key exists (should create new key)
-    let ssh_context = resolve_ssh_signing_context(&SshSigningParams {
+    let params = SshSigningParams {
         ssh_key: Some(ssh_key_path.clone()),
         signing_method: Some(SshSigner::SshKeygen),
         base_dir: Some(home_dir.path().to_path_buf()),
         verbose: false,
-    })
-    .unwrap();
+    };
+    let candidates = resolve_ssh_key_candidates(&params).unwrap();
+    let ssh_context = build_ssh_signing_context(&params, &candidates[0].public_key).unwrap();
     let result = ensure_key_exists(
         member_id,
         &keystore_root,
@@ -242,13 +245,14 @@ fn test_ensure_key_exists_reuses_existing_key() {
         .expect("Failed to generate SSH key");
 
     // First call: create a new key
-    let ssh_context = resolve_ssh_signing_context(&SshSigningParams {
+    let params = SshSigningParams {
         ssh_key: Some(ssh_key_path.clone()),
         signing_method: Some(SshSigner::SshKeygen),
         base_dir: Some(home_dir.path().to_path_buf()),
         verbose: false,
-    })
-    .unwrap();
+    };
+    let candidates = resolve_ssh_key_candidates(&params).unwrap();
+    let ssh_context = build_ssh_signing_context(&params, &candidates[0].public_key).unwrap();
     let first_result = ensure_key_exists(
         member_id,
         &keystore_root,
@@ -262,13 +266,14 @@ fn test_ensure_key_exists_reuses_existing_key() {
     let first_kid = first_result.kid.clone();
 
     // Second call: should reuse existing key
-    let ssh_context2 = resolve_ssh_signing_context(&SshSigningParams {
+    let params2 = SshSigningParams {
         ssh_key: Some(ssh_key_path),
         signing_method: Some(SshSigner::SshKeygen),
         base_dir: Some(home_dir.path().to_path_buf()),
         verbose: false,
-    })
-    .unwrap();
+    };
+    let candidates2 = resolve_ssh_key_candidates(&params2).unwrap();
+    let ssh_context2 = build_ssh_signing_context(&params2, &candidates2[0].public_key).unwrap();
     let second_result = ensure_key_exists(
         member_id,
         &keystore_root,
