@@ -4,11 +4,18 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release (e.g. v1.2.3). Builds from the commit at this tag and creates a GitHub Release with the same name.'
+        required: true
+        type: string
 
 permissions: {}
 
 env:
   CARGO_TERM_COLOR: always
+  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
 
 jobs:
   build:
@@ -36,6 +43,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref }}
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -64,7 +73,7 @@ jobs:
       - name: Create archive
         shell: bash
         env:
-          TAG: ${{ github.ref_name }}
+          TAG: ${{ env.RELEASE_TAG }}
           TARGET: ${{ matrix.target }}
         run: |
           ARCHIVE="secretenv-${TAG}-${TARGET}.tar.gz"
@@ -102,6 +111,7 @@ jobs:
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ env.RELEASE_TAG }}
           files: |
             artifacts/secretenv-*.tar.gz
             artifacts/SHA256SUMS
@@ -113,7 +123,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions: {}
     env:
-      TAG: ${{ github.ref_name }}
+      TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
     steps:
       - name: Download SHA256SUMS
         run: |
@@ -135,7 +145,7 @@ jobs:
       - name: Update Formula
         uses: actions/github-script@v8
         env:
-          TAG: ${{ github.ref_name }}
+          TAG: ${{ env.RELEASE_TAG }}
           SHA256_LINUX_X86: ${{ env.SHA256_LINUX_X86 }}
           SHA256_LINUX_ARM: ${{ env.SHA256_LINUX_ARM }}
           SHA256_MACOS_ARM: ${{ env.SHA256_MACOS_ARM }}
