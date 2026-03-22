@@ -9,7 +9,7 @@
 
 use crate::config::resolution::common::{resolve_ssh_add_path, resolve_ssh_keygen_path};
 use crate::config::resolution::ssh_key::{
-    resolve_ssh_key_candidate, resolve_ssh_key_descriptor, SshKeySource,
+    resolve_ssh_key_candidate, resolve_ssh_key_descriptor, ResolvedSshKey, SshKeySource,
 };
 use crate::config::resolution::ssh_signer::{resolve_ssh_signer, resolve_ssh_signer_config};
 use crate::config::types::SshSigner;
@@ -154,7 +154,7 @@ fn resolve_key_descriptor_lenient(
 }
 
 /// Build a NotFound error for a non-existent explicit SSH key.
-fn build_not_found_error(candidate: &crate::config::resolution::ssh_key::ResolvedSshKey) -> Error {
+fn build_not_found_error(candidate: &ResolvedSshKey) -> Error {
     let source_str = match candidate.source {
         SshKeySource::Cli => "CLI option",
         SshKeySource::Env => "SECRETENV_SSH_KEY",
