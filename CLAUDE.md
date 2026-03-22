@@ -28,15 +28,19 @@ cargo fmt -- --check           # Check formatting
 
 ```
 cli -> app -> feature
-             -> io
-             -> format
-             -> model
+app -> io | format | model | config
+feature -> crypto | format | model | io | config
+format -> crypto | model | support
+crypto -> model | support
+config -> io | support
 ```
 
 - `cli` は `feature` / `io` に直接依存しない
 - `feature` は `cli` / `app` に依存しない
 - `app` は `cli` に依存しない
+- `io` は `feature` / `app` / `cli` に依存しない
 - `format` は `feature` に依存しない
+- `crypto` は `app` / `cli` に依存しない
 
 ### レイヤー責務
 
@@ -80,7 +84,7 @@ KV 暗号化: KV マップ → エントリごとに CEK で暗号化 → トー
 
 ## Reference Documents
 
-- `schemas/secretenv.schema.v3.json` — v3 JSON Schema
+- `schemas/secretenv_schema_v3.json` — v3 JSON Schema
 - `guides/product_brief_v3_en.md` / `guides/product_brief_v3_ja.md` — Product Brief (EN/JA)
 - `guides/security_design_v3_en.md` / `guides/security_design_v3_ja.md` — Security Design (EN/JA)
 - `guides/user_guide_en.md` / `guides/user_guide_ja.md` — User Guide (EN/JA)
