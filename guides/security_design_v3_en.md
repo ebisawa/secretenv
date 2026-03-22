@@ -300,25 +300,9 @@ CEK independence ── HKDF PRF security ── Cryptographic independence betw
 
 ### 3.8 Nonce Safety Margin
 
-XChaCha20-Poly1305 uses a 24-byte (192-bit) nonce. The collision probability of random nonces is evaluated with the birthday bound.
+XChaCha20-Poly1305 uses a 24-byte (192-bit) nonce. In SecretEnv's design, there are no cases where the same symmetric key is used for multiple encryptions. DEK (file-enc), CEK (kv-enc entry), and enc_key (PrivateKey protection) are each uniquely generated or derived per encryption, so the risk of nonce collision is structurally eliminated.
 
-**Collision probability calculation:**
-
-For `q` encryptions with the same key:
-
-```
-P(collision) ≈ q² / (2 × 2¹⁹²) = q² / 2¹⁹³
-```
-
-Safety margin in SecretEnv's usage pattern:
-
-| Scenario | Number of encryptions `q` with same key | Collision probability | Safety margin |
-|----------|----------------------------------------|-----------------------|--------------|
-| file-enc (DEK is unique per file) | 1 | 0 | ∞ (no nonce reuse) |
-| kv-enc entry (CEK is unique per entry) | 1 | 0 | ∞ (no nonce reuse) |
-| PrivateKey protection (enc_key is unique per salt) | 1 | 0 | ∞ (no nonce reuse) |
-
-**Conclusion:** In SecretEnv's design, there are no cases where the same symmetric key is used for multiple encryptions. DEK / CEK / enc_key are each generated or derived uniquely, so the risk of nonce collision is structurally eliminated. The choice of 24-byte nonce serves as a safety net in case future design changes introduce same-key reuse.
+The choice of 192-bit nonce space serves as a safety net in case future design changes introduce same-key reuse.
 
 ---
 
@@ -356,6 +340,16 @@ graph TB
     style CEK fill:#90EE90
 ```
 
+This diagram intentionally separates the SSH key from the SecretEnv key pair.
+
+- The **SSH key** is an external authentication key already owned by the user; it does not directly encrypt or sign SecretEnv workspace payloads
+- The **SecretEnv key pair** is the application-specific key material used for encryption, decryption, signing, and verification inside the workspace
+- The SSH key has only two roles
+  - **attestation**: show which SSH key backs a SecretEnv public key
+  - **PrivateKey protection**: derive the `enc_key` used to unlock the SecretEnv private key stored in the local keystore
+
+Therefore, the SSH key is not the SecretEnv key pair itself. It is an outer key used to support provenance checks and local protection of the SecretEnv key pair.
+
 ### 4.2 Key Parameter Summary
 
 | Key type | Size | Generation method | Purpose | Zeroization required |
@@ -369,6 +363,12 @@ graph TB
 | MK (Master Key) | 32 bytes | CSPRNG | CEK derivation source for kv-enc | MUST |
 | CEK (Content Encryption Key) | 32 bytes | Derived via HKDF-SHA256 | kv-enc entry encryption | MUST |
 | enc_key (for PrivateKey protection) | 32 bytes | Derived via HKDF-SHA256 | PrivateKey AEAD encryption | MUST |
+
+Notes:
+
+- `enc_key` is not a stored or pre-existing key; it is a transient symmetric key derived from SSH signing output each time
+- The same SSH key can protect multiple SecretEnv key generations, but different `kid` / `salt` values produce different `enc_key` values
+- The `private.json` stored in the local keystore contains only the ciphertext of SecretEnv private key material; the SSH private key itself remains outside SecretEnv storage
 
 ### 4.3 Key Lifecycle
 
@@ -565,8 +565,6 @@ HPKE internally passes info to the KDF and AAD to the AEAD. By making them ident
 - The info layer defends against bypass attacks at the AEAD stage
 - Defence-in-depth is achieved
 
-Implementation: `src/feature/envelope/wrap.rs:62` — `Aad::from(info.as_bytes())`
-
 ### 5.4 Payload Encryption
 
 ```
@@ -583,8 +581,6 @@ ct = XChaCha20Poly1305.Encrypt(DEK, nonce, aad, plaintext)
 // store nonce and ct in payload.encrypted
 payload.encrypted = { "nonce": b64url(nonce), "ct": b64url(ct) }
 ```
-
-Implementation: `src/format/context/aad.rs:42-46` — `file_payload` function
 
 ### 5.5 Decryption Flow
 
@@ -693,8 +689,6 @@ CEK = HKDF-SHA256(
 )
 ```
 
-Implementation: `src/feature/envelope/cek.rs:27` — `derive_cek` function
-
 Including `sid` in info means that even if an entry is copied between different files, a different CEK is derived, causing decryption to fail.
 
 ### 6.3 Entry AAD
@@ -706,8 +700,6 @@ aad = jcs({
     "sid": <HEAD.sid>
 })
 ```
-
-Implementation: `src/format/context/aad.rs:28-35` — `kv_payload` function
 
 **Design decisions:**
 - Include `k` → prevents entry swapping within the same file
@@ -728,8 +720,6 @@ aad_bytes = info_bytes   // defence-in-depth: same policy as file-enc
 ```
 
 As with file-enc (§5.3), the same bytes are used for HPKE info and AAD. This ensures binding at both the KDF stage and the AEAD stage in kv-enc wraps as well, achieving defence-in-depth.
-
-Implementation: `src/feature/envelope/wrap.rs:61-62` — `build_wrap_item` function (shared by file-enc / kv-enc)
 
 ### 6.5 Partial Decryption (get / set)
 
@@ -758,6 +748,31 @@ The `disclosed` flag makes visible the entries that may have been disclosed to t
 
 SecretEnv's PrivateKey (KEM private key + signing private key) is encrypted and protected using the user's existing SSH Ed25519 key. This eliminates the need for password management specific to SecretEnv.
 
+What is protected here is the SecretEnv private key stored in the local keystore. The SSH key does not directly decrypt workspace secrets. Instead, it first unlocks the SecretEnv private key in the local keystore, and the recovered SecretEnv private key is then used for HPKE unwrap and Ed25519 signing.
+
+### 7.1.1 Relationship Between the SSH Key and the SecretEnv Key Pair
+
+- The SSH key is an **existing user-owned authentication key** outside SecretEnv
+- The SecretEnv key pair is an **application-specific key pair** managed per `kid`
+- On the PublicKey side, the SSH key appears in attestation, showing which SSH key is bound to the SecretEnv key pair
+- On the PrivateKey side, the same SSH key protects the encrypted SecretEnv private key stored in the local keystore
+
+Therefore, the SSH key and the SecretEnv key pair are not fused into a single key. One SSH key may protect multiple generations of SecretEnv keys, while the actual file-enc / kv-enc cryptographic operations are performed by the SecretEnv key pair after it has been decrypted.
+
+### 7.1.2 What Is Stored in the local keystore
+
+Each key-generation directory in the local keystore contains two files.
+
+- `public.json`: a PublicKey document that can be distributed to the workspace
+- `private.json`: an encrypted SecretEnv private key document
+
+`private.json` itself has two layers.
+
+- `protected`: header fields such as `member_id`, `kid`, `alg.fpr`, `alg.salt`, `created_at`, and `expires_at`; these define the decryption conditions and tamper-detection scope
+- `encrypted`: the ciphertext containing the actual SecretEnv private key material
+
+Here `alg.fpr` is only an identifier for the SSH key used to protect that key generation. It is not the SSH private key itself.
+
 ### 7.2 Key Derivation Pipeline
 
 ```mermaid
@@ -784,8 +799,6 @@ secretenv:key-protection@3
 
 Each line is separated by LF (`0x0A`). Since `member_id` is an arbitrary string, it is not used for cryptographic purposes; only `kid` (ULID) is used.
 
-Implementation: `src/feature/key/protection/key_derivation.rs:22-29` — `build_sign_message` function
-
 ### 7.4 SSHSIG signed_data
 
 SSH signatures conform to the SSHSIG format:
@@ -809,7 +822,7 @@ enc_key = HKDF-SHA256(
 )
 ```
 
-Implementation: `src/feature/key/protection/key_derivation.rs` (builds `info`) and `expand_to_array` in `src/crypto/kdf.rs`
+This `enc_key` is not a stored fixed key. It is re-derived from the same SSH signing capability during both encryption and decryption.
 
 ### 7.6 Determinism Check
 
@@ -821,6 +834,17 @@ Ed25519 (RFC 8032 PureEdDSA) generates deterministic signatures by specification
 
 **Reason:** Non-deterministic signatures would derive different IKM at encryption and decryption time, making **decryption impossible**.
 
+### 7.6.1 Conditions for Successful Decryption
+
+To decrypt `private.json` in the local keystore, all of the following conditions must hold.
+
+1. The SSH key corresponding to `protected.alg.fpr` must be usable
+2. That SSH key must produce deterministic signatures for identical input
+3. The sign message must be reconstructible from `protected.alg.salt` and `kid`
+4. `protected` must be untampered so that AAD verification over `jcs(protected)` succeeds
+
+Conversely, an attacker does not necessarily need to steal the SSH private key file itself; any actor with equivalent signing capability can derive `enc_key`.
+
 ### 7.7 AAD
 
 ```
@@ -829,7 +853,18 @@ aad = jcs(protected)
 
 Using the JCS-canonicalized bytes of the entire `protected` object as AAD means that `format`, `member_id`, `kid`, `alg`, `created_at`, and `expires_at` are all subject to tamper detection. Notably, including `expires_at` in AAD detects tampering with the expiration date.
 
-Implementation: `src/format/context/aad.rs:52-56` — `private_key` function
+### 7.7.1 How to Read the Decryption Flow
+
+The high-level local keystore protection flow is:
+
+1. Load `private.json`
+2. Read `kid`, `salt`, and the SSH key fingerprint from `protected`
+3. Rebuild the sign message from `kid + salt`
+4. Ask the SSH key to sign and extract raw Ed25519 signature bytes as IKM
+5. Derive `enc_key` via HKDF
+6. Decrypt the ciphertext using `jcs(protected)` as AAD
+
+This means the SSH key is both an authentication mechanism for local keystore access and, in practice, the source of decryption capability.
 
 ### 7.8 Trust Assumptions
 
@@ -847,6 +882,8 @@ Since PrivateKey protection derives IKM from SSH signatures, **any entity that c
 **Note on ssh-agent forwarding**: In environments with agent forwarding enabled, processes on the remote host can send signing requests to the local ssh-agent. This allows administrators or malware on the remote host to decrypt the PrivateKey. Disabling agent forwarding is recommended in environments using SecretEnv.
 
 **Clarifying design intent**: The equivalence between SSH signing capability and PrivateKey decryption capability is an intentional design decision. SecretEnv uses the existing SSH authentication infrastructure as a trust anchor for cryptographic key protection, eliminating the need for additional password or master key management. This tradeoff means that the SSH key's protection level becomes the upper bound of SecretEnv's secret protection level. Therefore, proper SSH key management (setting passphrases, restricting agent forwarding, considering hardware token use) is essential to SecretEnv's security.
+
+Operationally, local keystore file permissions and SSH key handling must not be treated as separate concerns. Even if `private.json` has safe filesystem permissions, any actor on the same host that can freely use the SSH key or agent socket can ultimately decrypt the SecretEnv private key as well.
 
 ---
 
@@ -883,8 +920,6 @@ signature = ed25519_sign(sig_priv, canonical_bytes)
 - `wrap`, `payload`, and `removed_recipients` are all contained within `protected` and therefore protected by the signature
 - The `signature` field is not included in the signed data
 
-Implementation: `src/crypto/sign.rs:40-56` — `sign_bytes` function
-
 ### 8.3 kv-enc Signature
 
 canonical_bytes construction procedure:
@@ -908,8 +943,6 @@ DATABASE_URL <token>\n  ← field separator: space (0x20), line terminator: LF
 canonical_bytes = concat_lines_with_lf(all_lines_except_SIG)
 signature = ed25519_sign(sig_priv, canonical_bytes)
 ```
-
-Implementation: `src/format/kv/enc/canonical.rs` — `build_canonical_bytes` function, `src/crypto/sign.rs:126-133` — `sign_kv` function
 
 ### 8.4 PublicKey Self-Signature
 
@@ -999,19 +1032,6 @@ Recipient integrity is protected by **Ed25519 signatures** (wraps are contained 
 | `p` | all protocols | **included** | **included** | **included** | **included** | — | Reusing data across different protocols |
 
 **Note on the HPKE AAD column** — For both file-enc and kv-enc, HPKE AAD = HPKE info (same bytes). This applies the same binding at both the KDF stage and the AEAD stage (see §9.3).
-
-### 9.6 Implementation Mapping
-
-| Binding construction | Source file | Function |
-|---------------------|-------------|---------|
-| file-enc HPKE info | `src/format/context/hpke_info.rs` | `file()` |
-| kv-enc HPKE info | `src/format/context/hpke_info.rs` | `kv_file()` |
-| HPKE AAD = info (shared) | `src/feature/envelope/wrap.rs` | `build_wrap_item()` |
-| file-enc payload AAD | `src/format/context/aad.rs` | `file_payload()` |
-| kv-enc payload AAD | `src/format/context/aad.rs` | `kv_payload()` |
-| CEK derivation info | `src/feature/envelope/cek.rs` | `derive_cek()` |
-| PrivateKey AAD | `src/format/context/aad.rs` | `private_key()` |
-| Identifier constants | `src/support/wire.rs` | `context` module |
 
 ---
 
@@ -1107,7 +1127,7 @@ Recipient integrity is protected by **Ed25519 signatures** (wraps are contained 
 | DEK / MK / CEK | Zeroize after use (MUST) | `Zeroizing` wrapper / `Cek::new` |
 | Decrypted plaintext | Zeroize after use (SHOULD) | `Zeroizing<Plaintext>` |
 
-Implementation example: `src/crypto/kem.rs:21` — `X25519SecretKey(Zeroizing<[u8; 32]>)`
+As a representative implementation technique, secret keys and decrypted plaintext are erased on scope exit by zeroizing wrappers.
 
 ### 11.2 DoS Limits
 
@@ -1413,4 +1433,3 @@ graph TB
     style MK fill:#FFE4B5
     style CEK fill:#90EE90
 ```
-

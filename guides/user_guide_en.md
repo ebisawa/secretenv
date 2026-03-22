@@ -193,7 +193,7 @@ secretenv verifies "is this public key really from this person?" through multipl
 ```
 [Trusted (secure)]
   Local machine
-  ~/.config/secretenv/keys/  ← private key storage
+  ~/.config/secretenv/keys/  ← local keystore
   SSH Ed25519 private key
 
 [Workspace (potentially tampered)]
@@ -203,6 +203,15 @@ secretenv verifies "is this public key really from this person?" through multipl
 [External systems (optional)]
   GitHub API                 ← used only for online verification
 ```
+
+### Role of the SSH Key
+
+In secretenv, the SSH key is not the key that directly decrypts workspace secrets. It has two roles:
+
+1. Protect the secretenv private key stored locally under `~/.config/secretenv/keys/`
+2. Through attestation, show which SSH key backs that secretenv key
+
+The key that actually decrypts and signs file-enc / kv-enc data is the secretenv private key after it has been unlocked locally. Think of the SSH key as the outer key that makes the local secretenv private key usable.
 
 ---
 
