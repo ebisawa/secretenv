@@ -16,9 +16,7 @@ use crate::feature::key::manage::{activate_key, export_key, list_keys, remove_ke
 use crate::io::keystore::storage;
 use crate::{Error, Result};
 use export::save_exported_public_key;
-pub(crate) use github::{
-    resolve_github_account, verify_generated_key_github_binding, verify_preflight_github_binding,
-};
+pub(crate) use github::{resolve_github_account, verify_preflight_github_binding};
 use timestamp::resolve_key_timestamps;
 pub use types::{
     KeyActivateResult, KeyExportResult, KeyInfo, KeyListResult, KeyNewResult, KeyRemoveResult,
