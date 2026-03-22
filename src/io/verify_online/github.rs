@@ -20,6 +20,7 @@ use super::VerificationResult;
 mod http;
 mod matcher;
 mod policy;
+pub mod preflight;
 
 /// SSH key metadata fetched from GitHub.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -37,7 +38,7 @@ pub trait GitHubApi {
     fn fetch_keys<'a>(&'a self, login: &'a str) -> GitHubApiFuture<'a, Vec<GitHubKeyRecord>>;
 }
 
-struct GitHubApiClient {
+pub(super) struct GitHubApiClient {
     client: reqwest::Client,
 }
 
