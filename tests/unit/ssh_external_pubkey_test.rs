@@ -6,22 +6,72 @@
 //! Tests for SSH public key retrieval utilities.
 
 use secretenv::io::ssh::external::pubkey::{
-    find_ed25519_key_in_output, load_ssh_public_key_file, load_ssh_public_key_with_descriptor,
+    collect_ed25519_keys_in_output, find_ed25519_key_in_output, load_ed25519_keys_from_agent,
+    load_ssh_public_key_file, load_ssh_public_key_with_descriptor, SshKeyCandidate,
 };
+use secretenv::io::ssh::external::traits::SshAdd;
 use secretenv::io::ssh::protocol::key_descriptor::SshKeyDescriptor;
+use secretenv::Result;
 use std::path::PathBuf;
 use tempfile::TempDir;
+
+// Valid Ed25519 public key for testing
+const VALID_ED25519_KEY: &str =
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA test@example.com";
+
+const VALID_ED25519_KEY_NO_COMMENT: &str =
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+
+// A second distinct Ed25519 key (different base64 data)
+const VALID_ED25519_KEY_2: &str =
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBb second@host";
+
+const RSA_KEY: &str = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQ rsa-key@host";
+
+// --- Mock SshAdd ---
+
+struct MockSshAdd {
+    output: Result<String>,
+}
+
+impl MockSshAdd {
+    fn ok(output: &str) -> Self {
+        Self {
+            output: Ok(output.to_string()),
+        }
+    }
+
+    fn err(message: &str) -> Self {
+        Self {
+            output: Err(secretenv::Error::from(
+                secretenv::io::ssh::SshError::operation_failed(message),
+            )),
+        }
+    }
+}
+
+impl SshAdd for MockSshAdd {
+    fn list_keys(&self) -> Result<String> {
+        match &self.output {
+            Ok(s) => Ok(s.clone()),
+            Err(e) => Err(secretenv::Error::from(
+                secretenv::io::ssh::SshError::operation_failed(e.to_string()),
+            )),
+        }
+    }
+}
+
+// --- Tests for existing functions (kept) ---
 
 #[test]
 fn test_load_ssh_public_key_file_valid_ed25519() {
     let temp_dir = TempDir::new().unwrap();
     let pub_path = temp_dir.path().join("test.pub");
 
-    let valid_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA test@example.com";
-    std::fs::write(&pub_path, format!("{}\n", valid_key)).unwrap();
+    std::fs::write(&pub_path, format!("{}\n", VALID_ED25519_KEY)).unwrap();
 
     let result = load_ssh_public_key_file(&pub_path).unwrap();
-    assert_eq!(result, valid_key);
+    assert_eq!(result, VALID_ED25519_KEY);
 }
 
 #[test]
@@ -29,8 +79,7 @@ fn test_load_ssh_public_key_file_invalid_key_type() {
     let temp_dir = TempDir::new().unwrap();
     let pub_path = temp_dir.path().join("test.pub");
 
-    let rsa_key = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQ test@example.com";
-    std::fs::write(&pub_path, rsa_key).unwrap();
+    std::fs::write(&pub_path, RSA_KEY).unwrap();
 
     let result = load_ssh_public_key_file(&pub_path);
     assert!(result.is_err());
@@ -68,15 +117,120 @@ fn test_load_ssh_public_key_with_descriptor_public_key() {
     let temp_dir = TempDir::new().unwrap();
     let pub_path = temp_dir.path().join("test.pub");
 
-    let valid_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA test@example.com";
-    std::fs::write(&pub_path, format!("{}\n", valid_key)).unwrap();
+    std::fs::write(&pub_path, format!("{}\n", VALID_ED25519_KEY)).unwrap();
 
     let descriptor = SshKeyDescriptor::from_path(pub_path);
 
     // ssh-keygen path is not used when .pub file is provided
     let result = load_ssh_public_key_with_descriptor("unused-ssh-keygen", &descriptor).unwrap();
-    assert_eq!(result, valid_key);
+    assert_eq!(result, VALID_ED25519_KEY);
 }
+
+// --- Tests for collect_ed25519_keys_in_output ---
+
+#[test]
+fn test_collect_ed25519_keys_in_output_single_key() {
+    let output = format!("{}\n", VALID_ED25519_KEY);
+    let keys = collect_ed25519_keys_in_output(&output);
+    assert_eq!(keys.len(), 1);
+    assert_eq!(keys[0], VALID_ED25519_KEY);
+}
+
+#[test]
+fn test_collect_ed25519_keys_in_output_multiple_mixed() {
+    let output = format!(
+        "{}\n{}\n{}\n",
+        RSA_KEY, VALID_ED25519_KEY, VALID_ED25519_KEY_2
+    );
+    let keys = collect_ed25519_keys_in_output(&output);
+    assert_eq!(keys.len(), 2);
+    assert_eq!(keys[0], VALID_ED25519_KEY);
+    assert_eq!(keys[1], VALID_ED25519_KEY_2);
+}
+
+#[test]
+fn test_collect_ed25519_keys_in_output_no_ed25519() {
+    let output = format!("{}\n", RSA_KEY);
+    let keys = collect_ed25519_keys_in_output(&output);
+    assert!(keys.is_empty());
+}
+
+#[test]
+fn test_collect_ed25519_keys_in_output_empty() {
+    let keys = collect_ed25519_keys_in_output("");
+    assert!(keys.is_empty());
+}
+
+// --- Tests for load_ed25519_keys_from_agent ---
+
+#[test]
+fn test_load_ed25519_keys_from_agent_single_key() {
+    let mock = MockSshAdd::ok(VALID_ED25519_KEY);
+    let candidates = load_ed25519_keys_from_agent(&mock).unwrap();
+    assert_eq!(candidates.len(), 1);
+    assert_eq!(candidates[0].public_key, VALID_ED25519_KEY);
+    assert_eq!(candidates[0].comment, "test@example.com");
+    assert!(candidates[0].fingerprint.starts_with("SHA256:"));
+}
+
+#[test]
+fn test_load_ed25519_keys_from_agent_multiple_mixed() {
+    let output = format!(
+        "{}\n{}\n{}\n",
+        RSA_KEY, VALID_ED25519_KEY, VALID_ED25519_KEY_2
+    );
+    let mock = MockSshAdd::ok(&output);
+    let candidates = load_ed25519_keys_from_agent(&mock).unwrap();
+    assert_eq!(candidates.len(), 2);
+    assert_eq!(candidates[0].comment, "test@example.com");
+    assert_eq!(candidates[1].comment, "second@host");
+}
+
+#[test]
+fn test_load_ed25519_keys_from_agent_no_ed25519() {
+    let mock = MockSshAdd::ok(RSA_KEY);
+    let candidates = load_ed25519_keys_from_agent(&mock).unwrap();
+    assert!(candidates.is_empty());
+}
+
+#[test]
+fn test_load_ed25519_keys_from_agent_empty_output() {
+    let mock = MockSshAdd::ok("");
+    let candidates = load_ed25519_keys_from_agent(&mock).unwrap();
+    assert!(candidates.is_empty());
+}
+
+#[test]
+fn test_load_ed25519_keys_from_agent_empty_comment() {
+    let mock = MockSshAdd::ok(VALID_ED25519_KEY_NO_COMMENT);
+    let candidates = load_ed25519_keys_from_agent(&mock).unwrap();
+    assert_eq!(candidates.len(), 1);
+    assert_eq!(candidates[0].comment, "");
+    assert!(candidates[0].fingerprint.starts_with("SHA256:"));
+}
+
+#[test]
+fn test_load_ed25519_keys_from_agent_error() {
+    let mock = MockSshAdd::err("agent not running");
+    let result = load_ed25519_keys_from_agent(&mock);
+    assert!(result.is_err());
+}
+
+// --- Tests for SshKeyCandidate ---
+
+#[test]
+fn test_ssh_key_candidate_fields() {
+    let candidate = SshKeyCandidate {
+        public_key: VALID_ED25519_KEY.to_string(),
+        fingerprint: "SHA256:abc123".to_string(),
+        comment: "test@example.com".to_string(),
+    };
+    assert_eq!(candidate.public_key, VALID_ED25519_KEY);
+    assert_eq!(candidate.fingerprint, "SHA256:abc123");
+    assert_eq!(candidate.comment, "test@example.com");
+}
+
+// --- Legacy tests (kept for backward compat until removal) ---
 
 #[test]
 fn test_find_ed25519_key_in_output() {
