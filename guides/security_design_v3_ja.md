@@ -300,25 +300,9 @@ CEK 独立性 ── HKDF PRF 安全性 ── entry 間の暗号学的独立
 
 ### 3.8 nonce 安全性マージン
 
-XChaCha20-Poly1305 は 24-byte (192-bit) nonce を使用する。ランダム nonce の衝突確率を birthday bound で評価する。
+XChaCha20-Poly1305 は 24-byte (192-bit) nonce を使用する。SecretEnv の設計では、同一の対称鍵で複数回の暗号化を行うケースが存在しない。DEK（file-enc）・CEK（kv-enc entry）・enc_key（PrivateKey 保護）はそれぞれ暗号化ごとに一意に生成または導出されるため、nonce 衝突のリスクは構造的に排除されている。
 
-**衝突確率の計算:**
-
-同一鍵で `q` 回の暗号化を行った場合の衝突確率:
-
-```
-P(collision) ≈ q² / (2 × 2¹⁹²) = q² / 2¹⁹³
-```
-
-SecretEnv の使用パターンにおける安全性マージン:
-
-| シナリオ | 同一鍵での暗号化回数 `q` | 衝突確率 | 安全性マージン |
-|---------|------------------------|---------|-------------|
-| file-enc（DEK はファイルごとに一意） | 1 | 0 | ∞（nonce reuse なし） |
-| kv-enc entry（CEK は entry ごとに一意） | 1 | 0 | ∞（nonce reuse なし） |
-| PrivateKey 保護（enc_key は salt ごとに一意） | 1 | 0 | ∞（nonce reuse なし） |
-
-**結論:** SecretEnv の設計では、同一の対称鍵で複数回の暗号化を行うケースが存在しない。DEK / CEK / enc_key はそれぞれ一意に生成または導出されるため、nonce 衝突のリスクは構造的に排除されている。24-byte nonce の選択は、将来の設計変更で同一鍵の再利用が発生した場合の安全弁として機能する。
+192-bit nonce 空間の選択は、将来の設計変更で同一鍵の再利用が発生した場合の安全弁として機能する。
 
 ---
 

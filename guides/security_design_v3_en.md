@@ -300,25 +300,9 @@ CEK independence ── HKDF PRF security ── Cryptographic independence betw
 
 ### 3.8 Nonce Safety Margin
 
-XChaCha20-Poly1305 uses a 24-byte (192-bit) nonce. The collision probability of random nonces is evaluated with the birthday bound.
+XChaCha20-Poly1305 uses a 24-byte (192-bit) nonce. In SecretEnv's design, there are no cases where the same symmetric key is used for multiple encryptions. DEK (file-enc), CEK (kv-enc entry), and enc_key (PrivateKey protection) are each uniquely generated or derived per encryption, so the risk of nonce collision is structurally eliminated.
 
-**Collision probability calculation:**
-
-For `q` encryptions with the same key:
-
-```
-P(collision) ≈ q² / (2 × 2¹⁹²) = q² / 2¹⁹³
-```
-
-Safety margin in SecretEnv's usage pattern:
-
-| Scenario | Number of encryptions `q` with same key | Collision probability | Safety margin |
-|----------|----------------------------------------|-----------------------|--------------|
-| file-enc (DEK is unique per file) | 1 | 0 | ∞ (no nonce reuse) |
-| kv-enc entry (CEK is unique per entry) | 1 | 0 | ∞ (no nonce reuse) |
-| PrivateKey protection (enc_key is unique per salt) | 1 | 0 | ∞ (no nonce reuse) |
-
-**Conclusion:** In SecretEnv's design, there are no cases where the same symmetric key is used for multiple encryptions. DEK / CEK / enc_key are each generated or derived uniquely, so the risk of nonce collision is structurally eliminated. The choice of 24-byte nonce serves as a safety net in case future design changes introduce same-key reuse.
+The choice of 192-bit nonce space serves as a safety net in case future design changes introduce same-key reuse.
 
 ---
 
