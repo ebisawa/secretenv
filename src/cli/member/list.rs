@@ -13,8 +13,12 @@ pub(crate) fn run(args: ListArgs) -> Result<(), Error> {
     let result = list_members(&options)?;
     let active = result.active;
     let incoming = result.incoming;
+    let warnings = result.warnings;
 
     if active.is_empty() && incoming.is_empty() {
+        for warning in &warnings {
+            eprintln!("Warning: {}", warning);
+        }
         if args.common.json {
             println!("{{\"active\":[],\"incoming\":[]}}");
         } else {
@@ -42,6 +46,10 @@ pub(crate) fn run(args: ListArgs) -> Result<(), Error> {
                 println!("  {}", member.member_id);
             }
         }
+    }
+
+    for warning in &warnings {
+        eprintln!("Warning: {}", warning);
     }
 
     Ok(())

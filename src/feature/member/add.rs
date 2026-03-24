@@ -3,6 +3,7 @@
 
 //! Member add feature - add external public key to incoming.
 
+use super::verification::load_and_verify_member_file;
 use crate::format::schema::document::parse_public_key_str;
 use crate::io::workspace::members::{save_member_content, MemberStatus};
 use crate::support::fs::load_text;
@@ -22,6 +23,7 @@ pub fn add_member_from_file(
     let content = load_text(file_path)?;
 
     let public_key = parse_public_key_str(&content, &display_path_relative_to_cwd(file_path))?;
+    load_and_verify_member_file(file_path, Some(&public_key.protected.member_id), false)?;
 
     let member_id = public_key.protected.member_id.clone();
 

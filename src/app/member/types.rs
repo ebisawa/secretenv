@@ -11,12 +11,28 @@ pub struct MemberListEntry {
 pub struct MemberListResult {
     pub active: Vec<MemberListEntry>,
     pub incoming: Vec<MemberListEntry>,
+    pub warnings: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
 pub struct MemberGithubAccount {
     pub id: u64,
     pub login: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MemberDocumentStatus {
+    Valid,
+    Expired,
+}
+
+impl MemberDocumentStatus {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Valid => "valid",
+            Self::Expired => "expired",
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -33,6 +49,8 @@ pub struct MemberDocumentView {
     pub ssh_attestation_method: String,
     pub ssh_attestation_pubkey: String,
     pub github_account: Option<MemberGithubAccount>,
+    pub verification_status: MemberDocumentStatus,
+    pub verification_warnings: Vec<String>,
     pub document: serde_json::Value,
 }
 
