@@ -260,9 +260,6 @@ fn test_env_key_rejects_invalid_format() {
             member_id: "alice@example.com".to_string(),
             kid: "01HN8Z3Q4R5S6T7V8W9X0Y1Z2A".to_string(),
             alg: PrivateKeyAlgorithm::Argon2id {
-                m: 47104,
-                t: 1,
-                p: 1,
                 salt: "AAAA".to_string(),
                 aead: "xchacha20-poly1305".to_string(),
             },

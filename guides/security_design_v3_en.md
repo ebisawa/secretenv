@@ -907,10 +907,8 @@ The HKDF info string (`secretenv:password-private-key-enc@3:{kid}`) differs from
 #### 7.9.3 Argon2id Parameters and Password Requirements
 
 - Default parameters at export time: m=47104 (46 MiB), t=1, p=1 (OWASP recommended)
-- Parameters are recorded in the `alg` object of the private key document and read from it at decryption time (not hardcoded)
-- Minimum parameter validation at decryption: m >= 19456 (19 MiB), t >= 1, p >= 1 (reject trivially weak parameters)
+- Parameters are fixed by the implementation and are not serialized in the private key document
 - Minimum password length: 8 characters
-- Future parameter changes are forward-compatible: existing keys retain their recorded parameters
 
 #### 7.9.4 Security Trade-offs in CI Environments
 

@@ -89,6 +89,68 @@ fn test_validate_private_key_basic() {
 }
 
 #[test]
+fn test_validate_private_key_argon2id_without_params() {
+    let validator = Validator::new().unwrap();
+    let valid_private_key = serde_json::json!({
+        "protected": {
+            "format": secretenv::model::identifiers::format::PRIVATE_KEY_V3,
+            "member_id": "alice@example.com",
+            "kid": "01HY0G8N3P5X7QRSTV0WXYZ123",
+            "alg": {
+                "kdf": secretenv::model::identifiers::private_key::PROTECTION_METHOD_ARGON2ID_HKDF_SHA256,
+                "salt": "AAAAAAAAAAAAAAAAAAAAAA",
+                "aead": secretenv::model::identifiers::alg::AEAD_XCHACHA20_POLY1305
+            },
+            "created_at": "2026-01-14T00:00:00Z",
+            "expires_at": "2027-01-14T00:00:00Z"
+        },
+        "encrypted": {
+            "nonce": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            "ct": "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
+        }
+    });
+
+    let result = validator.validate_private_key(&valid_private_key);
+    assert!(
+        result.is_ok(),
+        "Argon2id private key v3 should pass validation: {:?}",
+        result
+    );
+}
+
+#[test]
+fn test_validate_private_key_argon2id_rejects_legacy_params() {
+    let validator = Validator::new().unwrap();
+    let invalid_private_key = serde_json::json!({
+        "protected": {
+            "format": secretenv::model::identifiers::format::PRIVATE_KEY_V3,
+            "member_id": "alice@example.com",
+            "kid": "01HY0G8N3P5X7QRSTV0WXYZ123",
+            "alg": {
+                "kdf": secretenv::model::identifiers::private_key::PROTECTION_METHOD_ARGON2ID_HKDF_SHA256,
+                "m": 47104,
+                "t": 1,
+                "p": 1,
+                "salt": "AAAAAAAAAAAAAAAAAAAAAA",
+                "aead": secretenv::model::identifiers::alg::AEAD_XCHACHA20_POLY1305
+            },
+            "created_at": "2026-01-14T00:00:00Z",
+            "expires_at": "2027-01-14T00:00:00Z"
+        },
+        "encrypted": {
+            "nonce": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            "ct": "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
+        }
+    });
+
+    let result = validator.validate_private_key(&invalid_private_key);
+    assert!(
+        result.is_err(),
+        "Legacy argon2 params must fail schema validation"
+    );
+}
+
+#[test]
 fn test_validate_file_enc_document_basic() {
     let validator = Validator::new().unwrap();
     // v3 schema requires: protected { format, sid, payload, wrap, created_at, updated_at }, signature

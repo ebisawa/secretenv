@@ -102,10 +102,7 @@ fn test_password_encrypt_alg_kdf_is_argon2id() {
     .expect("encryption should succeed");
 
     match &encrypted.protected.alg {
-        PrivateKeyAlgorithm::Argon2id { m, t, p, aead, .. } => {
-            assert_eq!(*m, 47104);
-            assert_eq!(*t, 1);
-            assert_eq!(*p, 1);
+        PrivateKeyAlgorithm::Argon2id { aead, .. } => {
             assert_eq!(aead, "xchacha20-poly1305");
         }
         _ => panic!("expected Argon2id algorithm variant"),
@@ -185,10 +182,7 @@ fn test_password_decrypt_rejects_unsupported_aead() {
 
     // Tamper with the AEAD field
     encrypted.protected.alg = match encrypted.protected.alg {
-        PrivateKeyAlgorithm::Argon2id { m, t, p, salt, .. } => PrivateKeyAlgorithm::Argon2id {
-            m,
-            t,
-            p,
+        PrivateKeyAlgorithm::Argon2id { salt, .. } => PrivateKeyAlgorithm::Argon2id {
             salt,
             aead: "aes-256-gcm".to_string(),
         },

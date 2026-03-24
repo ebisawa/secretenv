@@ -45,6 +45,7 @@ pub struct PrivateKeyProtected {
 /// Algorithm configuration (tagged by KDF method)
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "kdf")]
+#[serde(deny_unknown_fields)]
 pub enum PrivateKeyAlgorithm {
     /// SSH-signature-based key derivation
     #[serde(rename = "sshsig-ed25519-hkdf-sha256")]
@@ -55,13 +56,7 @@ pub enum PrivateKeyAlgorithm {
     },
     /// Argon2id password-based key derivation
     #[serde(rename = "argon2id-hkdf-sha256")]
-    Argon2id {
-        m: u32,
-        t: u32,
-        p: u32,
-        salt: String,
-        aead: String,
-    },
+    Argon2id { salt: String, aead: String },
 }
 
 impl PrivateKeyAlgorithm {

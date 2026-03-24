@@ -157,6 +157,18 @@ fn test_export_uses_argon2id_kdf() {
     // Verify kdf tag serializes to argon2id-hkdf-sha256
     let json = serde_json::to_value(&private_key.protected.alg).unwrap();
     assert_eq!(json["kdf"], "argon2id-hkdf-sha256");
+    assert!(
+        json.get("m").is_none(),
+        "argon2 memory cost must not be serialized"
+    );
+    assert!(
+        json.get("t").is_none(),
+        "argon2 time cost must not be serialized"
+    );
+    assert!(
+        json.get("p").is_none(),
+        "argon2 parallelism must not be serialized"
+    );
 
     match &private_key.protected.alg {
         PrivateKeyAlgorithm::Argon2id { .. } => {}

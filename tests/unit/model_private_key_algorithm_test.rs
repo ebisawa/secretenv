@@ -28,23 +28,32 @@ fn test_sshsig_variant_roundtrip() {
 #[test]
 fn test_argon2id_variant_roundtrip() {
     let alg = PrivateKeyAlgorithm::Argon2id {
-        m: 65536,
-        t: 3,
-        p: 4,
         salt: "YXJnb24yc2FsdA".to_string(),
         aead: AEAD_XCHACHA20_POLY1305.to_string(),
     };
 
     let json = serde_json::to_value(&alg).expect("serialize");
     assert_eq!(json["kdf"], PROTECTION_METHOD_ARGON2ID_HKDF_SHA256);
-    assert_eq!(json["m"], 65536);
-    assert_eq!(json["t"], 3);
-    assert_eq!(json["p"], 4);
     assert_eq!(json["salt"], "YXJnb24yc2FsdA");
     assert_eq!(json["aead"], AEAD_XCHACHA20_POLY1305);
 
     let deserialized: PrivateKeyAlgorithm = serde_json::from_value(json).expect("deserialize");
     assert_eq!(alg, deserialized);
+}
+
+#[test]
+fn test_argon2id_variant_rejects_legacy_params() {
+    let json = serde_json::json!({
+        "kdf": PROTECTION_METHOD_ARGON2ID_HKDF_SHA256,
+        "m": 47104,
+        "t": 1,
+        "p": 1,
+        "salt": "YXJnb24yc2FsdA",
+        "aead": AEAD_XCHACHA20_POLY1305
+    });
+
+    let result = serde_json::from_value::<PrivateKeyAlgorithm>(json);
+    assert!(result.is_err(), "legacy argon2 params must be rejected");
 }
 
 #[test]
