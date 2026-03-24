@@ -34,7 +34,7 @@ pub(crate) fn set_kv_command(
     success_message: Option<&str>,
     ssh_ctx: Option<ResolvedSshSigner>,
 ) -> Result<KvWriteOutcome> {
-    execute_kv_write(
+    execute_kv_mutation(
         KvWriteRequest {
             options,
             member_id,
@@ -65,7 +65,7 @@ pub(crate) fn unset_kv_command(
     success_message: Option<&str>,
     ssh_ctx: Option<ResolvedSshSigner>,
 ) -> Result<KvWriteOutcome> {
-    execute_kv_write(
+    execute_kv_mutation(
         KvWriteRequest {
             options,
             member_id,
@@ -134,7 +134,7 @@ pub(crate) fn import_kv_command_result(
     })
 }
 
-fn execute_kv_write<F>(request: KvWriteRequest<'_>, operation: F) -> Result<KvWriteOutcome>
+fn execute_kv_mutation<F>(request: KvWriteRequest<'_>, operation: F) -> Result<KvWriteOutcome>
 where
     F: FnOnce(Option<&KvEncContent>, &KvWriteContext, &KvFileTarget) -> Result<String>,
 {

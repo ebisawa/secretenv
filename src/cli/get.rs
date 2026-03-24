@@ -6,7 +6,7 @@
 use clap::Args;
 
 use crate::app::context::options::CommonCommandOptions;
-use crate::app::kv::read::get_kv_command;
+use crate::app::kv::query::get_kv_command;
 use crate::app::kv::types::KvReadResult;
 use crate::cli::common::options::CommonOptions;
 use crate::cli::common::output::json::print_json_output;

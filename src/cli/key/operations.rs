@@ -9,7 +9,6 @@ use crate::app::key::manage::{
     save_exported_private_key,
 };
 use crate::cli::common::ssh::resolve_ssh_context_for_active_key;
-use crate::cli::identity_prompt;
 use crate::support::path::display_path_relative_to_cwd;
 use crate::Result;
 use std::io::IsTerminal;
@@ -21,13 +20,7 @@ use super::{ActivateArgs, ExportArgs, RemoveArgs};
 /// Main entry point for key activation
 pub fn run_activate(args: ActivateArgs) -> Result<()> {
     let options = CommonCommandOptions::from(&args.common);
-    let keystore_root = options.resolve_keystore_root()?;
-    let member_id = identity_prompt::resolve_member_id(
-        args.member_id.clone(),
-        &keystore_root,
-        options.home.as_deref(),
-    )?;
-    let result = activate_key_command(&options, Some(member_id), args.kid.clone())?;
+    let result = activate_key_command(&options, args.member_id.clone(), args.kid.clone())?;
     eprintln!("Activated key for '{}':", result.member_id);
     eprintln!("  Kid: {}", result.kid);
     Ok(())
@@ -36,17 +29,12 @@ pub fn run_activate(args: ActivateArgs) -> Result<()> {
 /// Main entry point for key removal
 pub fn run_remove(args: RemoveArgs) -> Result<()> {
     let options = CommonCommandOptions::from(&args.common);
-    let member_id = if args.member_id.is_some() {
-        let keystore_root = options.resolve_keystore_root()?;
-        Some(identity_prompt::resolve_member_id(
-            args.member_id.clone(),
-            &keystore_root,
-            options.home.as_deref(),
-        )?)
-    } else {
-        None
-    };
-    let result = remove_key_command(&options, member_id, args.kid.clone(), args.force)?;
+    let result = remove_key_command(
+        &options,
+        args.member_id.clone(),
+        args.kid.clone(),
+        args.force,
+    )?;
     eprintln!("Removed key for '{}':", result.member_id);
     eprintln!("  Kid: {}", result.kid);
     if result.was_active {
@@ -64,13 +52,7 @@ pub fn run_export(args: ExportArgs) -> Result<()> {
             message: "--out is required for public key export".to_string(),
         })?;
     let options = CommonCommandOptions::from(&args.common);
-    let keystore_root = options.resolve_keystore_root()?;
-    let member_id = identity_prompt::resolve_member_id(
-        args.member_id.clone(),
-        &keystore_root,
-        options.home.as_deref(),
-    )?;
-    let result = export_key_command(&options, Some(member_id), args.kid.clone(), out)?;
+    let result = export_key_command(&options, args.member_id.clone(), args.kid.clone(), out)?;
     eprintln!("Exported public key for '{}':", result.member_id);
     eprintln!("  Kid:    {}", result.kid);
     eprintln!("  Output: {}", display_path_relative_to_cwd(out));
@@ -87,20 +69,13 @@ pub fn run_export_private(args: ExportArgs) -> Result<()> {
     }
 
     let options = CommonCommandOptions::from(&args.common);
-    let keystore_root = options.resolve_keystore_root()?;
-    let member_id = identity_prompt::resolve_member_id(
-        args.member_id.clone(),
-        &keystore_root,
-        options.home.as_deref(),
-    )?;
-
     let password = prompt_export_password()?;
 
     let ssh_ctx = resolve_ssh_context_for_active_key(&options)?;
 
     let result = export_private_key_command(
         &options,
-        Some(member_id),
+        args.member_id.clone(),
         args.kid.clone(),
         password.as_str(),
         ssh_ctx,

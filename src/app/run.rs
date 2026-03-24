@@ -5,7 +5,7 @@
 
 use crate::app::context::options::CommonCommandOptions;
 use crate::app::context::ssh::ResolvedSshSigner;
-use crate::app::kv::read::build_run_env_command;
+use crate::app::kv::query::build_run_env_command;
 use crate::io::process::execute_command_with_env;
 use crate::{Error, Result};
 

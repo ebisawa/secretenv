@@ -4,7 +4,6 @@
 use std::path::PathBuf;
 
 use crate::app::verification::OnlineVerificationStatus;
-use crate::io::workspace::members::MemberStatus;
 use crate::model::ssh::SshDeterminismStatus;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -28,8 +27,32 @@ pub enum RegistrationKeyPlan {
 }
 
 impl RegistrationKeyPlan {
-    pub fn requires_github_user(&self) -> bool {
+    pub fn needs_new_key(&self) -> bool {
         matches!(self, Self::GenerateNew)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RegistrationTarget {
+    Active,
+    Incoming,
+}
+
+impl RegistrationTarget {
+    pub fn directory_name(self) -> &'static str {
+        match self {
+            Self::Active => "members/active",
+            Self::Incoming => "members/incoming",
+        }
+    }
+}
+
+impl From<crate::io::workspace::members::MemberStatus> for RegistrationTarget {
+    fn from(value: crate::io::workspace::members::MemberStatus) -> Self {
+        match value {
+            crate::io::workspace::members::MemberStatus::Active => Self::Active,
+            crate::io::workspace::members::MemberStatus::Incoming => Self::Incoming,
+        }
     }
 }
 
@@ -61,7 +84,7 @@ pub struct PreparedRegistration {
     pub workspace_path: PathBuf,
     pub keystore_root: PathBuf,
     pub setup: MemberSetupResult,
-    pub target: MemberStatus,
+    pub target: RegistrationTarget,
     pub is_new_workspace: bool,
     pub conflict_exists: bool,
     pub already_active: bool,
@@ -71,7 +94,7 @@ pub struct PreparedRegistration {
 pub struct RegistrationOutcome {
     pub mode: RegistrationMode,
     pub workspace_path: PathBuf,
-    pub target: MemberStatus,
+    pub target: RegistrationTarget,
     pub is_new_workspace: bool,
     pub member_id: String,
     pub key_result: MemberKeySetupResult,

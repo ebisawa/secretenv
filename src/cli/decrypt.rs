@@ -8,8 +8,8 @@ use std::path::PathBuf;
 
 use crate::app::context::options::CommonCommandOptions;
 use crate::app::file::decrypt::{decrypt_file_command, validate_decrypt_input};
-use crate::app::file::output::save_decrypted_file;
 use crate::cli::common::options::CommonOptions;
+use crate::cli::common::output::file::write_decrypted_output;
 use crate::cli::common::ssh::resolve_ssh_context_optional;
 use crate::{Error, Result};
 
@@ -57,11 +57,6 @@ pub fn run(args: DecryptArgs) -> Result<()> {
         ssh_ctx,
     )?;
 
-    if let Some(message) =
-        save_decrypted_file(plaintext_bytes.as_ref(), out_path, args.common.quiet)?
-    {
-        eprintln!("{message}");
-    }
-
+    write_decrypted_output(out_path, plaintext_bytes.as_ref(), args.common.quiet)?;
     Ok(())
 }

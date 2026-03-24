@@ -5,9 +5,9 @@ use std::path::Path;
 
 use crate::app::registration::types::{
     MemberKeySetupResult, RegistrationMode, RegistrationOutcome, RegistrationResult,
+    RegistrationTarget,
 };
 use crate::cli::key::common::print_key_generation_binding_info;
-use crate::io::workspace::members::MemberStatus;
 use crate::support::path::display_path_relative_to_cwd;
 use crate::Error;
 
@@ -127,11 +127,8 @@ fn print_generated_key_binding_info(key_result: &MemberKeySetupResult) -> Result
     )
 }
 
-fn target_directory_name(target: MemberStatus) -> &'static str {
-    match target {
-        MemberStatus::Active => "members/active",
-        MemberStatus::Incoming => "members/incoming",
-    }
+fn target_directory_name(target: RegistrationTarget) -> &'static str {
+    target.directory_name()
 }
 
 fn build_workspace_display(path: &Path) -> String {

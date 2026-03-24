@@ -3,7 +3,6 @@
 
 use crate::app::context::options::CommonCommandOptions;
 use crate::app::member::query::show_member;
-use crate::io::workspace::members::MemberStatus;
 use crate::Error;
 
 use super::ShowArgs;
@@ -17,10 +16,7 @@ pub(crate) fn run(args: ShowArgs) -> Result<(), Error> {
     if args.common.json {
         println!("{}", serde_json::to_string_pretty(&member.document)?);
     } else {
-        let membership_str = match status {
-            MemberStatus::Active => "active",
-            MemberStatus::Incoming => "incoming",
-        };
+        let membership_str = status.as_str();
         println!("Member: {}", member.member_id);
         println!("Membership:   {}", membership_str);
         println!("Key ID: {}", member.kid);

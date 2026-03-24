@@ -3,7 +3,7 @@
 
 //! Application-layer KV file workflows.
 
-pub(crate) mod read;
+pub(crate) mod mutation;
+pub(crate) mod query;
 pub(crate) mod session;
 pub(crate) mod types;
-pub(crate) mod write;

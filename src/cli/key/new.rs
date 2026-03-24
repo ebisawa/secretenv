@@ -6,7 +6,6 @@
 use crate::app::context::options::CommonCommandOptions;
 use crate::app::key::generate::generate_key_command;
 use crate::cli::common::ssh::resolve_ssh_context;
-use crate::cli::identity_prompt;
 use crate::Result;
 
 use super::common::print_key_generation_binding_info;
@@ -15,21 +14,12 @@ use super::NewArgs;
 /// Main entry point for key generation
 pub fn run(args: NewArgs) -> Result<()> {
     let options = CommonCommandOptions::from(&args.common);
-    let keystore_root = options.resolve_keystore_root()?;
-    let member_id = identity_prompt::resolve_member_id(
-        args.member_id.clone(),
-        &keystore_root,
-        options.home.as_deref(),
-    )?;
-    let github_user =
-        identity_prompt::resolve_github_user(args.github_user.clone(), options.home.as_deref())?;
-
     eprintln!();
     let ssh_ctx = resolve_ssh_context(&options)?;
     let result = generate_key_command(
         &options,
-        Some(member_id),
-        github_user,
+        args.member_id.clone(),
+        args.github_user.clone(),
         &args.expires_at,
         &args.valid_for,
         args.no_activate,

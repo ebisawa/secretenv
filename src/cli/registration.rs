@@ -30,17 +30,18 @@ pub(crate) fn execute_registration_command(
     let member_id =
         identity_prompt::resolve_member_id(member_id, &keystore_root, options.home.as_deref())?;
     let key_plan = resolve_registration_key_plan(&member_id, &keystore_root)?;
-    if key_plan.requires_github_user() {
+    let needs_new_key = key_plan.needs_new_key();
+    if needs_new_key {
         print_missing_key_notice(&member_id);
     }
-    let github_user = if key_plan.requires_github_user() {
+    let github_user = if needs_new_key {
         identity_prompt::resolve_github_user(github_user, options.home.as_deref())?
     } else {
         None
     };
 
     eprintln!();
-    let ssh_ctx = if key_plan.requires_github_user() {
+    let ssh_ctx = if needs_new_key {
         Some(resolve_ssh_context(&options)?)
     } else {
         None

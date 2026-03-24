@@ -27,7 +27,7 @@ fn test_resolve_registration_key_plan_existing_active_key() {
     let plan = resolve_registration_key_plan("alice@example.com", &keystore_root).unwrap();
 
     assert!(matches!(plan, RegistrationKeyPlan::UseExisting { .. }));
-    assert!(!plan.requires_github_user());
+    assert!(!plan.needs_new_key());
 }
 
 #[test]
@@ -39,7 +39,7 @@ fn test_resolve_registration_key_plan_missing_active_key() {
     let plan = resolve_registration_key_plan("alice@example.com", &keystore_root).unwrap();
 
     assert_eq!(plan, RegistrationKeyPlan::GenerateNew);
-    assert!(plan.requires_github_user());
+    assert!(plan.needs_new_key());
 }
 
 #[test]

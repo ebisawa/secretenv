@@ -6,7 +6,7 @@
 use clap::Args;
 
 use crate::app::context::options::CommonCommandOptions;
-use crate::app::kv::write::import_kv_command;
+use crate::app::kv::mutation::import_kv_command;
 use crate::cli::common::options::CommonOptions;
 use crate::cli::common::output::json::print_json_output;
 use crate::cli::common::ssh::resolve_ssh_context_optional;

@@ -409,7 +409,9 @@ fn test_decrypt_file_enc_roundtrip_with_out() {
         .env("SECRETENV_HOME", home_dir.path())
         .env("SECRETENV_SSH_KEY", ssh_priv.to_str().unwrap())
         .assert()
-        .success();
+        .success()
+        .stderr(predicate::str::contains("Decrypted to:"))
+        .stderr(predicate::str::contains("decrypted.txt"));
 
     // 復号されたファイルの内容が元のデータと一致することを確認
     assert!(decrypted_file.exists(), "Decrypted file should exist");

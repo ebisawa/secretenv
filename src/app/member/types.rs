@@ -1,8 +1,6 @@
 // Copyright 2026 Satoshi Ebisawa
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::io::workspace::members::MemberStatus;
-
 #[derive(Debug)]
 pub struct MemberListEntry {
     pub member_id: String,
@@ -39,9 +37,33 @@ pub struct MemberDocumentView {
 }
 
 #[derive(Debug)]
+pub enum MembershipStatus {
+    Active,
+    Incoming,
+}
+
+impl MembershipStatus {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Active => "active",
+            Self::Incoming => "incoming",
+        }
+    }
+}
+
+impl From<crate::io::workspace::members::MemberStatus> for MembershipStatus {
+    fn from(value: crate::io::workspace::members::MemberStatus) -> Self {
+        match value {
+            crate::io::workspace::members::MemberStatus::Active => Self::Active,
+            crate::io::workspace::members::MemberStatus::Incoming => Self::Incoming,
+        }
+    }
+}
+
+#[derive(Debug)]
 pub struct MemberShowResult {
     pub member: MemberDocumentView,
-    pub status: MemberStatus,
+    pub status: MembershipStatus,
 }
 
 #[derive(Debug)]

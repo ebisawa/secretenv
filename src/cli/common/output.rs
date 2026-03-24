@@ -3,4 +3,5 @@
 
 //! Output utilities for CLI commands.
 
+pub mod file;
 pub mod json;

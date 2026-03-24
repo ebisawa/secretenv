@@ -11,8 +11,8 @@ use std::path::PathBuf;
 
 use crate::app::context::options::CommonCommandOptions;
 use crate::app::file::encrypt::encrypt_file_command;
-use crate::app::file::output::{resolve_encrypted_output_path, save_encrypted_output};
 use crate::cli::common::options::CommonOptions;
+use crate::cli::common::output::file::{resolve_encrypted_output_path, write_encrypted_output};
 use crate::cli::common::ssh::resolve_ssh_context_optional;
 use crate::Result;
 
@@ -50,11 +50,6 @@ pub fn run(args: EncryptArgs) -> Result<()> {
     )?;
     let output_path = resolve_encrypted_output_path(args.out.as_ref(), &args.input)?;
 
-    if let Some(message) =
-        save_encrypted_output(output_path.as_ref(), &encrypted, args.common.quiet)?
-    {
-        eprintln!("{message}");
-    }
-
+    write_encrypted_output(output_path.as_ref(), &encrypted, args.common.quiet)?;
     Ok(())
 }

@@ -19,6 +19,11 @@ use crate::{Error, Result};
 use super::session::KvFileSession;
 use super::types::{KvReadMode, KvReadResult};
 
+struct ResolvedKvQuery {
+    file: KvFileSession,
+    execution: ExecutionContext,
+}
+
 pub(crate) fn list_kv_command(
     options: &CommonCommandOptions,
     file_name: Option<&str>,
@@ -35,12 +40,8 @@ pub(crate) fn get_kv_command(
     all: bool,
     ssh_ctx: Option<ResolvedSshSigner>,
 ) -> Result<KvReadResult> {
-    let file = KvFileSession::load(options, file_name)?;
-    let execution = ExecutionContext::resolve(options, member_id, None, ssh_ctx)?;
-    if let Some(warning) = build_key_expiry_warning(&execution.key_ctx.expires_at)? {
-        warn!("{}", warning);
-    }
-    let disclosed = list_kv_keys_with_disclosed(&file.kv_content())?;
+    let resolved = resolve_kv_query(options, member_id, file_name, ssh_ctx)?;
+    let disclosed = list_kv_keys_with_disclosed(&resolved.file.kv_content())?;
     let mode = if all {
         KvReadMode::All
     } else {
@@ -48,7 +49,13 @@ pub(crate) fn get_kv_command(
             message: "KEY argument is required (or use --all to get all entries)".to_string(),
         })?)
     };
-    read_kv_values(&file, &execution, &disclosed, mode, options.verbose)
+    load_kv_values(
+        &resolved.file,
+        &resolved.execution,
+        &disclosed,
+        mode,
+        options.verbose,
+    )
 }
 
 pub(crate) fn build_run_env_command(
@@ -57,21 +64,31 @@ pub(crate) fn build_run_env_command(
     file_name: Option<&str>,
     ssh_ctx: Option<ResolvedSshSigner>,
 ) -> Result<BTreeMap<String, String>> {
+    let resolved = resolve_kv_query(options, member_id, file_name, ssh_ctx)?;
+    let content = resolved.file.content().to_string();
+    build_env_from_kv_contents(
+        &[&content],
+        &resolved.execution.member_id,
+        &resolved.execution.key_ctx,
+        options.verbose,
+    )
+}
+
+fn resolve_kv_query(
+    options: &CommonCommandOptions,
+    member_id: Option<String>,
+    file_name: Option<&str>,
+    ssh_ctx: Option<ResolvedSshSigner>,
+) -> Result<ResolvedKvQuery> {
     let file = KvFileSession::load(options, file_name)?;
     let execution = ExecutionContext::resolve(options, member_id, None, ssh_ctx)?;
     if let Some(warning) = build_key_expiry_warning(&execution.key_ctx.expires_at)? {
         warn!("{}", warning);
     }
-    let content = file.content().to_string();
-    build_env_from_kv_contents(
-        &[&content],
-        &execution.member_id,
-        &execution.key_ctx,
-        options.verbose,
-    )
+    Ok(ResolvedKvQuery { file, execution })
 }
 
-fn read_kv_values(
+fn load_kv_values(
     file: &KvFileSession,
     execution: &ExecutionContext,
     disclosed: &[(String, bool)],

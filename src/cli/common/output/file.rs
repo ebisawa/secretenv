@@ -7,9 +7,6 @@ use crate::support::fs::atomic;
 use crate::support::path::display_path_relative_to_cwd;
 use crate::{Error, Result};
 
-/// Resolve output path for file-enc format.
-///
-/// Returns `<input_filename>.encrypted` in current directory if `--out` is not specified.
 pub fn resolve_encrypted_output_path(
     explicit_out: Option<&PathBuf>,
     input_path: &Path,
@@ -20,7 +17,7 @@ pub fn resolve_encrypted_output_path(
 
     let input_filename = input_path
         .file_name()
-        .and_then(|n| n.to_str())
+        .and_then(|name| name.to_str())
         .ok_or_else(|| Error::InvalidArgument {
             message: format!(
                 "Cannot derive filename from input path: {}",
@@ -34,40 +31,43 @@ pub fn resolve_encrypted_output_path(
         });
     }
 
-    let output_filename = format!("{}.encrypted", input_filename);
     let current_dir = std::env::current_dir().map_err(|e| Error::Io {
         message: format!("Failed to get current directory: {}", e),
         source: Some(e),
     })?;
-    Ok(Some(current_dir.join(output_filename)))
+    Ok(Some(
+        current_dir.join(format!("{}.encrypted", input_filename)),
+    ))
 }
 
-pub fn save_encrypted_output(
+pub fn write_encrypted_output(
     output_path: Option<&PathBuf>,
     content: &str,
     quiet: bool,
-) -> Result<Option<String>> {
+) -> Result<()> {
     match output_path {
         Some(path) => {
             atomic::save_text(path, content)?;
-            Ok(build_output_notice("Encrypted to", path.as_path(), quiet))
+            print_output_notice("Encrypted to", path, quiet);
         }
-        None => {
-            print!("{}", content);
-            Ok(None)
-        }
+        None => print!("{}", content),
     }
+    Ok(())
 }
 
-pub fn save_decrypted_file(
-    plaintext_bytes: &[u8],
+pub fn write_decrypted_output(
     output_path: &Path,
+    plaintext_bytes: &[u8],
     quiet: bool,
-) -> Result<Option<String>> {
+) -> Result<()> {
     atomic::save_bytes(output_path, plaintext_bytes)?;
-    Ok(build_output_notice("Decrypted to", output_path, quiet))
+    print_output_notice("Decrypted to", output_path, quiet);
+    Ok(())
 }
 
-fn build_output_notice(label: &str, output_path: &Path, quiet: bool) -> Option<String> {
-    (!quiet).then(|| format!("{}: {}", label, display_path_relative_to_cwd(output_path)))
+fn print_output_notice(label: &str, output_path: &Path, quiet: bool) {
+    if quiet {
+        return;
+    }
+    eprintln!("{}: {}", label, display_path_relative_to_cwd(output_path));
 }

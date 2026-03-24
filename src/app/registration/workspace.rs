@@ -13,12 +13,12 @@ use crate::io::workspace::members::{
 use crate::io::workspace::setup;
 use crate::Result;
 
-use super::types::{RegistrationMode, RegistrationResult};
+use super::types::{RegistrationMode, RegistrationResult, RegistrationTarget};
 
 pub(crate) struct RegistrationPaths {
     pub workspace_path: PathBuf,
     pub keystore_root: PathBuf,
-    pub target: MemberStatus,
+    pub target: RegistrationTarget,
     pub is_new_workspace: bool,
     pub conflict_exists: bool,
     pub already_active: bool,
@@ -30,7 +30,7 @@ pub(crate) fn register_member(
     kid: &str,
     overwrite: bool,
     keystore_root: &Path,
-    target: MemberStatus,
+    target: RegistrationTarget,
 ) -> Result<RegistrationResult> {
     let member_file = member_file_path(workspace_path, member_id, target);
 
@@ -56,22 +56,23 @@ pub(crate) fn resolve_registration_paths(
     let is_new_workspace = resolve_workspace_for_registration(mode, &workspace_path)?;
     let keystore_root = KeystoreResolver::resolve(common.home.as_ref())?;
     let target = registration_target(mode);
-    let conflict_exists = member_file_path(&workspace_path, member_id, target).exists();
+    let conflict_exists =
+        member_file_path(&workspace_path, member_id, RegistrationTarget::from(target)).exists();
     let already_active = resolve_already_active(mode, &workspace_path, member_id);
     Ok(RegistrationPaths {
         workspace_path,
         keystore_root,
-        target,
+        target: RegistrationTarget::from(target),
         is_new_workspace,
         conflict_exists,
         already_active,
     })
 }
 
-fn member_file_path(workspace_path: &Path, member_id: &str, target: MemberStatus) -> PathBuf {
+fn member_file_path(workspace_path: &Path, member_id: &str, target: RegistrationTarget) -> PathBuf {
     match target {
-        MemberStatus::Active => active_member_file_path(workspace_path, member_id),
-        MemberStatus::Incoming => incoming_member_file_path(workspace_path, member_id),
+        RegistrationTarget::Active => active_member_file_path(workspace_path, member_id),
+        RegistrationTarget::Incoming => incoming_member_file_path(workspace_path, member_id),
     }
 }
 

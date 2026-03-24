@@ -8,7 +8,7 @@ use crate::io::workspace::members::{
 };
 use crate::Result;
 
-use super::types::{MemberListResult, MemberShowResult};
+use super::types::{MemberListResult, MemberShowResult, MembershipStatus};
 use super::view::{build_member_document_view, build_member_list_entry};
 
 pub fn list_members(options: &CommonCommandOptions) -> Result<MemberListResult> {
@@ -30,6 +30,6 @@ pub fn show_member(options: &CommonCommandOptions, member_id: &str) -> Result<Me
     let (member, status) = load_member_file(&workspace.root_path, member_id)?;
     Ok(MemberShowResult {
         member: build_member_document_view(member)?,
-        status,
+        status: MembershipStatus::from(status),
     })
 }
