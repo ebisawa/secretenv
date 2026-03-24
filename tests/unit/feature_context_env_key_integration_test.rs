@@ -6,7 +6,8 @@
 //! These tests exercise the full portable export -> env var loading pipeline
 //! using properly generated key pairs with SSH attestation.
 
-use secretenv::feature::context::env_key::{load_private_key_from_env, verify_own_public_key};
+use secretenv::app::context::crypto::load_crypto_context_from_env;
+use secretenv::feature::context::env_key::load_private_key_from_env;
 use secretenv::feature::key::portable_export::export_private_key_portable;
 use tempfile::TempDir;
 
@@ -111,61 +112,6 @@ fn test_env_key_wrong_password_error() {
 }
 
 #[test]
-fn test_verify_own_public_key_with_attested_keys() {
-    let member_id = "verify-match@example.com";
-    let temp_dir = TempDir::new().unwrap();
-    let (ssh_priv, _ssh_pub, ssh_pub_content) = create_temp_ssh_keypair_in_dir(&temp_dir);
-
-    let (plaintext, public_key) =
-        keygen_test(member_id, &ssh_priv, &ssh_pub_content).expect("keygen should succeed");
-
-    let verified_private = secretenv::model::verified::VerifiedPrivateKey::new(
-        plaintext,
-        secretenv::model::verified::DecryptionProof {
-            member_id: member_id.to_string(),
-            kid: public_key.protected.kid.clone(),
-            ssh_fpr: None,
-        },
-    );
-    let result = verify_own_public_key(&verified_private, &public_key, false);
-    assert!(
-        result.is_ok(),
-        "matching attested keys should verify: {:?}",
-        result
-    );
-}
-
-#[test]
-fn test_verify_own_public_key_different_keys_fails() {
-    let temp_dir = TempDir::new().unwrap();
-    let (ssh_priv, _ssh_pub, ssh_pub_content) = create_temp_ssh_keypair_in_dir(&temp_dir);
-
-    // Generate two different key pairs
-    let (plaintext_a, _pub_a) = keygen_test("user-a@example.com", &ssh_priv, &ssh_pub_content)
-        .expect("keygen a should succeed");
-    let (_plaintext_b, pub_b) = keygen_test("user-b@example.com", &ssh_priv, &ssh_pub_content)
-        .expect("keygen b should succeed");
-
-    // Verify plaintext_a against pub_b should fail (different key material)
-    let verified_private = secretenv::model::verified::VerifiedPrivateKey::new(
-        plaintext_a,
-        secretenv::model::verified::DecryptionProof {
-            member_id: "user-a@example.com".to_string(),
-            kid: pub_b.protected.kid.clone(),
-            ssh_fpr: None,
-        },
-    );
-    let result = verify_own_public_key(&verified_private, &pub_b, false);
-    assert!(result.is_err(), "mismatched keys should fail");
-    let err = result.unwrap_err().to_string();
-    assert!(
-        err.contains("mismatch"),
-        "error should mention mismatch: {}",
-        err
-    );
-}
-
-#[test]
 fn test_env_key_roundtrip_preserves_key_material_for_decryption() {
     let _guard = EnvGuard::new(&[ENV_PRIVATE_KEY, ENV_KEY_PASSWORD]);
     let member_id = "ci-decrypt@example.com";
@@ -179,11 +125,47 @@ fn test_env_key_roundtrip_preserves_key_material_for_decryption() {
 
     let env_result = load_private_key_from_env(false).expect("load from env should succeed");
 
-    // Verify the loaded key matches the public key (simulates what CryptoContext does)
-    let result = verify_own_public_key(&env_result.verified_key, &public_key, false);
-    assert!(
-        result.is_ok(),
-        "env-loaded key should match its own public key: {:?}",
-        result
+    assert_eq!(env_result.member_id, public_key.protected.member_id);
+    assert_eq!(
+        env_result.verified_key.proof().kid,
+        public_key.protected.kid
+    );
+    assert_eq!(
+        env_result.verified_key.document().keys.sig.x,
+        public_key.protected.identity.keys.sig.x
+    );
+    assert_eq!(
+        env_result.verified_key.document().keys.kem.x,
+        public_key.protected.identity.keys.kem.x
+    );
+}
+
+#[test]
+fn test_load_crypto_context_from_env_without_workspace_member_file() {
+    let _guard = EnvGuard::new(&[ENV_PRIVATE_KEY, ENV_KEY_PASSWORD]);
+    let password = "strong-test-password-42";
+    let (exported, _plaintext, public_key) =
+        generate_and_export("ci-no-lookup@example.com", password);
+
+    let workspace = TempDir::new().unwrap();
+    std::fs::create_dir_all(workspace.path().join("members/active")).unwrap();
+    std::fs::create_dir_all(workspace.path().join("members/incoming")).unwrap();
+    std::fs::create_dir_all(workspace.path().join("secrets")).unwrap();
+
+    std::env::set_var(ENV_PRIVATE_KEY, &exported);
+    std::env::set_var(ENV_KEY_PASSWORD, password);
+
+    let ctx = load_crypto_context_from_env(workspace.path().to_path_buf(), false)
+        .expect("env crypto context should not require own workspace member file");
+
+    assert_eq!(ctx.member_id, public_key.protected.member_id);
+    assert_eq!(ctx.kid, public_key.protected.kid);
+    assert_eq!(
+        ctx.private_key.document().keys.sig.x,
+        public_key.protected.identity.keys.sig.x
+    );
+    assert_eq!(
+        ctx.private_key.document().keys.kem.x,
+        public_key.protected.identity.keys.kem.x
     );
 }

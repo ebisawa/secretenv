@@ -1207,6 +1207,8 @@ For base64url inputs, the implementation should reject invalid characters, paddi
 
 KEM private keys, signing private keys, DEK / MK / CEK values, and decrypted plaintext should be zeroized after use as far as the type system allows. Audits should at minimum verify that secret material is not retained in long-lived buffers or exposed through logs.
 
+However, complete erasure of secret material from process memory is not guaranteed. When key bytes are copied into cryptographic library types (e.g., `SigningKey::from_bytes`), the `Zeroize` wrapper clears the source buffer but cannot control copies held internally by the library. Additionally, the runtime allocator may leave residual data in freed pages, and compiler optimizations may create intermediate copies that are not zeroized. SecretEnv therefore treats memory zeroization as a best-effort defense-in-depth measure, not an absolute guarantee.
+
 ---
 
 ## 12. Audit-Relevant Limitations and Non-Goals

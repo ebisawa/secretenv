@@ -12,12 +12,8 @@ use zeroize::Zeroizing;
 
 use crate::feature::context::crypto::validate_and_wrap_private_key_password;
 use crate::feature::key::protection::password_encryption::decrypt_private_key_with_password;
-use crate::feature::verify::public_key::{
-    verify_public_key_for_verification, VerifiedPublicKeyForVerification,
-};
 use crate::format::schema::document::parse_private_key_bytes;
 use crate::model::private_key::{PrivateKey, PrivateKeyAlgorithm};
-use crate::model::public_key::{PublicKey, VerifiedPublicKeyAttested};
 use crate::model::verified::VerifiedPrivateKey;
 use crate::{Error, Result};
 
@@ -118,74 +114,4 @@ pub fn load_private_key_from_env(debug: bool) -> Result<EnvKeyLoadResult> {
         member_id,
         expires_at,
     })
-}
-
-/// Verify that a public key's components match the private key plaintext
-///
-/// Reuses the standard PublicKey verification path (self-signature + attestation),
-/// then confirms that the verified PublicKey matches the env-loaded private key.
-#[derive(Debug, Clone)]
-pub struct OwnPublicKeyVerification {
-    pub verified_public_key: VerifiedPublicKeyAttested,
-    pub warnings: Vec<String>,
-}
-
-pub fn verify_own_public_key(
-    private_key: &VerifiedPrivateKey,
-    public_key: &PublicKey,
-    debug: bool,
-) -> Result<OwnPublicKeyVerification> {
-    let verified = verify_public_key_for_verification(public_key, debug)?;
-    ensure_verified_public_key_matches_private_key(private_key, &verified)?;
-    Ok(OwnPublicKeyVerification {
-        verified_public_key: verified.verified_public_key,
-        warnings: verified.warnings,
-    })
-}
-
-fn ensure_verified_public_key_matches_private_key(
-    private_key: &VerifiedPrivateKey,
-    verified: &VerifiedPublicKeyForVerification,
-) -> Result<()> {
-    let doc = verified.verified_public_key.document();
-    let proof = private_key.proof();
-    let plaintext = private_key.document();
-
-    if doc.protected.member_id != proof.member_id {
-        return Err(Error::Verify {
-            rule: "public-key-match".to_string(),
-            message: format!(
-                "Member ID mismatch: private key member_id '{}' does not match public key member_id '{}'",
-                proof.member_id, doc.protected.member_id
-            ),
-        });
-    }
-
-    if doc.protected.kid != proof.kid {
-        return Err(Error::Verify {
-            rule: "public-key-match".to_string(),
-            message: format!(
-                "Key ID mismatch: private key kid '{}' does not match public key kid '{}'",
-                proof.kid, doc.protected.kid
-            ),
-        });
-    }
-
-    if plaintext.keys.sig.x != doc.protected.identity.keys.sig.x {
-        return Err(Error::Verify {
-            rule: "public-key-match".to_string(),
-            message: "Signing key mismatch: private key sig.x does not match public key sig.x"
-                .to_string(),
-        });
-    }
-
-    if plaintext.keys.kem.x != doc.protected.identity.keys.kem.x {
-        return Err(Error::Verify {
-            rule: "public-key-match".to_string(),
-            message: "KEM key mismatch: private key kem.x does not match public key kem.x"
-                .to_string(),
-        });
-    }
-
-    Ok(())
 }

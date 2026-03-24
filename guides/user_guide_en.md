@@ -730,9 +730,9 @@ secretenv supports CI/CD environments through portable private key export and en
 
 ### Overview
 
-In CI mode, secretenv reads the private key and password from environment variables instead of the local keystore. Public keys are resolved from the workspace's `members/active/` directory (which is available in the Git checkout).
+In CI mode, secretenv reads the private key and password from environment variables instead of the local keystore. Environment variable-based key loading is decrypt-only: only `run`, `decrypt`, and `get` are supported.
 
-This matters because `members/active/` is checkout-derived input outside the trust boundary. Env mode must therefore be limited to **trusted workflow / trusted ref / trusted runner** contexts.
+This still matters because the workspace checkout remains input to signature verification. Environment variable-based key loading must therefore be limited to **trusted workflow / trusted ref / trusted runner** contexts.
 
 ### Allowed CI Contexts
 
@@ -853,18 +853,18 @@ secretenv decrypt ca.pem.encrypted --out ca.pem
 Environment variable mode guarantees only the secret-operation commands currently implemented for env dispatch:
 
 - **Decryption** (`run`, `decrypt`, `get`): uses the KEM private key from the environment variable
-- **Encrypt/update** (`encrypt`, `set`, `unset`, `import`): uses the signing key from the environment variable, recipient public keys from the workspace
-- **Rewrap** (`rewrap`): uses the signing key from the environment variable, public keys from the workspace
 
-The following commands remain unavailable in CI environment-variable mode because they require a local keystore and SSH signer:
+All other commands remain unavailable in CI environment-variable mode:
 
+- **Secret mutation / re-signing** (`encrypt`, `set`, `unset`, `import`, `rewrap`)
 - **Key lifecycle** (`key new`, `key list`, `key activate`, `key remove`, `key export`, `key export --private`)
 - **Setup** (`init`, `join`)
+- **Other helper commands** (`list`, `inspect`, `member`, `config`, etc.)
 
 ### Security Considerations
 
 - **Password exposure**: `SECRETENV_KEY_PASSWORD` persists in process memory and may be visible via `/proc/*/environ` on Linux. This is consistent with how CI platforms handle secrets.
-- **Trusted CI only**: Use env mode only in trusted workflow / trusted ref / trusted runner contexts. In attacker-controlled checkouts, `members/active/` cannot be treated as a trustworthy public key source.
+- **Trusted CI only**: Use environment variable-based key loading only in trusted workflow / trusted ref / trusted runner contexts. Attacker-controlled checkouts must not be used as signature-verification input.
 - **Dedicated CI member**: Always use a dedicated CI member rather than a human member's key. This allows independent rotation and revocation.
 - **Key rotation**: Rotate the CI member key and re-export with `key export --private` on a developer machine with SSH signer and local keystore access, then update the CI platform's secret store.
 - **Least privilege**: Only add the CI member to the secrets it actually needs access to.

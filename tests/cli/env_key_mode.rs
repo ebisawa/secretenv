@@ -3,8 +3,8 @@
 
 //! CLI integration tests for env key mode (CI mode)
 //!
-//! Tests that the CLI binary correctly handles SECRETENV_PRIVATE_KEY and
-//! SECRETENV_KEY_PASSWORD environment variables for keyless CI operation.
+//! Tests that env key mode is restricted to decrypt-only operations:
+//! `run`, `decrypt`, and `get`.
 
 use crate::cli::common::{cmd, setup_workspace, TEST_MEMBER_ID};
 use crate::test_utils::ed25519_backend::Ed25519DirectBackend;
@@ -13,11 +13,12 @@ use secretenv::feature::key::portable_export::export_private_key_portable;
 use secretenv::feature::key::protection::encryption::decrypt_private_key;
 use secretenv::io::keystore::active::load_active_kid;
 use secretenv::io::keystore::storage::load_private_key;
+use std::fs;
+use std::path::PathBuf;
 use tempfile::TempDir;
 
 const TEST_PASSWORD: &str = "cli-integration-test-password-42";
-const ENV_MODE_UNSUPPORTED_MESSAGE: &str =
-    "requires a local keystore and SSH signer; run it on a developer machine";
+const ENV_MODE_UNSUPPORTED_MESSAGE: &str = "env mode only supports decrypt-only commands";
 
 // ============================================================================
 // Setup Helper
@@ -25,9 +26,9 @@ const ENV_MODE_UNSUPPORTED_MESSAGE: &str =
 
 /// Setup a workspace with an exported portable private key for env key mode.
 ///
-/// Returns (workspace_dir, home_dir, exported_key_base64url).
+/// Returns (workspace_dir, home_dir, ssh_temp, ssh_priv, exported_key_base64url).
 /// The ssh_temp TempDir is also returned to keep it alive during the test.
-fn setup_env_key_workspace() -> (TempDir, TempDir, TempDir, String) {
+fn setup_env_key_workspace() -> (TempDir, TempDir, TempDir, PathBuf, String) {
     let (workspace_dir, home_dir, ssh_temp, ssh_priv) = setup_workspace();
 
     let keystore_root = home_dir.path().join("keys");
@@ -65,7 +66,7 @@ fn setup_env_key_workspace() -> (TempDir, TempDir, TempDir, String) {
     )
     .expect("should export private key");
 
-    (workspace_dir, home_dir, ssh_temp, exported)
+    (workspace_dir, home_dir, ssh_temp, ssh_priv, exported)
 }
 
 /// Build a CLI command configured for env key mode.
@@ -84,24 +85,26 @@ fn env_key_cmd(home: &TempDir, exported_key: &str, password: &str) -> assert_cmd
 }
 
 // ============================================================================
-// Roundtrip Tests
+// Read-only Success Tests
 // ============================================================================
 
 #[test]
-fn test_env_key_set_and_get_roundtrip() {
-    let (workspace_dir, home_dir, _ssh_temp, exported_key) = setup_env_key_workspace();
+fn test_env_key_get_roundtrip() {
+    let (workspace_dir, home_dir, _ssh_temp, ssh_priv, exported_key) = setup_env_key_workspace();
 
-    // Set a KV pair using env key mode
-    env_key_cmd(&home_dir, &exported_key, TEST_PASSWORD)
+    // Prepare the encrypted KV document in normal SSH mode.
+    cmd()
         .arg("set")
         .arg("DATABASE_URL")
         .arg("postgres://localhost/testdb")
         .arg("--workspace")
         .arg(workspace_dir.path())
+        .env("SECRETENV_HOME", home_dir.path())
+        .env("SECRETENV_SSH_KEY", ssh_priv.to_str().unwrap())
         .assert()
         .success();
 
-    // Get it back using env key mode
+    // Read it back in env key mode.
     env_key_cmd(&home_dir, &exported_key, TEST_PASSWORD)
         .arg("get")
         .arg("DATABASE_URL")
@@ -113,31 +116,30 @@ fn test_env_key_set_and_get_roundtrip() {
 }
 
 #[test]
-fn test_env_key_encrypt_decrypt_file_roundtrip() {
-    let (workspace_dir, home_dir, _ssh_temp, exported_key) = setup_env_key_workspace();
+fn test_env_key_decrypt_roundtrip() {
+    let (workspace_dir, home_dir, _ssh_temp, ssh_priv, exported_key) = setup_env_key_workspace();
 
-    // Create a test file to encrypt
+    // Prepare the encrypted file in normal SSH mode.
     let original_content = b"TOP_SECRET=env_key_mode_works\n";
     let input_file = home_dir.path().join("secret.txt");
-    std::fs::write(&input_file, original_content).unwrap();
+    fs::write(&input_file, original_content).unwrap();
 
     let encrypted_file = home_dir.path().join("secret.txt.encrypted");
     let decrypted_file = home_dir.path().join("decrypted.txt");
 
-    // Encrypt using env key mode
-    env_key_cmd(&home_dir, &exported_key, TEST_PASSWORD)
+    cmd()
         .arg("encrypt")
         .arg(input_file.to_str().unwrap())
         .arg("--out")
         .arg(encrypted_file.to_str().unwrap())
         .arg("--workspace")
         .arg(workspace_dir.path())
+        .env("SECRETENV_HOME", home_dir.path())
+        .env("SECRETENV_SSH_KEY", ssh_priv.to_str().unwrap())
         .assert()
         .success();
 
-    assert!(encrypted_file.exists(), "Encrypted file should exist");
-
-    // Decrypt using env key mode
+    // Decrypt in env key mode.
     env_key_cmd(&home_dir, &exported_key, TEST_PASSWORD)
         .arg("decrypt")
         .arg(encrypted_file.to_str().unwrap())
@@ -156,13 +158,68 @@ fn test_env_key_encrypt_decrypt_file_roundtrip() {
     );
 }
 
+#[test]
+fn test_env_key_run_roundtrip() {
+    let (workspace_dir, home_dir, _ssh_temp, ssh_priv, exported_key) = setup_env_key_workspace();
+
+    cmd()
+        .arg("set")
+        .arg("APP_TOKEN")
+        .arg("run-mode-value")
+        .arg("--workspace")
+        .arg(workspace_dir.path())
+        .env("SECRETENV_HOME", home_dir.path())
+        .env("SECRETENV_SSH_KEY", ssh_priv.to_str().unwrap())
+        .assert()
+        .success();
+
+    #[cfg(unix)]
+    let mut c = env_key_cmd(&home_dir, &exported_key, TEST_PASSWORD);
+    #[cfg(unix)]
+    c.arg("run")
+        .arg("--workspace")
+        .arg(workspace_dir.path())
+        .arg("--")
+        .arg("sh")
+        .arg("-c")
+        .arg("echo $APP_TOKEN")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("run-mode-value"));
+
+    #[cfg(windows)]
+    let mut c = env_key_cmd(&home_dir, &exported_key, TEST_PASSWORD);
+    #[cfg(windows)]
+    c.arg("run")
+        .arg("--workspace")
+        .arg(workspace_dir.path())
+        .arg("--")
+        .arg("cmd")
+        .arg("/c")
+        .arg("echo %APP_TOKEN%")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("run-mode-value"));
+}
+
 // ============================================================================
 // Error Cases
 // ============================================================================
 
 #[test]
 fn test_env_key_missing_password_fails() {
-    let (workspace_dir, home_dir, _ssh_temp, exported_key) = setup_env_key_workspace();
+    let (workspace_dir, home_dir, _ssh_temp, ssh_priv, exported_key) = setup_env_key_workspace();
+
+    cmd()
+        .arg("set")
+        .arg("SOME_KEY")
+        .arg("some_value")
+        .arg("--workspace")
+        .arg(workspace_dir.path())
+        .env("SECRETENV_HOME", home_dir.path())
+        .env("SECRETENV_SSH_KEY", ssh_priv.to_str().unwrap())
+        .assert()
+        .success();
 
     // Set SECRETENV_PRIVATE_KEY but NOT SECRETENV_KEY_PASSWORD
     let mut c = cmd();
@@ -172,9 +229,8 @@ fn test_env_key_missing_password_fails() {
         .env_remove("SSH_AUTH_SOCK")
         .env_remove("SECRETENV_SSH_KEY");
 
-    c.arg("set")
+    c.arg("get")
         .arg("SOME_KEY")
-        .arg("some_value")
         .arg("--workspace")
         .arg(workspace_dir.path())
         .assert()
@@ -184,13 +240,23 @@ fn test_env_key_missing_password_fails() {
 
 #[test]
 fn test_env_key_wrong_password_fails() {
-    let (workspace_dir, home_dir, _ssh_temp, exported_key) = setup_env_key_workspace();
+    let (workspace_dir, home_dir, _ssh_temp, ssh_priv, exported_key) = setup_env_key_workspace();
 
-    // Use wrong password
-    env_key_cmd(&home_dir, &exported_key, "wrong-password-99")
+    cmd()
         .arg("set")
         .arg("SOME_KEY")
         .arg("some_value")
+        .arg("--workspace")
+        .arg(workspace_dir.path())
+        .env("SECRETENV_HOME", home_dir.path())
+        .env("SECRETENV_SSH_KEY", ssh_priv.to_str().unwrap())
+        .assert()
+        .success();
+
+    // Use wrong password
+    env_key_cmd(&home_dir, &exported_key, "wrong-password-99")
+        .arg("get")
+        .arg("SOME_KEY")
         .arg("--workspace")
         .arg(workspace_dir.path())
         .assert()
@@ -198,8 +264,69 @@ fn test_env_key_wrong_password_fails() {
 }
 
 #[test]
+fn test_env_key_mode_rejects_set() {
+    let (workspace_dir, home_dir, _ssh_temp, _ssh_priv, exported_key) = setup_env_key_workspace();
+
+    env_key_cmd(&home_dir, &exported_key, TEST_PASSWORD)
+        .arg("set")
+        .arg("SOME_KEY")
+        .arg("some_value")
+        .arg("--workspace")
+        .arg(workspace_dir.path())
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("environment-variable key mode"))
+        .stderr(predicate::str::contains(ENV_MODE_UNSUPPORTED_MESSAGE));
+}
+
+#[test]
+fn test_env_key_mode_rejects_encrypt() {
+    let (workspace_dir, home_dir, _ssh_temp, _ssh_priv, exported_key) = setup_env_key_workspace();
+    let input_file = home_dir.path().join("blocked.txt");
+    fs::write(&input_file, b"blocked").unwrap();
+
+    env_key_cmd(&home_dir, &exported_key, TEST_PASSWORD)
+        .arg("encrypt")
+        .arg(input_file.to_str().unwrap())
+        .arg("--workspace")
+        .arg(workspace_dir.path())
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("environment-variable key mode"))
+        .stderr(predicate::str::contains(ENV_MODE_UNSUPPORTED_MESSAGE));
+}
+
+#[test]
+fn test_env_key_mode_rejects_rewrap() {
+    let (workspace_dir, home_dir, _ssh_temp, _ssh_priv, exported_key) = setup_env_key_workspace();
+
+    env_key_cmd(&home_dir, &exported_key, TEST_PASSWORD)
+        .arg("rewrap")
+        .arg("--workspace")
+        .arg(workspace_dir.path())
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("environment-variable key mode"))
+        .stderr(predicate::str::contains(ENV_MODE_UNSUPPORTED_MESSAGE));
+}
+
+#[test]
+fn test_env_key_mode_rejects_list() {
+    let (workspace_dir, home_dir, _ssh_temp, _ssh_priv, exported_key) = setup_env_key_workspace();
+
+    env_key_cmd(&home_dir, &exported_key, TEST_PASSWORD)
+        .arg("list")
+        .arg("--workspace")
+        .arg(workspace_dir.path())
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("environment-variable key mode"))
+        .stderr(predicate::str::contains(ENV_MODE_UNSUPPORTED_MESSAGE));
+}
+
+#[test]
 fn test_env_key_mode_rejects_key_new() {
-    let (_workspace_dir, home_dir, _ssh_temp, exported_key) = setup_env_key_workspace();
+    let (_workspace_dir, home_dir, _ssh_temp, _ssh_priv, exported_key) = setup_env_key_workspace();
 
     env_key_cmd(&home_dir, &exported_key, TEST_PASSWORD)
         .arg("key")
@@ -213,44 +340,11 @@ fn test_env_key_mode_rejects_key_new() {
 }
 
 #[test]
-fn test_env_key_mode_rejects_private_key_export() {
-    let (_workspace_dir, home_dir, _ssh_temp, exported_key) = setup_env_key_workspace();
-
-    env_key_cmd(&home_dir, &exported_key, TEST_PASSWORD)
-        .arg("key")
-        .arg("export")
-        .arg("--private")
-        .arg("--stdout")
-        .arg("--member-id")
-        .arg(TEST_MEMBER_ID)
-        .assert()
-        .failure()
-        .stderr(predicate::str::contains("environment-variable key mode"))
-        .stderr(predicate::str::contains(ENV_MODE_UNSUPPORTED_MESSAGE));
-}
-
-#[test]
 fn test_env_key_mode_rejects_init() {
-    let (workspace_dir, home_dir, _ssh_temp, exported_key) = setup_env_key_workspace();
+    let (workspace_dir, home_dir, _ssh_temp, _ssh_priv, exported_key) = setup_env_key_workspace();
 
     env_key_cmd(&home_dir, &exported_key, TEST_PASSWORD)
         .arg("init")
-        .arg("--workspace")
-        .arg(workspace_dir.path())
-        .arg("--member-id")
-        .arg(TEST_MEMBER_ID)
-        .assert()
-        .failure()
-        .stderr(predicate::str::contains("environment-variable key mode"))
-        .stderr(predicate::str::contains(ENV_MODE_UNSUPPORTED_MESSAGE));
-}
-
-#[test]
-fn test_env_key_mode_rejects_join() {
-    let (workspace_dir, home_dir, _ssh_temp, exported_key) = setup_env_key_workspace();
-
-    env_key_cmd(&home_dir, &exported_key, TEST_PASSWORD)
-        .arg("join")
         .arg("--workspace")
         .arg(workspace_dir.path())
         .arg("--member-id")
