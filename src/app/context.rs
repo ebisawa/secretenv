@@ -117,16 +117,18 @@ impl ExecutionContext {
             Some(ctx) => Self::load(options, member_id, explicit_kid, ctx),
             None => {
                 if member_id.is_some() {
-                    tracing::warn!(
-                        "Ignoring --member-id in environment variable key mode \
-                         (member_id is derived from SECRETENV_PRIVATE_KEY)"
-                    );
+                    return Err(Error::InvalidArgument {
+                        message: "--member-id cannot be used in environment variable key mode \
+                                 (member_id is derived from SECRETENV_PRIVATE_KEY)"
+                            .to_string(),
+                    });
                 }
                 if explicit_kid.is_some() {
-                    tracing::warn!(
-                        "Ignoring --kid in environment variable key mode \
-                         (kid is derived from SECRETENV_PRIVATE_KEY)"
-                    );
+                    return Err(Error::InvalidArgument {
+                        message: "--kid cannot be used in environment variable key mode \
+                                 (kid is derived from SECRETENV_PRIVATE_KEY)"
+                            .to_string(),
+                    });
                 }
                 Self::load_from_env(options)
             }

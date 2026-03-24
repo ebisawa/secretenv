@@ -109,8 +109,6 @@ pub fn derive_key_from_password(
     params: &Argon2Params,
     debug_enabled: bool,
 ) -> Result<XChaChaKey> {
-    validate_argon2_params(params)?;
-
     if debug_enabled {
         debug!(
             "[CRYPTO] Argon2id: password hash (kid: {}, m: {}, t: {}, p: {})",

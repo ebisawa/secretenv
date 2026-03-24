@@ -6,7 +6,7 @@
 use crate::io::keystore::helpers::resolve_kid;
 use crate::io::keystore::public_keys::load_public_keys_for_member_ids;
 use crate::io::keystore::storage::load_public_key;
-use crate::io::workspace::members::{load_member_file, load_member_files};
+use crate::io::workspace::members::load_member_file;
 use crate::model::public_key::PublicKey;
 use crate::Result;
 use std::path::{Path, PathBuf};
@@ -70,6 +70,9 @@ impl PublicKeySource for WorkspacePublicKeySource {
     }
 
     fn load_public_keys_for_member_ids(&self, member_ids: &[String]) -> Result<Vec<PublicKey>> {
-        load_member_files(&self.workspace_path, member_ids)
+        member_ids
+            .iter()
+            .map(|id| self.load_public_key(id))
+            .collect()
     }
 }

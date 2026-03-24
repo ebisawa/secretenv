@@ -44,8 +44,6 @@ pub fn load_private_key_from_env(
             ),
         },
     })?);
-    // Clear sensitive environment variable after reading
-    std::env::remove_var(ENV_PRIVATE_KEY);
 
     let password = Zeroizing::new(std::env::var(ENV_KEY_PASSWORD).map_err(|e| match e {
         std::env::VarError::NotPresent => Error::Config {
@@ -61,8 +59,6 @@ pub fn load_private_key_from_env(
             ),
         },
     })?);
-    // Clear sensitive environment variable after reading
-    std::env::remove_var(ENV_KEY_PASSWORD);
 
     let json_bytes =
         Zeroizing::new(URL_SAFE_NO_PAD.decode(&encoded).map_err(|e| Error::Parse {
@@ -108,8 +104,15 @@ pub fn load_private_key_from_env(
     let kid = private_key.protected.kid.clone();
 
     let plaintext = decrypt_private_key_with_password(&private_key, &password, debug)?;
-
     let verified_key = validate_and_wrap_private_key_password(plaintext, &member_id, &kid)?;
+
+    // Safety: clear sensitive env vars after successful validation.
+    // This is intentional security hygiene to minimize secret exposure.
+    // Note: std::env::remove_var is not thread-safe; this function must
+    // be called from the main thread only. The env vars cannot be
+    // recovered after removal, so retries require re-setting them.
+    std::env::remove_var(ENV_PRIVATE_KEY);
+    std::env::remove_var(ENV_KEY_PASSWORD);
 
     Ok((verified_key, member_id))
 }

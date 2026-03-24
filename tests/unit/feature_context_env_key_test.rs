@@ -223,6 +223,70 @@ fn test_verify_own_public_key_mismatch_fails() {
 }
 
 #[test]
+fn test_env_vars_cleared_after_successful_load() {
+    let _guard = EnvGuard::new(&[ENV_PRIVATE_KEY, ENV_KEY_PASSWORD]);
+    let plaintext = build_test_plaintext();
+    let password = "strong-password-42";
+    let exported = build_exported_key(&plaintext, password);
+
+    std::env::set_var(ENV_PRIVATE_KEY, &exported);
+    std::env::set_var(ENV_KEY_PASSWORD, password);
+
+    let _result = load_private_key_from_env(false).expect("should succeed");
+
+    assert!(
+        std::env::var(ENV_PRIVATE_KEY).is_err(),
+        "SECRETENV_PRIVATE_KEY should be cleared after successful load"
+    );
+    assert!(
+        std::env::var(ENV_KEY_PASSWORD).is_err(),
+        "SECRETENV_KEY_PASSWORD should be cleared after successful load"
+    );
+}
+
+#[test]
+fn test_env_key_rejects_invalid_format() {
+    let _guard = EnvGuard::new(&[ENV_PRIVATE_KEY, ENV_KEY_PASSWORD]);
+
+    // Build a PrivateKey with wrong format string
+    let bad_format_key = PrivateKey {
+        protected: PrivateKeyProtected {
+            format: "secretenv.private.key@2".to_string(),
+            member_id: "alice@example.com".to_string(),
+            kid: "01HN8Z3Q4R5S6T7V8W9X0Y1Z2A".to_string(),
+            alg: PrivateKeyAlgorithm::Argon2id {
+                m: 47104,
+                t: 1,
+                p: 1,
+                salt: "AAAA".to_string(),
+                aead: "xchacha20-poly1305".to_string(),
+            },
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+            expires_at: "2027-01-01T00:00:00Z".to_string(),
+        },
+        encrypted: EncryptedData {
+            nonce: "AAAA".to_string(),
+            ct: "AAAA".to_string(),
+        },
+    };
+
+    let json = serde_json::to_vec(&bad_format_key).expect("serialize");
+    let encoded = URL_SAFE_NO_PAD.encode(&json);
+
+    std::env::set_var(ENV_PRIVATE_KEY, &encoded);
+    std::env::set_var(ENV_KEY_PASSWORD, "test-password");
+
+    let result = load_private_key_from_env(false);
+    assert!(result.is_err(), "Wrong format should be rejected");
+    let err = result.unwrap_err().to_string();
+    assert!(
+        err.contains("Unsupported PrivateKey format"),
+        "error should mention unsupported format: {}",
+        err
+    );
+}
+
+#[test]
 fn test_env_key_rejects_sshsig_algorithm() {
     let _guard = EnvGuard::new(&[ENV_PRIVATE_KEY, ENV_KEY_PASSWORD]);
 

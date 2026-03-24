@@ -50,9 +50,8 @@ fn validate_password_length(password: &str) -> Result<()> {
     if password.len() < MIN_PASSWORD_LENGTH {
         return Err(Error::InvalidArgument {
             message: format!(
-                "Password must be at least {} characters, got {}",
+                "Password must be at least {} characters",
                 MIN_PASSWORD_LENGTH,
-                password.len()
             ),
         });
     }

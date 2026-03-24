@@ -68,6 +68,67 @@ fn test_workspace_public_key_source_load_not_found() {
     assert!(result.is_err());
 }
 
+fn setup_incoming_member(workspace_path: &std::path::Path, member_id: &str, kid: &str) {
+    let incoming_dir = workspace_path.join("members/incoming");
+    std::fs::create_dir_all(&incoming_dir).unwrap();
+    let json = build_test_public_key_json(member_id, kid);
+    std::fs::write(incoming_dir.join(format!("{}.json", member_id)), json).unwrap();
+}
+
+#[test]
+fn test_workspace_public_key_source_rejects_incoming_member() {
+    let temp_dir = TempDir::new().unwrap();
+    let workspace_path = temp_dir.path();
+
+    // Only place member in incoming/ (not active/)
+    std::fs::create_dir_all(workspace_path.join("members/active")).unwrap();
+    setup_incoming_member(
+        workspace_path,
+        "pending@example.com",
+        "01HTEST0000000000PENDING",
+    );
+
+    let source = WorkspacePublicKeySource::new(workspace_path.to_path_buf());
+    let result = source.load_public_key("pending@example.com");
+    assert!(result.is_err(), "Incoming member should be rejected");
+    let err = result.unwrap_err().to_string();
+    assert!(
+        err.contains("not active"),
+        "error should mention 'not active': {}",
+        err
+    );
+}
+
+#[test]
+fn test_workspace_public_key_source_bulk_rejects_incoming_member() {
+    let temp_dir = TempDir::new().unwrap();
+    let workspace_path = temp_dir.path();
+
+    // Active member
+    setup_workspace_member(
+        workspace_path,
+        "alice@example.com",
+        "01HTEST00000000000000ALICE",
+    );
+    // Incoming member
+    setup_incoming_member(
+        workspace_path,
+        "pending@example.com",
+        "01HTEST0000000000PENDING",
+    );
+
+    let source = WorkspacePublicKeySource::new(workspace_path.to_path_buf());
+    let member_ids = vec![
+        "alice@example.com".to_string(),
+        "pending@example.com".to_string(),
+    ];
+    let result = source.load_public_keys_for_member_ids(&member_ids);
+    assert!(
+        result.is_err(),
+        "Bulk load should reject when any member is not active"
+    );
+}
+
 #[test]
 fn test_workspace_public_key_source_load_multiple() {
     let temp_dir = TempDir::new().unwrap();

@@ -65,6 +65,23 @@ fn test_generate_salt_randomness() {
 }
 
 #[test]
+fn test_derive_key_different_kids_differ() {
+    let salt = Salt::new([5u8; 16]);
+    let password = "same-password-for-both";
+
+    let key1 = derive_key_from_password(password, &salt, "kid-aaa", &DEFAULT_ARGON2_PARAMS, false)
+        .unwrap();
+    let key2 = derive_key_from_password(password, &salt, "kid-bbb", &DEFAULT_ARGON2_PARAMS, false)
+        .unwrap();
+
+    assert_ne!(
+        key1.as_bytes(),
+        key2.as_bytes(),
+        "Same password and salt with different kids must produce different keys"
+    );
+}
+
+#[test]
 fn test_validate_argon2_params_default_ok() {
     // DEFAULT_ARGON2_PARAMS values should pass constructor validation
     assert!(Argon2Params::new(
