@@ -161,7 +161,7 @@ pub fn validate_okp_key(
     d: &str,
     x: &str,
     label: &str,
-) -> Result<(Vec<u8>, Vec<u8>)> {
+) -> Result<(Zeroizing<Vec<u8>>, Vec<u8>)> {
     if kty != "OKP" {
         return Err(Error::Crypto {
             message: format!("Invalid {} key type: expected 'OKP', got '{}'", label, kty),
@@ -177,7 +177,7 @@ pub fn validate_okp_key(
             source: None,
         });
     }
-    let d_bytes = b64_decode(d, &format!("{} private key", label))?;
+    let d_bytes = Zeroizing::new(b64_decode(d, &format!("{} private key", label))?);
     let x_bytes = b64_decode(x, &format!("{} public key", label))?;
     if d_bytes.len() != 32 {
         return Err(Error::Crypto {

@@ -118,7 +118,7 @@ pub struct IdentityKeysPrivate {
 /// - `crv = "Ed25519"` for signatures
 ///
 /// It also includes public component `x` for PublicKey reconstruction.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Zeroize)]
+#[derive(Clone, Serialize, Deserialize, PartialEq, Zeroize)]
 #[zeroize(drop)]
 #[serde(deny_unknown_fields)]
 pub struct JwkOkpPrivateKey {
@@ -126,6 +126,17 @@ pub struct JwkOkpPrivateKey {
     pub crv: String,
     pub x: String,
     pub d: String,
+}
+
+impl std::fmt::Debug for JwkOkpPrivateKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("JwkOkpPrivateKey")
+            .field("kty", &self.kty)
+            .field("crv", &self.crv)
+            .field("x", &self.x)
+            .field("d", &"[REDACTED]")
+            .finish()
+    }
 }
 impl PrivateKey {
     /// Create a new PrivateKey with the given parameters

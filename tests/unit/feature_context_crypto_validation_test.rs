@@ -62,7 +62,7 @@ fn test_validate_okp_key_success() {
 
     let result = validate_okp_key("OKP", "Ed25519", "Ed25519", &d, &x, "Sig");
     assert!(result.is_ok());
-    let (d_bytes, x_bytes): (Vec<u8>, Vec<u8>) = result.unwrap();
+    let (d_bytes, x_bytes) = result.unwrap();
     assert_eq!(d_bytes.len(), 32);
     assert_eq!(x_bytes.len(), 32);
 }

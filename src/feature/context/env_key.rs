@@ -42,10 +42,11 @@ pub fn load_private_key_from_env() -> Result<(crate::model::verified::VerifiedPr
         ),
     })?);
 
-    let json_bytes = URL_SAFE_NO_PAD.decode(&encoded).map_err(|e| Error::Parse {
-        message: format!("Failed to decode {} as Base64url: {}", ENV_PRIVATE_KEY, e),
-        source: Some(Box::new(e)),
-    })?;
+    let json_bytes =
+        Zeroizing::new(URL_SAFE_NO_PAD.decode(&encoded).map_err(|e| Error::Parse {
+            message: format!("Failed to decode {} as Base64url: {}", ENV_PRIVATE_KEY, e),
+            source: Some(Box::new(e)),
+        })?);
 
     let private_key: PrivateKey =
         serde_json::from_slice(&json_bytes).map_err(|e| Error::Parse {
