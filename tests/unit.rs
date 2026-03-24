@@ -45,6 +45,8 @@ pub mod feature_config_test;
 pub mod feature_context_crypto_test;
 #[path = "unit/feature_context_crypto_validation_test.rs"]
 pub mod feature_context_crypto_validation_test;
+#[path = "unit/feature_context_env_key_integration_test.rs"]
+pub mod feature_context_env_key_integration_test;
 #[path = "unit/feature_context_env_key_test.rs"]
 pub mod feature_context_env_key_test;
 #[path = "unit/feature_context_ssh_match_test.rs"]
