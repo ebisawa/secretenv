@@ -22,6 +22,7 @@ pub(crate) fn run(args: ShowArgs) -> Result<(), Error> {
         println!("Key ID: {}", member.kid);
         println!("Format: {}", member.format);
         println!("Expires: {}", member.expires_at);
+        println!("Status: {}", member.verification_status.as_str());
         if let Some(ref created) = member.created_at {
             println!("Created: {}", created);
         }
@@ -36,12 +37,16 @@ pub(crate) fn run(args: ShowArgs) -> Result<(), Error> {
         println!("  Method: {}", member.ssh_attestation_method);
         println!("  SSH Pubkey: {}", member.ssh_attestation_pubkey);
 
-        if let Some(github) = member.github_account {
+        if let Some(ref github) = member.github_account {
             println!();
             println!("GitHub Account:");
             println!("  GitHub ID: {}", github.id);
             println!("  GitHub username: {}", github.login);
         }
+    }
+
+    for warning in &member.verification_warnings {
+        eprintln!("Warning: {}", warning);
     }
 
     Ok(())

@@ -6,8 +6,15 @@
 use crate::test_utils::setup_test_workspace;
 use secretenv::feature::member::add::add_member_from_file;
 use secretenv::io::workspace::members::load_incoming_member_files;
+use serde_json::Value;
 use std::fs;
 use tempfile::TempDir;
+
+fn write_tampered_public_key(export_file: &std::path::Path, tamper: impl FnOnce(&mut Value)) {
+    let mut value: Value = serde_json::from_str(&fs::read_to_string(export_file).unwrap()).unwrap();
+    tamper(&mut value);
+    fs::write(export_file, serde_json::to_string_pretty(&value).unwrap()).unwrap();
+}
 
 #[test]
 fn test_add_member_valid_file() {
@@ -111,4 +118,51 @@ fn test_add_member_duplicate_with_force() {
     // Second add with force succeeds
     let result = add_member_from_file(&workspace_dir2, &export_file, true);
     assert!(result.is_ok());
+}
+
+#[test]
+fn test_add_member_invalid_self_signature_error() {
+    let (_temp_dir, workspace_dir) = setup_test_workspace(&["alice@example.com"]);
+
+    let alice_key_path = workspace_dir.join("members/active/alice@example.com.json");
+    let key_content = fs::read_to_string(&alice_key_path).unwrap();
+
+    let export_dir = TempDir::new().unwrap();
+    let export_file = export_dir.path().join("alice.json");
+    fs::write(&export_file, &key_content).unwrap();
+    write_tampered_public_key(&export_file, |value| {
+        value["protected"]["expires_at"] = Value::String("2030-01-01T00:00:00Z".to_string());
+    });
+
+    let temp_dir2 = TempDir::new().unwrap();
+    let workspace_dir2 = temp_dir2.path().join("workspace");
+    fs::create_dir_all(workspace_dir2.join("members/active")).unwrap();
+    fs::create_dir_all(workspace_dir2.join("members/incoming")).unwrap();
+
+    let result = add_member_from_file(&workspace_dir2, &export_file, false);
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_add_member_invalid_attestation_error() {
+    let (_temp_dir, workspace_dir) = setup_test_workspace(&["alice@example.com"]);
+
+    let alice_key_path = workspace_dir.join("members/active/alice@example.com.json");
+    let key_content = fs::read_to_string(&alice_key_path).unwrap();
+
+    let export_dir = TempDir::new().unwrap();
+    let export_file = export_dir.path().join("alice.json");
+    fs::write(&export_file, &key_content).unwrap();
+    write_tampered_public_key(&export_file, |value| {
+        value["protected"]["identity"]["attestation"]["pub"] =
+            Value::String("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBroken broken@test".to_string());
+    });
+
+    let temp_dir2 = TempDir::new().unwrap();
+    let workspace_dir2 = temp_dir2.path().join("workspace");
+    fs::create_dir_all(workspace_dir2.join("members/active")).unwrap();
+    fs::create_dir_all(workspace_dir2.join("members/incoming")).unwrap();
+
+    let result = add_member_from_file(&workspace_dir2, &export_file, false);
+    assert!(result.is_err());
 }

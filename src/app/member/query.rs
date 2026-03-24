@@ -3,9 +3,13 @@
 
 use crate::app::context::options::CommonCommandOptions;
 use crate::app::context::paths::require_workspace;
+use crate::feature::member::verification::load_and_verify_member_file;
 use crate::io::workspace::members::{
-    load_active_member_files, load_incoming_member_files, load_member_file,
+    active_member_file_path, incoming_member_file_path, list_active_member_paths,
+    list_incoming_member_paths, MemberStatus,
 };
+use crate::support::path::display_path_relative_to_cwd;
+use crate::Error;
 use crate::Result;
 
 use super::types::{MemberListResult, MemberShowResult, MembershipStatus};
@@ -13,23 +17,57 @@ use super::view::{build_member_document_view, build_member_list_entry};
 
 pub fn list_members(options: &CommonCommandOptions) -> Result<MemberListResult> {
     let workspace = require_workspace(options, "member list")?;
+    let mut warnings = Vec::new();
     Ok(MemberListResult {
-        active: load_active_member_files(&workspace.root_path)?
-            .into_iter()
-            .map(build_member_list_entry)
-            .collect::<Result<Vec<_>>>()?,
-        incoming: load_incoming_member_files(&workspace.root_path)?
-            .into_iter()
-            .map(build_member_list_entry)
-            .collect::<Result<Vec<_>>>()?,
+        active: collect_member_entries(
+            &list_active_member_paths(&workspace.root_path)?,
+            options.verbose,
+            &mut warnings,
+        )?,
+        incoming: collect_member_entries(
+            &list_incoming_member_paths(&workspace.root_path)?,
+            options.verbose,
+            &mut warnings,
+        )?,
+        warnings,
     })
 }
 
 pub fn show_member(options: &CommonCommandOptions, member_id: &str) -> Result<MemberShowResult> {
     let workspace = require_workspace(options, "member show")?;
-    let (member, status) = load_member_file(&workspace.root_path, member_id)?;
+    let active_path = active_member_file_path(&workspace.root_path, member_id);
+    let incoming_path = incoming_member_file_path(&workspace.root_path, member_id);
+    let (member_path, status) = if active_path.exists() {
+        (active_path, MemberStatus::Active)
+    } else if incoming_path.exists() {
+        (incoming_path, MemberStatus::Incoming)
+    } else {
+        return Err(Error::NotFound {
+            message: format!("Member '{}' not found in workspace", member_id),
+        });
+    };
+    let verified = load_and_verify_member_file(&member_path, Some(member_id), options.verbose)?;
     Ok(MemberShowResult {
-        member: build_member_document_view(member)?,
+        member: build_member_document_view(verified.public_key, verified.warnings)?,
         status: MembershipStatus::from(status),
     })
+}
+
+fn collect_member_entries(
+    member_paths: &[std::path::PathBuf],
+    debug: bool,
+    warnings: &mut Vec<String>,
+) -> Result<Vec<super::types::MemberListEntry>> {
+    let mut entries = Vec::new();
+    for member_path in member_paths {
+        match load_and_verify_member_file(member_path, None, debug) {
+            Ok(verified) => entries.push(build_member_list_entry(verified.public_key)?),
+            Err(error) => warnings.push(format!(
+                "Skipping invalid member file {}: {}",
+                display_path_relative_to_cwd(member_path),
+                error
+            )),
+        }
+    }
+    Ok(entries)
 }

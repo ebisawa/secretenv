@@ -8,8 +8,8 @@ use crate::app::context::paths::require_workspace;
 use crate::feature::member::promotion::{
     build_incoming_verification_report, IncomingVerificationReport,
 };
-use crate::feature::member::verification::{verify_incoming_members, verify_member};
-use crate::io::workspace::members::load_incoming_member_files;
+use crate::feature::member::verification::{verify_member, verify_member_files};
+use crate::io::workspace::members::list_incoming_member_paths;
 use crate::support::runtime::{run_blocking, run_blocking_result};
 use crate::Result;
 
@@ -33,11 +33,11 @@ pub fn verify_incoming_members_for_promotion(
     workspace_path: &Path,
     verbose: bool,
 ) -> Result<Option<IncomingVerificationReport>> {
-    let incoming_members = load_incoming_member_files(workspace_path)?;
-    if incoming_members.is_empty() {
+    let incoming_member_files = list_incoming_member_paths(workspace_path)?;
+    if incoming_member_files.is_empty() {
         return Ok(None);
     }
 
-    let results = run_blocking(verify_incoming_members(&incoming_members, verbose))?;
+    let results = run_blocking(verify_member_files(&incoming_member_files, verbose))?;
     Ok(Some(build_incoming_verification_report(&results)))
 }

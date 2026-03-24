@@ -108,6 +108,14 @@ pub fn load_incoming_member_files(workspace_path: &Path) -> Result<Vec<PublicKey
     load_sorted_members_from_dir(&members_dir(workspace_path, MemberStatus::Incoming))
 }
 
+pub fn list_active_member_paths(workspace_path: &Path) -> Result<Vec<PathBuf>> {
+    load_json_files_in_dir(&members_dir(workspace_path, MemberStatus::Active))
+}
+
+pub fn list_incoming_member_paths(workspace_path: &Path) -> Result<Vec<PathBuf>> {
+    load_json_files_in_dir(&members_dir(workspace_path, MemberStatus::Incoming))
+}
+
 pub fn list_active_member_ids(workspace_root: &Path) -> Result<Vec<String>> {
     let paths = load_json_files_in_dir(&members_dir(workspace_root, MemberStatus::Active))?;
 

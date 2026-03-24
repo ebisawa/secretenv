@@ -6,7 +6,8 @@ use crate::model::public_key::PublicKey;
 use crate::Result;
 
 use super::types::{
-    MemberDocumentView, MemberGithubAccount, MemberListEntry, MemberVerificationResult,
+    MemberDocumentStatus, MemberDocumentView, MemberGithubAccount, MemberListEntry,
+    MemberVerificationResult,
 };
 
 pub(crate) fn build_member_list_entry(public_key: PublicKey) -> Result<MemberListEntry> {
@@ -16,7 +17,16 @@ pub(crate) fn build_member_list_entry(public_key: PublicKey) -> Result<MemberLis
     })
 }
 
-pub(crate) fn build_member_document_view(public_key: PublicKey) -> Result<MemberDocumentView> {
+pub(crate) fn build_member_document_view(
+    public_key: PublicKey,
+    verification_warnings: Vec<String>,
+) -> Result<MemberDocumentView> {
+    let verification_status = if verification_warnings.is_empty() {
+        MemberDocumentStatus::Valid
+    } else {
+        MemberDocumentStatus::Expired
+    };
+
     Ok(MemberDocumentView {
         member_id: public_key.protected.member_id.clone(),
         kid: public_key.protected.kid.clone(),
@@ -38,6 +48,8 @@ pub(crate) fn build_member_document_view(public_key: PublicKey) -> Result<Member
                 id: account.id,
                 login: account.login.clone(),
             }),
+        verification_status,
+        verification_warnings,
         document: serialize_to_json_value(&public_key)?,
     })
 }
