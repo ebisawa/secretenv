@@ -11,14 +11,18 @@ mod types;
 use crate::app::context::{CommonCommandOptions, SshSigningContext};
 use crate::app::identity::{resolve_github_user_with_fallback, resolve_member_id_with_fallback};
 use crate::feature::key::generate::{generate_key, KeyGenerationOptions};
-use crate::feature::key::manage::{activate_key, export_key, list_keys, remove_key};
+use crate::feature::key::manage::{
+    activate_key, export_key, list_keys, load_and_decrypt_private_key, remove_key,
+};
+use crate::feature::key::portable_export::export_private_key_portable;
 use crate::io::keystore::storage;
 use crate::{Error, Result};
 use export::save_exported_public_key;
 pub(crate) use github::{resolve_github_account, verify_preflight_github_binding};
 use timestamp::resolve_key_timestamps;
 pub use types::{
-    KeyActivateResult, KeyExportResult, KeyInfo, KeyListResult, KeyNewResult, KeyRemoveResult,
+    KeyActivateResult, KeyExportPrivateResult, KeyExportResult, KeyInfo, KeyListResult,
+    KeyNewResult, KeyRemoveResult,
 };
 
 /// Resolve GitHub account metadata, verify SSH key on GitHub, then generate a key.
@@ -137,6 +141,45 @@ pub fn export_key_command(
     let result = export_key(options.home.clone(), member_id, kid)?;
     save_exported_public_key(out, &result.public_key)?;
     Ok(result.into())
+}
+
+pub fn export_private_key_command(
+    options: &CommonCommandOptions,
+    member_id: Option<String>,
+    kid: Option<String>,
+    password: &str,
+    ssh_ctx: SshSigningContext,
+) -> Result<KeyExportPrivateResult> {
+    let keystore_root = options.resolve_keystore_root()?;
+    let member_id = require_member_id(resolve_member_id_with_fallback(
+        member_id,
+        &keystore_root,
+        options.home.as_deref(),
+    )?)?;
+
+    let loaded = load_and_decrypt_private_key(
+        options.home.clone(),
+        member_id,
+        kid,
+        ssh_ctx.backend.as_ref(),
+        &ssh_ctx.public_key,
+        options.verbose,
+    )?;
+
+    let encoded_key = export_private_key_portable(
+        &loaded.plaintext,
+        &loaded.member_id,
+        &loaded.kid,
+        &loaded.created_at,
+        &loaded.expires_at,
+        password,
+    )?;
+
+    Ok(KeyExportPrivateResult {
+        member_id: loaded.member_id,
+        kid: loaded.kid,
+        encoded_key,
+    })
 }
 
 fn require_member_id(member_id: Option<String>) -> Result<String> {

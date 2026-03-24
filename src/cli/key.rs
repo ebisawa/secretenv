@@ -127,14 +127,24 @@ pub struct ExportArgs {
     pub kid: Option<String>,
 
     /// Output file path
-    #[arg(long, short = 'o', required = true)]
-    pub out: PathBuf,
+    #[arg(long, short = 'o', required_unless_present = "private")]
+    pub out: Option<PathBuf>,
+
+    /// Export password-protected portable private key
+    #[arg(long)]
+    pub private: bool,
 }
 
 pub fn run(args: KeyArgs) -> Result<()> {
     match args.command {
         KeyCommand::Activate(args) => operations::run_activate(args),
-        KeyCommand::Export(args) => operations::run_export(args),
+        KeyCommand::Export(args) => {
+            if args.private {
+                operations::run_export_private(args)
+            } else {
+                operations::run_export(args)
+            }
+        }
         KeyCommand::List(args) => list::run(args),
         KeyCommand::New(args) => new::run(args),
         KeyCommand::Remove(args) => operations::run_remove(args),

@@ -4,11 +4,14 @@
 //! Key management operations (list, activate, remove, export).
 
 use super::{KeyActivateResult, KeyExportResult, KeyInfo, KeyListResult, KeyRemoveResult};
+use crate::feature::key::protection::decrypt_private_key;
 use crate::io::keystore::active::{clear_active_kid, load_active_kid, set_active_kid};
 use crate::io::keystore::member::{remove_key_directory, select_latest_valid_kid};
 use crate::io::keystore::paths::get_private_key_file_path_from_root;
 use crate::io::keystore::resolver::KeystoreResolver;
-use crate::io::keystore::storage::{list_kids, list_member_ids, load_public_key};
+use crate::io::keystore::storage::{list_kids, list_member_ids, load_private_key, load_public_key};
+use crate::io::ssh::backend::SignatureBackend;
+use crate::model::private_key::PrivateKeyPlaintext;
 use crate::{Error, Result};
 use std::path::PathBuf;
 
@@ -128,15 +131,7 @@ pub fn export_key(
 ) -> Result<KeyExportResult> {
     let keystore_root = KeystoreResolver::resolve(home.as_ref())?;
 
-    let kid = if let Some(k) = kid {
-        k
-    } else {
-        let active_kid = load_active_kid(&member_id, &keystore_root)?;
-        active_kid.ok_or_else(|| Error::NotFound {
-            message: format!("No active key for member: {}", member_id),
-        })?
-    };
-
+    let kid = resolve_active_kid(&keystore_root, &member_id, kid)?;
     let public_key = load_public_key(&keystore_root, &member_id, &kid)?;
 
     Ok(KeyExportResult {
@@ -144,4 +139,51 @@ pub fn export_key(
         kid,
         public_key,
     })
+}
+
+/// Decrypted private key with metadata for portable export.
+pub struct LoadedPrivateKey {
+    pub plaintext: PrivateKeyPlaintext,
+    pub member_id: String,
+    pub kid: String,
+    pub created_at: String,
+    pub expires_at: String,
+}
+
+/// Load and decrypt a private key from keystore using SSH backend.
+pub fn load_and_decrypt_private_key(
+    home: Option<PathBuf>,
+    member_id: String,
+    kid: Option<String>,
+    backend: &dyn SignatureBackend,
+    ssh_pubkey: &str,
+    debug: bool,
+) -> Result<LoadedPrivateKey> {
+    let keystore_root = KeystoreResolver::resolve(home.as_ref())?;
+    let kid = resolve_active_kid(&keystore_root, &member_id, kid)?;
+
+    let encrypted = load_private_key(&keystore_root, &member_id, &kid)?;
+    let plaintext = decrypt_private_key(&encrypted, backend, ssh_pubkey, debug)?;
+
+    Ok(LoadedPrivateKey {
+        plaintext,
+        member_id,
+        kid,
+        created_at: encrypted.protected.created_at.clone(),
+        expires_at: encrypted.protected.expires_at.clone(),
+    })
+}
+
+/// Resolve the key ID, falling back to the active key if not specified.
+fn resolve_active_kid(
+    keystore_root: &std::path::Path,
+    member_id: &str,
+    kid: Option<String>,
+) -> Result<String> {
+    match kid {
+        Some(k) => Ok(k),
+        None => load_active_kid(member_id, keystore_root)?.ok_or_else(|| Error::NotFound {
+            message: format!("No active key for member: {}", member_id),
+        }),
+    }
 }

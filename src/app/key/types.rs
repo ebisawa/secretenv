@@ -122,3 +122,9 @@ impl From<feature_key::KeyExportResult> for KeyExportResult {
         }
     }
 }
+
+pub struct KeyExportPrivateResult {
+    pub member_id: String,
+    pub kid: String,
+    pub encoded_key: String,
+}
