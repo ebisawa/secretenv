@@ -33,7 +33,7 @@ pub struct KeyArgs {
 pub enum KeyCommand {
     /// Activate a key
     Activate(ActivateArgs),
-    /// Export public key
+    /// Export key material
     Export(ExportArgs),
     /// List keys
     List(ListArgs),
@@ -129,6 +129,10 @@ pub struct ExportArgs {
     /// Output file path
     #[arg(long, short = 'o', required_unless_present = "private")]
     pub out: Option<PathBuf>,
+
+    /// Write exported private key to stdout
+    #[arg(long, requires = "private", conflicts_with = "out")]
+    pub stdout: bool,
 
     /// Export password-protected portable private key
     #[arg(long)]

@@ -80,6 +80,12 @@ pub fn run_export(args: ExportArgs) -> Result<()> {
 
 /// Main entry point for private key export (password-protected portable format)
 pub fn run_export_private(args: ExportArgs) -> Result<()> {
+    if args.out.is_none() && !args.stdout {
+        return Err(crate::Error::InvalidArgument {
+            message: "--private export requires either --out or --stdout".to_string(),
+        });
+    }
+
     let options = CommonCommandOptions::from(&args.common);
     let keystore_root = options.resolve_keystore_root()?;
     let member_id = identity_prompt::resolve_member_id(
@@ -105,8 +111,10 @@ pub fn run_export_private(args: ExportArgs) -> Result<()> {
         eprintln!("Exported private key for '{}':", result.member_id);
         eprintln!("  Kid:    {}", result.kid);
         eprintln!("  Output: {}", display_path_relative_to_cwd(out));
-    } else {
+    } else if args.stdout {
+        eprintln!();
         println!("{}", result.encoded_key);
+        eprintln!();
         eprintln!("Exported private key for '{}':", result.member_id);
         eprintln!("  Kid: {}", result.kid);
     }

@@ -172,7 +172,7 @@ fn test_key_export_private_writes_password_protected_key_file() {
 }
 
 #[test]
-fn test_key_export_private_writes_base64url_to_stdout() {
+fn test_key_export_private_writes_base64url_to_stdout_with_stdout_flag() {
     let temp_dir = TempDir::new().unwrap();
     let (ssh_temp, ssh_priv, _ssh_pub, _ssh_pub_content) = create_temp_ssh_keypair();
     let member_id = TEST_MEMBER_ID;
@@ -192,6 +192,7 @@ fn test_key_export_private_writes_base64url_to_stdout() {
         .arg("key")
         .arg("export")
         .arg("--private")
+        .arg("--stdout")
         .arg("--member-id")
         .arg(member_id)
         .env("SECRETENV_HOME", temp_dir.path())
@@ -215,6 +216,80 @@ fn test_key_export_private_writes_base64url_to_stdout() {
 
     assert_eq!(private_key.protected.member_id, member_id);
     assert_eq!(private_key.protected.format, format::PRIVATE_KEY_V3);
+
+    drop(ssh_temp);
+}
+
+#[test]
+fn test_key_export_private_requires_explicit_output_destination() {
+    let temp_dir = TempDir::new().unwrap();
+    let (ssh_temp, ssh_priv, _ssh_pub, _ssh_pub_content) = create_temp_ssh_keypair();
+    let member_id = TEST_MEMBER_ID;
+
+    cmd()
+        .arg("key")
+        .arg("new")
+        .arg("--member-id")
+        .arg(member_id)
+        .arg("-i")
+        .arg(ssh_priv.to_str().unwrap())
+        .env("SECRETENV_HOME", temp_dir.path())
+        .assert()
+        .success();
+
+    cmd()
+        .arg("key")
+        .arg("export")
+        .arg("--private")
+        .arg("--member-id")
+        .arg(member_id)
+        .env("SECRETENV_HOME", temp_dir.path())
+        .env("SECRETENV_SSH_KEY", ssh_priv.to_str().unwrap())
+        .assert()
+        .failure()
+        .stdout(predicates::prelude::predicate::str::is_empty())
+        .stderr(predicates::prelude::predicate::str::contains(
+            "requires either --out or --stdout",
+        ));
+
+    drop(ssh_temp);
+}
+
+#[test]
+fn test_key_export_private_rejects_stdout_and_out_together() {
+    let temp_dir = TempDir::new().unwrap();
+    let (ssh_temp, ssh_priv, _ssh_pub, _ssh_pub_content) = create_temp_ssh_keypair();
+    let member_id = TEST_MEMBER_ID;
+
+    cmd()
+        .arg("key")
+        .arg("new")
+        .arg("--member-id")
+        .arg(member_id)
+        .arg("-i")
+        .arg(ssh_priv.to_str().unwrap())
+        .env("SECRETENV_HOME", temp_dir.path())
+        .assert()
+        .success();
+
+    let export_file = temp_dir.path().join("portable-private-key.txt");
+
+    cmd()
+        .arg("key")
+        .arg("export")
+        .arg("--private")
+        .arg("--stdout")
+        .arg("--member-id")
+        .arg(member_id)
+        .arg("--out")
+        .arg(export_file.to_str().unwrap())
+        .env("SECRETENV_HOME", temp_dir.path())
+        .env("SECRETENV_SSH_KEY", ssh_priv.to_str().unwrap())
+        .assert()
+        .failure()
+        .stderr(predicates::prelude::predicate::str::contains(
+            "cannot be used with",
+        ));
 
     drop(ssh_temp);
 }

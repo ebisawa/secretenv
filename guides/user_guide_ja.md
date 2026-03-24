@@ -791,7 +791,7 @@ secretenv key export --private --member-id ci@example.com --out ci-key.txt
 # パスワードの入力と確認を求められます（最低 8 文字）
 ```
 
-出力ファイルには Base64url エンコードされたテキストが 1 行含まれます。
+出力ファイルには Base64url エンコードされたテキストが 1 行含まれます。標準出力に出したい場合は、`--stdout` を明示的に指定してください。
 
 #### ステップ 4: CI シークレット変数に登録する
 
@@ -1038,8 +1038,8 @@ secretenv encrypt -i ~/.ssh/id_ed25519_work secret.env
 | `secretenv key list` | 鍵一覧を表示 |
 | `secretenv key activate <kid>` | 特定の鍵を active にする |
 | `secretenv key remove <kid>` | 鍵を削除 |
-| `secretenv key export [<kid>] [--member-id <id>]` | 公開鍵をエクスポート |
-| `secretenv key export --private [<kid>] [--member-id <id>] [--out <path>]` | 秘密鍵をエクスポート（パスワード保護、CI/CD 用） |
+| `secretenv key export [<kid>] [--member-id <id>] --out <path>` | 公開鍵をエクスポート |
+| `secretenv key export --private [<kid>] [--member-id <id>] (--stdout \| --out <path>)` | 秘密鍵をエクスポート（パスワード保護、CI/CD 用） |
 
 ### 設定
 

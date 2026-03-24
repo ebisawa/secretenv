@@ -791,7 +791,7 @@ secretenv key export --private --member-id ci@example.com --out ci-key.txt
 # You will be prompted to enter and confirm a password (minimum 8 characters)
 ```
 
-The output file contains a single line of Base64url-encoded text.
+The output file contains a single line of Base64url-encoded text. If you intentionally need stdout output, pass `--stdout` explicitly.
 
 #### Step 4: Register in CI Secret Variables
 
@@ -1038,8 +1038,8 @@ Even if the same member participates in multiple projects, their HPKE key is reg
 | `secretenv key list` | List keys |
 | `secretenv key activate <kid>` | Activate a specific key |
 | `secretenv key remove <kid>` | Remove a key |
-| `secretenv key export [<kid>] [--member-id <id>]` | Export public key |
-| `secretenv key export --private [<kid>] [--member-id <id>] [--out <path>]` | Export private key (password-protected, for CI/CD) |
+| `secretenv key export [<kid>] [--member-id <id>] --out <path>` | Export public key |
+| `secretenv key export --private [<kid>] [--member-id <id>] (--stdout \| --out <path>)` | Export private key (password-protected, for CI/CD) |
 
 ### Configuration
 
