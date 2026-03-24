@@ -13,6 +13,7 @@ use secretenv::feature::kv::encrypt::encrypt_kv_document;
 use secretenv::format::content::KvEncContent;
 use secretenv::format::kv::document::parse_kv_document;
 use secretenv::format::kv::dotenv::{build_dotenv_string, parse_dotenv};
+use secretenv::format::schema::document::{parse_kv_head_token, parse_kv_wrap_token};
 use secretenv::format::token::TokenCodec;
 use secretenv::model::kv_enc::verified::VerifiedKvEncDocument;
 use secretenv::model::public_key::PublicKey;
@@ -316,7 +317,7 @@ fn test_wrap_line_with_many_recipients() {
         .expect("WRAP line should exist");
     let wrap_token = wrap_line.strip_prefix(":WRAP ").unwrap();
     let wrap_data: secretenv::model::kv_enc::header::KvWrap =
-        secretenv::format::token::TokenCodec::decode_auto(wrap_token).unwrap();
+        parse_kv_wrap_token(wrap_token).unwrap();
     let user_kid = wrap_data
         .wrap
         .iter()
@@ -442,7 +443,6 @@ fn kv_entry_token(content: &str, key: &str) -> Option<String> {
 }
 
 fn kv_head_field(content: &str, field: &str) -> String {
-    use secretenv::format::token::TokenCodec;
     use secretenv::model::kv_enc::header::KvHeader;
     let token = content
         .lines()
@@ -450,7 +450,7 @@ fn kv_head_field(content: &str, field: &str) -> String {
         .unwrap()
         .strip_prefix(":HEAD ")
         .unwrap();
-    let head: KvHeader = TokenCodec::decode_auto(token).unwrap();
+    let head: KvHeader = parse_kv_head_token(token).unwrap();
     match field {
         "sid" => head.sid.to_string(),
         "created_at" => head.created_at,

@@ -8,8 +8,9 @@ use crate::feature::envelope::entry::decrypt_entry;
 use crate::feature::envelope::unwrap::unwrap_master_key_for_kv;
 use crate::format::kv::enc::canonical::extract_head_and_wrap_tokens;
 use crate::format::kv::enc::parser::KvEncParser;
-use crate::format::token::TokenCodec;
-use crate::model::kv_enc::entry::KvEntryValue;
+use crate::format::schema::document::{
+    parse_kv_entry_token, parse_kv_head_token, parse_kv_wrap_token,
+};
 use crate::model::kv_enc::header::{KvHeader, KvWrap};
 use crate::model::kv_enc::line::KvEncLine;
 use crate::model::kv_enc::verified::VerifiedKvEncDocument;
@@ -37,19 +38,9 @@ pub(crate) fn parse_kv_enc_content(
     // Extract and parse HEAD and WRAP
     let (head_token, wrap_token) = extract_head_and_wrap_tokens(&lines)?;
 
-    let head_data: KvHeader = TokenCodec::decode_auto_debug(
-        &head_token,
-        debug,
-        Some("HEAD"),
-        Some("parse_kv_enc_content"),
-    )?;
-
-    let wrap_data: KvWrap = TokenCodec::decode_auto_debug(
-        &wrap_token,
-        debug,
-        Some("WRAP"),
-        Some("parse_kv_enc_content"),
-    )?;
+    let _ = debug;
+    let head_data: KvHeader = parse_kv_head_token(&head_token)?;
+    let wrap_data: KvWrap = parse_kv_wrap_token(&wrap_token)?;
 
     Ok((head_data, wrap_data, lines))
 }
@@ -73,8 +64,8 @@ pub(crate) fn decrypt_kv_entries(
     let mut kv_map = HashMap::new();
     for line in entries {
         if let KvEncLine::KV { key, token } = line {
-            let entry: KvEntryValue =
-                TokenCodec::decode_auto_debug(token, debug, Some(key), Some("decrypt_kv_entries"))?;
+            let _ = debug;
+            let entry = parse_kv_entry_token(token)?;
             let value = decrypt_entry(&entry, master_key, sid, debug, "decrypt_kv_entries")?;
             kv_map.insert(key.clone(), value);
         }
@@ -107,8 +98,8 @@ pub fn decrypt_kv_single_entry(
         })?;
 
     if let KvEncLine::KV { key: k, token } = kv_line {
-        let entry: KvEntryValue =
-            TokenCodec::decode_auto_debug(token, debug, Some(k), Some("decrypt_kv_single_entry"))?;
+        let _ = (debug, k);
+        let entry = parse_kv_entry_token(token)?;
         decrypt_entry(&entry, &master_key, &sid, debug, "decrypt_kv_single_entry")
     } else {
         unreachable!()

@@ -6,8 +6,7 @@
 use crate::feature::context::crypto::CryptoContext;
 use crate::format::kv::detect_token_codec_from_kv_content;
 use crate::format::kv::enc::canonical::{extract_recipients_from_wrap, parse_kv_wrap};
-use crate::format::token::TokenCodec;
-use crate::model::kv_enc::entry::KvEntryValue;
+use crate::format::schema::document::parse_kv_entry_token;
 use crate::model::kv_enc::line::KvEncLine;
 use crate::Result;
 
@@ -18,7 +17,7 @@ fn detect_disclosed_entries(content: &str) -> Result<bool> {
     let (lines, _, _) = parse_kv_wrap(content)?;
     Ok(lines.iter().any(|line| {
         if let KvEncLine::KV { token, .. } = line {
-            TokenCodec::decode_auto::<KvEntryValue>(token.as_str())
+            parse_kv_entry_token(token.as_str())
                 .map(|entry| entry.disclosed)
                 .unwrap_or(false)
         } else {

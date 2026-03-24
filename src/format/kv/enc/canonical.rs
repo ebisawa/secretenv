@@ -9,7 +9,7 @@
 
 use super::parser::KvEncParser;
 use crate::format::kv::HEADER_LINE_PREFIX;
-use crate::format::token::TokenCodec;
+use crate::format::schema::document::{parse_kv_head_token, parse_kv_wrap_token};
 use crate::format::FormatError;
 use crate::model::kv_enc::header::{KvHeader, KvWrap};
 use crate::model::kv_enc::line::KvEncLine;
@@ -101,8 +101,8 @@ pub fn parse_kv_wrap(content: &str) -> Result<(Vec<KvEncLine>, KvHeader, KvWrap)
     let (head_token, wrap_token) = extract_head_and_wrap_tokens(&lines)?;
 
     // Decode tokens
-    let head_data: KvHeader = TokenCodec::decode_auto(&head_token)?;
-    let wrap_data: KvWrap = TokenCodec::decode_auto(&wrap_token)?;
+    let head_data = parse_kv_head_token(&head_token)?;
+    let wrap_data = parse_kv_wrap_token(&wrap_token)?;
 
     Ok((lines, head_data, wrap_data))
 }

@@ -37,3 +37,4 @@ impl TokenCodec {
 // The codec module is imported to make the impl block available
 #[allow(unused_imports)]
 pub(crate) use codec::*;
+pub(crate) use decode::decode_token_bytes;

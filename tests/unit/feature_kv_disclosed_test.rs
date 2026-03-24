@@ -14,6 +14,7 @@ use secretenv::feature::kv::encrypt::encrypt_kv_document;
 use secretenv::feature::kv::mutate::{set_kv_entry, KvWriteContext};
 use secretenv::format::content::KvEncContent;
 use secretenv::format::kv::document::parse_kv_document;
+use secretenv::format::schema::document::parse_kv_entry_token;
 use secretenv::format::token::TokenCodec;
 use secretenv::io::keystore::storage::{list_kids, load_public_key};
 use secretenv::model::kv_enc::entry::KvEntryValue;
@@ -79,7 +80,7 @@ fn extract_disclosed_flags(content: &str) -> Vec<(String, bool)> {
         .iter()
         .filter_map(|line| match line {
             KvEncLine::KV { key, token } => {
-                let entry: KvEntryValue = TokenCodec::decode_auto(token).unwrap();
+                let entry: KvEntryValue = parse_kv_entry_token(token).unwrap();
                 Some((key.clone(), entry.disclosed))
             }
             _ => None,

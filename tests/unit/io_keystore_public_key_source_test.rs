@@ -19,14 +19,15 @@ fn build_test_public_key_json(member_id: &str, kid: &str) -> String {
         "sig": {{ "kty": "OKP", "crv": "Ed25519", "x": "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB" }}
       }},
       "attestation": {{
-        "method": "ssh",
-        "pub": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITest test@example.com",
-        "sig": "dGVzdHNpZw"
+        "method": "ssh-sign",
+        "pub": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "sig": "QUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQQ"
       }}
     }},
+    "created_at": "2026-01-01T00:00:00Z",
     "expires_at": "2027-01-01T00:00:00Z"
   }},
-  "signature": "dGVzdHNpZw"
+  "signature": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
 }}"#,
         member_id, kid
     )
@@ -45,7 +46,7 @@ fn test_workspace_public_key_source_load_public_key() {
     let workspace_path = temp_dir.path();
 
     let member_id = "alice@example.com";
-    let kid = "01HTEST00000000000000ALICE";
+    let kid = "01HY0G8N3P5X7QRSTV0WXYZ123";
     setup_workspace_member(workspace_path, member_id, kid);
 
     let source = WorkspacePublicKeySource::new(workspace_path.to_path_buf());
@@ -85,7 +86,7 @@ fn test_workspace_public_key_source_rejects_incoming_member() {
     setup_incoming_member(
         workspace_path,
         "pending@example.com",
-        "01HTEST0000000000PENDING",
+        "01HY0G8N3P5X7QRSTV0WXYZ124",
     );
 
     let source = WorkspacePublicKeySource::new(workspace_path.to_path_buf());
@@ -108,13 +109,13 @@ fn test_workspace_public_key_source_bulk_rejects_incoming_member() {
     setup_workspace_member(
         workspace_path,
         "alice@example.com",
-        "01HTEST00000000000000ALICE",
+        "01HY0G8N3P5X7QRSTV0WXYZ123",
     );
     // Incoming member
     setup_incoming_member(
         workspace_path,
         "pending@example.com",
-        "01HTEST0000000000PENDING",
+        "01HY0G8N3P5X7QRSTV0WXYZ124",
     );
 
     let source = WorkspacePublicKeySource::new(workspace_path.to_path_buf());
@@ -135,9 +136,9 @@ fn test_workspace_public_key_source_load_multiple() {
     let workspace_path = temp_dir.path();
 
     let members = vec![
-        ("alice@example.com", "01HTEST00000000000000ALICE"),
-        ("bob@example.com", "01HTEST000000000000000BOB0"),
-        ("charlie@example.com", "01HTEST0000000000000CHARLIE"),
+        ("alice@example.com", "01HY0G8N3P5X7QRSTV0WXYZ123"),
+        ("bob@example.com", "01HY0G8N3P5X7QRSTV0WXYZ124"),
+        ("charlie@example.com", "01HY0G8N3P5X7QRSTV0WXYZ125"),
     ];
 
     for (member_id, kid) in &members {

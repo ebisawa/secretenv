@@ -4,8 +4,8 @@
 //! Unsigned KV document state and serialization helpers.
 
 use crate::format::kv::enc::writer::build_unsigned_kv_document;
+use crate::format::schema::document::parse_kv_entry_token;
 use crate::format::token::TokenCodec;
-use crate::model::kv_enc::entry::KvEntryValue;
 use crate::model::kv_enc::header::{KvHeader, KvWrap};
 use crate::Result;
 use std::collections::{HashMap, HashSet};
@@ -132,7 +132,7 @@ impl UnsignedKvDocument {
     pub fn clear_disclosed_flags(&mut self) -> Result<()> {
         for entry in &mut self.entries {
             if let KvDocumentEntry::Preserved { key, token } = entry {
-                let mut value: KvEntryValue = TokenCodec::decode_auto(token)?;
+                let mut value = parse_kv_entry_token(token)?;
                 if value.disclosed {
                     value.disclosed = false;
                     let new_token = TokenCodec::encode(self.token_codec, &value)?;

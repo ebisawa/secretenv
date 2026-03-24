@@ -2,9 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::format::kv::dotenv::is_valid_key_name;
-use crate::format::token::TokenCodec;
-use crate::model::kv_enc::entry::KvEntryValue;
-use crate::model::kv_enc::header::KvWrap;
+use crate::format::schema::document::{
+    parse_kv_entry_token, parse_kv_signature_token as parse_kv_signature_document,
+    parse_kv_wrap_token,
+};
 use crate::model::kv_enc::line::KvEncLine;
 use crate::{Error, Result};
 
@@ -13,6 +14,7 @@ pub(super) fn validate_kv_tokens(lines: &[KvEncLine]) -> Result<()> {
         match line {
             KvEncLine::Wrap { token } => validate_wrap_token(token)?,
             KvEncLine::KV { key, token } => validate_entry_token(key, token)?,
+            KvEncLine::Sig { token } => validate_signature_token(token)?,
             _ => {}
         }
     }
@@ -52,17 +54,14 @@ pub(super) fn parse_kv_signature_token(lines: &[KvEncLine]) -> Result<String> {
 }
 
 fn validate_wrap_token(token: &str) -> Result<()> {
-    TokenCodec::decode_auto::<KvWrap>(token).map_err(|e| Error::Parse {
-        message: format!("Invalid WRAP token structure: {}", e),
-        source: Some(Box::new(e)),
-    })?;
+    parse_kv_wrap_token(token)?;
     Ok(())
 }
 
 fn validate_entry_token(key: &str, token: &str) -> Result<()> {
-    let entry: KvEntryValue = TokenCodec::decode_auto(token).map_err(|e| Error::Parse {
+    let entry = parse_kv_entry_token(token).map_err(|e| Error::Parse {
         message: format!("Invalid KV entry token structure for key '{}': {}", key, e),
-        source: Some(Box::new(e)),
+        source: None,
     })?;
 
     if key == entry.k {
@@ -76,6 +75,11 @@ fn validate_entry_token(key: &str, token: &str) -> Result<()> {
             key, key, entry.k
         ),
     })
+}
+
+fn validate_signature_token(token: &str) -> Result<()> {
+    parse_kv_signature_document(token)?;
+    Ok(())
 }
 
 fn validate_unique_line(

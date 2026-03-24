@@ -3,9 +3,8 @@
 
 //! Member add feature - add external public key to incoming.
 
-use crate::io::json::parse_json_str;
+use crate::format::schema::document::parse_public_key_str;
 use crate::io::workspace::members::{save_member_content, MemberStatus};
-use crate::model::public_key::PublicKey;
 use crate::support::fs::load_text;
 use crate::support::path::display_path_relative_to_cwd;
 use crate::Result;
@@ -22,11 +21,7 @@ pub fn add_member_from_file(
 ) -> Result<String> {
     let content = load_text(file_path)?;
 
-    let public_key: PublicKey = parse_json_str(
-        &content,
-        "PublicKey JSON",
-        &display_path_relative_to_cwd(file_path),
-    )?;
+    let public_key = parse_public_key_str(&content, &display_path_relative_to_cwd(file_path))?;
 
     let member_id = public_key.protected.member_id.clone();
 

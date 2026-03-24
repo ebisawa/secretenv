@@ -3,6 +3,7 @@
 
 //! KV document builder for assembling unsigned kv-enc documents.
 
+use crate::format::schema::document::parse_kv_wrap_token;
 use crate::format::token::TokenCodec;
 use crate::model::kv_enc::header::{KvHeader, KvWrap};
 use crate::model::kv_enc::line::KvEncLine;
@@ -83,7 +84,7 @@ impl KvDocumentBuilder {
         match wrap {
             Some(wrap) => Ok(WrapSource::Decoded(wrap.clone())),
             None => {
-                let data: KvWrap = TokenCodec::decode_auto(token)?;
+                let data = parse_kv_wrap_token(token)?;
                 Ok(WrapSource::Raw {
                     data,
                     token: token.to_string(),

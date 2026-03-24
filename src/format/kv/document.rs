@@ -4,7 +4,6 @@
 //! KV-enc document parsing and validation.
 
 mod parse;
-mod schema;
 mod structure;
 
 use crate::model::kv_enc::document::KvEncDocument;

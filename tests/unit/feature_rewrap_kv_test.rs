@@ -14,6 +14,7 @@ use secretenv::feature::kv::encrypt::encrypt_kv_document;
 use secretenv::format::content::KvEncContent;
 use secretenv::format::kv::document::parse_kv_document;
 use secretenv::format::kv::dotenv::parse_dotenv;
+use secretenv::format::schema::document::{parse_kv_entry_token, parse_kv_wrap_token};
 use secretenv::format::token::TokenCodec;
 use secretenv::io::keystore::storage::{list_kids, load_public_key};
 use secretenv::model::kv_enc::entry::KvEntryValue;
@@ -259,7 +260,7 @@ fn test_rewrap_kv_add_recipient() {
         .strip_prefix(":WRAP ")
         .unwrap();
     let wrap_data: secretenv::model::kv_enc::header::KvWrap =
-        TokenCodec::decode_auto(wrap_token).unwrap();
+        parse_kv_wrap_token(wrap_token).unwrap();
     let recipient_ids: Vec<&str> = wrap_data.wrap.iter().map(|w| w.rid.as_str()).collect();
     assert!(
         recipient_ids.contains(&BOB_MEMBER_ID),
@@ -384,7 +385,7 @@ fn extract_disclosed_flags(content: &str) -> Vec<(String, bool)> {
         .iter()
         .filter_map(|line| {
             if let KvEncLine::KV { key, token } = line {
-                let entry: KvEntryValue = TokenCodec::decode_auto(token).unwrap();
+                let entry: KvEntryValue = parse_kv_entry_token(token).unwrap();
                 Some((key.clone(), entry.disclosed))
             } else {
                 None
@@ -608,7 +609,7 @@ fn test_rewrap_kv_clear_disclosure_history_resets_disclosed_flags() {
         .unwrap()
         .strip_prefix(":WRAP ")
         .unwrap();
-    let wrap_after_remove: KvWrap = TokenCodec::decode_auto(wrap_token_after_remove).unwrap();
+    let wrap_after_remove: KvWrap = parse_kv_wrap_token(wrap_token_after_remove).unwrap();
     assert!(
         wrap_after_remove.removed_recipients.is_some(),
         "removed_recipients must be present after removal"
@@ -640,7 +641,7 @@ fn test_rewrap_kv_clear_disclosure_history_resets_disclosed_flags() {
         .unwrap()
         .strip_prefix(":WRAP ")
         .unwrap();
-    let wrap_after_clear: KvWrap = TokenCodec::decode_auto(wrap_token_after_clear).unwrap();
+    let wrap_after_clear: KvWrap = parse_kv_wrap_token(wrap_token_after_clear).unwrap();
     assert!(
         wrap_after_clear.removed_recipients.is_none(),
         "removed_recipients must be None after clear_disclosure_history"

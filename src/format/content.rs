@@ -9,6 +9,7 @@
 
 use crate::format::detection::{detect_format, InputFormat};
 use crate::format::kv::document::parse_kv_document;
+use crate::format::schema::document::parse_file_enc_str;
 use crate::model::file_enc::FileEncDocument;
 use crate::model::kv_enc::document::KvEncDocument;
 use crate::{Error, Result};
@@ -45,24 +46,8 @@ impl FileEncContent {
     }
 
     /// Parse the JSON content into a `FileEncDocument`.
-    ///
-    /// Validates JSON depth/element limits and schema conformance before
-    /// deserializing into the typed struct.
     pub fn parse(&self) -> Result<FileEncDocument> {
-        crate::support::json_limits::validate_json_limits(self.0.as_bytes())?;
-
-        let value: serde_json::Value = serde_json::from_str(&self.0).map_err(|e| Error::Parse {
-            message: format!("Failed to parse FileEncDocument JSON: {}", e),
-            source: Some(Box::new(e)),
-        })?;
-
-        crate::format::schema::validator::embedded_validator()?
-            .validate_file_enc_document(&value)?;
-
-        serde_json::from_value(value).map_err(|e| Error::Parse {
-            message: format!("Failed to deserialize FileEncDocument: {}", e),
-            source: Some(Box::new(e)),
-        })
+        parse_file_enc_str(&self.0, "file-enc content")
     }
 
     /// Serialize a `FileEncDocument` back to pretty-printed JSON.

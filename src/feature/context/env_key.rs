@@ -12,6 +12,7 @@ use zeroize::Zeroizing;
 
 use crate::feature::context::crypto::validate_and_wrap_private_key_password;
 use crate::feature::key::protection::password_encryption::decrypt_private_key_with_password;
+use crate::format::schema::document::parse_private_key_bytes;
 use crate::model::private_key::{PrivateKey, PrivateKeyAlgorithm, PrivateKeyPlaintext};
 use crate::model::public_key::PublicKey;
 use crate::{Error, Result};
@@ -82,26 +83,7 @@ pub fn load_private_key_from_env(
             source: Some(Box::new(e)),
         })?);
 
-    let private_key: PrivateKey =
-        serde_json::from_slice(&json_bytes).map_err(|e| Error::Parse {
-            message: format!(
-                "Failed to parse {} as PrivateKey JSON: {}",
-                ENV_PRIVATE_KEY, e
-            ),
-            source: Some(Box::new(e)),
-        })?;
-
-    // Validate format field
-    if private_key.protected.format != crate::model::identifiers::format::PRIVATE_KEY_V3 {
-        return Err(Error::Parse {
-            message: format!(
-                "Unsupported PrivateKey format: expected '{}', got '{}'",
-                crate::model::identifiers::format::PRIVATE_KEY_V3,
-                private_key.protected.format
-            ),
-            source: None,
-        });
-    }
+    let private_key: PrivateKey = parse_private_key_bytes(&json_bytes, ENV_PRIVATE_KEY)?;
 
     // Verify algorithm is Argon2id (password-based)
     match &private_key.protected.alg {

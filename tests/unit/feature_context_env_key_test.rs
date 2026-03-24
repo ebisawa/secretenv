@@ -260,15 +260,15 @@ fn test_env_key_rejects_invalid_format() {
             member_id: "alice@example.com".to_string(),
             kid: "01HN8Z3Q4R5S6T7V8W9X0Y1Z2A".to_string(),
             alg: PrivateKeyAlgorithm::Argon2id {
-                salt: "AAAA".to_string(),
+                salt: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
                 aead: "xchacha20-poly1305".to_string(),
             },
             created_at: "2026-01-01T00:00:00Z".to_string(),
             expires_at: "2027-01-01T00:00:00Z".to_string(),
         },
         encrypted: EncryptedData {
-            nonce: "AAAA".to_string(),
-            ct: "AAAA".to_string(),
+            nonce: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".to_string(),
+            ct: "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB".to_string(),
         },
     };
 
@@ -282,8 +282,8 @@ fn test_env_key_rejects_invalid_format() {
     assert!(result.is_err(), "Wrong format should be rejected");
     let err = result.unwrap_err().to_string();
     assert!(
-        err.contains("Unsupported PrivateKey format"),
-        "error should mention unsupported format: {}",
+        err.contains("Expected format"),
+        "error should mention expected format: {}",
         err
     );
     assert_env_key_vars_cleared();
@@ -301,15 +301,15 @@ fn test_env_key_rejects_sshsig_algorithm() {
             kid: "01HN8Z3Q4R5S6T7V8W9X0Y1Z2A".to_string(),
             alg: PrivateKeyAlgorithm::SshSig {
                 fpr: "SHA256:dummy".to_string(),
-                salt: "AAAA".to_string(),
+                salt: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
                 aead: "xchacha20-poly1305".to_string(),
             },
             created_at: "2026-01-01T00:00:00Z".to_string(),
             expires_at: "2027-01-01T00:00:00Z".to_string(),
         },
         encrypted: EncryptedData {
-            nonce: "AAAA".to_string(),
-            ct: "AAAA".to_string(),
+            nonce: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".to_string(),
+            ct: "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB".to_string(),
         },
     };
 

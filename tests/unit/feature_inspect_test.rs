@@ -12,6 +12,8 @@ use secretenv::feature::inspect::{build_inspect_view, InspectOutput};
 use secretenv::feature::verify::file::verify_file_document_report;
 use secretenv::feature::verify::kv::signature::verify_kv_document_report;
 use secretenv::format::content::EncryptedContent;
+use secretenv::format::token::TokenCodec;
+use secretenv::model::signature::Signature;
 use secretenv::model::verification::VerifyingKeySource;
 use std::fs;
 
@@ -388,13 +390,23 @@ fn test_inspect_kv_enc_with_verification_failure_no_keystore() {
     // Read encrypted content and corrupt the signature
     let mut kv_content = fs::read_to_string(&encrypted_path).unwrap();
     // Replace the SIG line with an invalid signature
+    let invalid_signature = Signature {
+        alg: "eddsa-ed25519".to_string(),
+        kid: "01HY0G8N3P5X7QRSTV0WXYZ123".to_string(),
+        signer_pub: None,
+        sig:
+            "QUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQQ"
+                .to_string(),
+    };
+    let invalid_signature_token =
+        TokenCodec::encode(TokenCodec::JsonJcs, &invalid_signature).unwrap();
     let lines: Vec<&str> = kv_content.lines().collect();
     let mut new_lines = Vec::new();
     for line in &lines {
         if line.starts_with(":SIG ") {
-            new_lines.push(":SIG eyJhbGciOiJlZGRzYS1lZDI1NTE5Iiwia2lkIjoiMDFIWTBHOE4zUDVYN1FSU1RWMFdYWVoxMjMiLCJzaWciOiJJTlZBTElEX1NJR05BVFVSRV8uLi4ifQ");
+            new_lines.push(format!(":SIG {}", invalid_signature_token));
         } else {
-            new_lines.push(line);
+            new_lines.push((*line).to_string());
         }
     }
     kv_content = new_lines.join("\n") + "\n";
@@ -533,12 +545,22 @@ fn test_verify_kv_document_report_failure_wrong_key() {
     let mut kv_content = fs::read_to_string(&encrypted_path).unwrap();
     let lines: Vec<&str> = kv_content.lines().collect();
     let mut new_lines = Vec::new();
+    let wrong_kid_signature = Signature {
+        alg: "eddsa-ed25519".to_string(),
+        kid: "01HY0G8N3P5X7QRSTV0WXYZ126".to_string(),
+        signer_pub: None,
+        sig:
+            "QUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQQ"
+                .to_string(),
+    };
+    let wrong_kid_signature_token =
+        TokenCodec::encode(TokenCodec::JsonJcs, &wrong_kid_signature).unwrap();
     for line in &lines {
         if line.starts_with(":SIG ") {
             // Replace with signature that references a non-existent kid
-            new_lines.push(":SIG eyJhbGciOiJlZGRzYS1lZDI1NTE5Iiwia2lkIjoiMDFOT05FWElTVEVOVEtFWV9JRCIsInNpZyI6Ii4uLiJ9");
+            new_lines.push(format!(":SIG {}", wrong_kid_signature_token));
         } else {
-            new_lines.push(line);
+            new_lines.push((*line).to_string());
         }
     }
     kv_content = new_lines.join("\n") + "\n";

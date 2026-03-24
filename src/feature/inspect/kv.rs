@@ -3,7 +3,7 @@
 
 //! KV-enc inspection.
 
-use crate::format::token::TokenCodec;
+use crate::format::schema::document::{parse_kv_entry_token, parse_kv_signature_token};
 use crate::model::kv_enc::document::{KvEncDocument, KvFileSignature};
 use crate::model::kv_enc::entry::KvEntryValue;
 use crate::model::kv_enc::header::{KvHeader, KvWrap};
@@ -116,14 +116,14 @@ fn kv_enc_document_to_inspection_data(doc: &KvEncDocument) -> Result<KvEncInspec
         match line {
             KvEncLine::Header { version: v } => version = Some(v.to_string()),
             KvEncLine::KV { key, token } => {
-                let entry: KvEntryValue = TokenCodec::decode_auto(token)?;
+                let entry = parse_kv_entry_token(token)?;
                 entries.push((key.clone(), entry, token.clone()));
             }
             _ => {}
         }
     }
     let signature: Option<(KvFileSignature, String)> =
-        TokenCodec::decode_auto(doc.signature_token())
+        parse_kv_signature_token(doc.signature_token())
             .ok()
             .map(|s| (s, String::new()));
     Ok(KvEncInspectionData {

@@ -4,7 +4,6 @@
 //! External I/O adapters (filesystem, SSH, config, online).
 
 pub mod config;
-pub mod json;
 pub mod keystore;
 pub mod process;
 pub mod ssh;

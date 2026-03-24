@@ -3,4 +3,5 @@
 
 //! JSON Schema validation for format-layer document parsing.
 
+pub mod document;
 pub mod validator;

@@ -87,11 +87,19 @@ impl Validator {
         self.validate(doc, FILE_ENC_V3)
     }
 
-    pub fn validate_kv_value(&self, doc: &Value) -> Result<()> {
+    pub fn validate_kv_head(&self, doc: &Value) -> Result<()> {
         self.validate_generic(doc)
     }
 
-    pub fn validate_kv_file_wrap(&self, doc: &Value) -> Result<()> {
+    pub fn validate_kv_wrap(&self, doc: &Value) -> Result<()> {
+        self.validate_generic(doc)
+    }
+
+    pub fn validate_kv_entry(&self, doc: &Value) -> Result<()> {
+        self.validate_generic(doc)
+    }
+
+    pub fn validate_signature(&self, doc: &Value) -> Result<()> {
         self.validate_generic(doc)
     }
 

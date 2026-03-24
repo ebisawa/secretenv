@@ -5,7 +5,7 @@
 //!
 //! Save and load PrivateKey and PublicKey.
 
-use crate::io::json::load_json_file;
+use crate::format::schema::document::{parse_private_key_file, parse_public_key_file};
 use crate::model::private_key::PrivateKey;
 use crate::model::public_key::PublicKey;
 use crate::support::fs::{atomic, check_permission, ensure_dir_restricted, list_dir};
@@ -88,7 +88,7 @@ pub fn load_private_key(keystore_root: &Path, member_id: &str, kid: &str) -> Res
             source: None,
         });
     }
-    load_json_file(&path, "private key")
+    parse_private_key_file(&path)
 }
 
 /// Load PublicKey from keystore
@@ -97,7 +97,7 @@ pub fn load_public_key(keystore_root: &Path, member_id: &str, kid: &str) -> Resu
     if let Some(msg) = check_permission(&path) {
         tracing::warn!("{}", msg);
     }
-    load_json_file(&path, "public key")
+    parse_public_key_file(&path)
 }
 
 /// List directory names in a path, filtering by predicate
