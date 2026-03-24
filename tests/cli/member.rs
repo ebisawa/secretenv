@@ -15,6 +15,17 @@ fn write_tampered_member_file(member_file: &std::path::Path, tamper: impl FnOnce
     fs::write(member_file, serde_json::to_string_pretty(&value).unwrap()).unwrap();
 }
 
+fn copy_fresh_public_key(temp_key_file: &std::path::Path) {
+    let (other_workspace_dir, _other_home_dir, _other_ssh_temp, _other_ssh_priv) =
+        setup_workspace();
+    let other_active_key_path = other_workspace_dir
+        .path()
+        .join("members")
+        .join("active")
+        .join(format!("{}.json", TEST_MEMBER_ID));
+    fs::copy(other_active_key_path, temp_key_file).unwrap();
+}
+
 // ============================================================================
 // member list
 // ============================================================================
@@ -267,15 +278,9 @@ fn test_member_remove_nonexistent_fails() {
 fn test_member_add_places_in_incoming() {
     let (workspace_dir, home_dir, _ssh_temp, ssh_priv) = setup_workspace();
 
-    // Copy the active member's public key JSON to a temp file
-    let active_key_path = workspace_dir
-        .path()
-        .join("members")
-        .join("active")
-        .join(format!("{}.json", TEST_MEMBER_ID));
     let temp_dir = TempDir::new().unwrap();
     let temp_key_file = temp_dir.path().join("pubkey.json");
-    fs::copy(&active_key_path, &temp_key_file).unwrap();
+    copy_fresh_public_key(&temp_key_file);
 
     cmd()
         .arg("member")
@@ -314,15 +319,9 @@ fn test_member_add_invalid_file_fails() {
 fn test_member_add_duplicate_without_force_fails() {
     let (workspace_dir, home_dir, _ssh_temp, ssh_priv) = setup_workspace();
 
-    // Copy the active member's public key JSON to a temp file
-    let active_key_path = workspace_dir
-        .path()
-        .join("members")
-        .join("active")
-        .join(format!("{}.json", TEST_MEMBER_ID));
     let temp_dir = TempDir::new().unwrap();
     let temp_key_file = temp_dir.path().join("pubkey.json");
-    fs::copy(&active_key_path, &temp_key_file).unwrap();
+    copy_fresh_public_key(&temp_key_file);
 
     // First add succeeds
     cmd()

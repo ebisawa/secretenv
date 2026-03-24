@@ -5,7 +5,7 @@ use super::paths::{
     active_member_file_path, ensure_members_dir, find_member_path, incoming_member_file_path,
     members_dir, MemberStatus,
 };
-use crate::format::schema::document::parse_public_key_file;
+use crate::format::schema::document::{parse_public_key_file, parse_public_key_str};
 use crate::model::public_key::PublicKey;
 use crate::support::fs::list_dir;
 use crate::support::path::display_path_relative_to_cwd;
@@ -13,6 +13,13 @@ use crate::{Error, Result};
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+
+#[derive(Debug, Clone)]
+pub(super) struct MemberKidCandidate {
+    pub member_id: String,
+    pub kid: String,
+    pub status: MemberStatus,
+}
 
 pub(super) fn load_json_files_in_dir(dir: &Path) -> Result<Vec<PathBuf>> {
     if !dir.exists() {
@@ -69,6 +76,54 @@ fn save_member_file(path: &Path, content: &str) -> Result<()> {
     })
 }
 
+pub fn ensure_member_document_kid_is_unique(
+    workspace_path: &Path,
+    status: MemberStatus,
+    member_id: &str,
+    kid: &str,
+    allow_replace_self: bool,
+) -> Result<()> {
+    let ignored_existing = if allow_replace_self {
+        vec![(status, member_id.to_string())]
+    } else {
+        Vec::new()
+    };
+    let candidate = MemberKidCandidate {
+        member_id: member_id.to_string(),
+        kid: kid.to_string(),
+        status,
+    };
+    ensure_workspace_member_kid_uniqueness(
+        workspace_path,
+        &[candidate],
+        &ignored_existing,
+        &[MemberStatus::Active, MemberStatus::Incoming],
+    )
+}
+
+pub(super) fn ensure_workspace_member_kid_uniqueness(
+    workspace_path: &Path,
+    candidates: &[MemberKidCandidate],
+    ignored_existing: &[(MemberStatus, String)],
+    existing_statuses: &[MemberStatus],
+) -> Result<()> {
+    let mut seen: BTreeMap<String, MemberKidCandidate> = BTreeMap::new();
+
+    for existing in load_member_kid_candidates(workspace_path, existing_statuses, ignored_existing)?
+    {
+        seen.insert(existing.kid.clone(), existing);
+    }
+
+    for candidate in candidates {
+        if let Some(existing) = seen.get(&candidate.kid) {
+            return Err(duplicate_kid_error(existing, candidate));
+        }
+        seen.insert(candidate.kid.clone(), candidate.clone());
+    }
+
+    Ok(())
+}
+
 pub fn save_member_content(
     workspace_path: &Path,
     status: MemberStatus,
@@ -77,6 +132,8 @@ pub fn save_member_content(
     overwrite: bool,
 ) -> Result<()> {
     ensure_members_dir(workspace_path, status)?;
+    let source_name = format!("member content for {}", member_id);
+    let public_key = parse_public_key_str(content, &source_name)?;
     let path = match status {
         MemberStatus::Active => active_member_file_path(workspace_path, member_id),
         MemberStatus::Incoming => incoming_member_file_path(workspace_path, member_id),
@@ -90,6 +147,13 @@ pub fn save_member_content(
             ),
         });
     }
+    ensure_member_document_kid_is_unique(
+        workspace_path,
+        status,
+        member_id,
+        &public_key.protected.kid,
+        overwrite && path.exists(),
+    )?;
     save_member_file(&path, content)
 }
 
@@ -231,4 +295,51 @@ pub fn delete_member(workspace_path: &Path, member_id: &str) -> Result<()> {
 
 pub fn load_member_file_from_path(path: &Path) -> Result<PublicKey> {
     parse_public_key_file(path)
+}
+
+fn load_member_kid_candidates(
+    workspace_path: &Path,
+    statuses: &[MemberStatus],
+    ignored_existing: &[(MemberStatus, String)],
+) -> Result<Vec<MemberKidCandidate>> {
+    let mut candidates = Vec::new();
+    for status in statuses {
+        for path in load_json_files_in_dir(&members_dir(workspace_path, *status))? {
+            let Some(member_id) = path
+                .file_stem()
+                .and_then(|stem| stem.to_str())
+                .map(String::from)
+            else {
+                continue;
+            };
+            if ignored_existing
+                .iter()
+                .any(|(ignored_status, ignored_member_id)| {
+                    *ignored_status == *status && *ignored_member_id == member_id
+                })
+            {
+                continue;
+            }
+            let member = load_member_file_from_path(&path)?;
+            candidates.push(MemberKidCandidate {
+                member_id,
+                kid: member.protected.kid.clone(),
+                status: *status,
+            });
+        }
+    }
+    Ok(candidates)
+}
+
+fn duplicate_kid_error(existing: &MemberKidCandidate, candidate: &MemberKidCandidate) -> Error {
+    Error::Config {
+        message: format!(
+            "Duplicate kid '{}' in workspace members: {}/'{}' conflicts with {}/'{}'",
+            candidate.kid,
+            member_status_dir_name(existing.status),
+            existing.member_id,
+            member_status_dir_name(candidate.status),
+            candidate.member_id
+        ),
+    }
 }

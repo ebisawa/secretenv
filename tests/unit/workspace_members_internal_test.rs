@@ -8,13 +8,9 @@ fn setup_workspace_with_incoming(member_ids: &[&str]) -> TempDir {
     let incoming_dir = tmp.path().join("members/incoming");
     fs::create_dir_all(&active_dir).unwrap();
     fs::create_dir_all(&incoming_dir).unwrap();
-    for id in member_ids {
+    for (index, id) in member_ids.iter().enumerate() {
         let path = incoming_dir.join(format!("{}.json", id));
-        fs::write(
-            &path,
-            r#"{"protected":{"member_id":"__ID__"}}"#.replace("__ID__", id),
-        )
-        .unwrap();
+        fs::write(&path, build_public_key_json(id, &test_kid(index))).unwrap();
     }
     tmp
 }
@@ -57,6 +53,59 @@ fn test_promote_specified_empty_list() {
 }
 
 #[test]
+fn test_promote_specified_rejects_kid_conflict_with_active_member() {
+    let tmp = TempDir::new().unwrap();
+    let active_dir = tmp.path().join("members/active");
+    let incoming_dir = tmp.path().join("members/incoming");
+    fs::create_dir_all(&active_dir).unwrap();
+    fs::create_dir_all(&incoming_dir).unwrap();
+    fs::write(
+        active_dir.join("alice.json"),
+        build_public_key_json("alice", "01HY0G8N3P5X7QRSTV0WXYZ123"),
+    )
+    .unwrap();
+    fs::write(
+        incoming_dir.join("bob.json"),
+        build_public_key_json("bob", "01HY0G8N3P5X7QRSTV0WXYZ123"),
+    )
+    .unwrap();
+
+    let result = promote_specified_incoming_members(tmp.path(), &["bob".to_string()]);
+    let error = result.unwrap_err().to_string();
+
+    assert!(error.contains("kid"));
+    assert!(tmp.path().join("members/incoming/bob.json").exists());
+    assert!(!tmp.path().join("members/active/bob.json").exists());
+}
+
+#[test]
+fn test_promote_specified_rejects_duplicate_kids_within_batch() {
+    let tmp = TempDir::new().unwrap();
+    let active_dir = tmp.path().join("members/active");
+    let incoming_dir = tmp.path().join("members/incoming");
+    fs::create_dir_all(&active_dir).unwrap();
+    fs::create_dir_all(&incoming_dir).unwrap();
+    fs::write(
+        incoming_dir.join("alice.json"),
+        build_public_key_json("alice", "01HY0G8N3P5X7QRSTV0WXYZ123"),
+    )
+    .unwrap();
+    fs::write(
+        incoming_dir.join("bob.json"),
+        build_public_key_json("bob", "01HY0G8N3P5X7QRSTV0WXYZ123"),
+    )
+    .unwrap();
+
+    let result =
+        promote_specified_incoming_members(tmp.path(), &["alice".to_string(), "bob".to_string()]);
+    let error = result.unwrap_err().to_string();
+
+    assert!(error.contains("kid"));
+    assert!(tmp.path().join("members/incoming/alice.json").exists());
+    assert!(tmp.path().join("members/incoming/bob.json").exists());
+}
+
+#[test]
 fn test_delete_member_removes_file() {
     let tmp = TempDir::new().unwrap();
     let active_dir = tmp.path().join("members/active");
@@ -84,21 +133,35 @@ fn test_save_member_content_incoming_new() {
     let incoming_dir = tmp.path().join("members/incoming");
     fs::create_dir_all(&incoming_dir).unwrap();
 
-    save_member_content(tmp.path(), MemberStatus::Incoming, "alice", "{}", false).unwrap();
+    save_member_content(
+        tmp.path(),
+        MemberStatus::Incoming,
+        "alice",
+        &build_public_key_json("alice", "01HY0G8N3P5X7QRSTV0WXYZ123"),
+        false,
+    )
+    .unwrap();
 
     assert!(incoming_dir.join("alice.json").exists());
     let content = fs::read_to_string(incoming_dir.join("alice.json")).unwrap();
-    assert_eq!(content, "{}");
+    assert!(content.contains("\"member_id\": \"alice\""));
 }
 
 #[test]
 fn test_save_member_content_creates_directory_if_missing() {
     let tmp = TempDir::new().unwrap();
 
-    save_member_content(tmp.path(), MemberStatus::Incoming, "alice", "{}", false).unwrap();
+    save_member_content(
+        tmp.path(),
+        MemberStatus::Incoming,
+        "alice",
+        &build_public_key_json("alice", "01HY0G8N3P5X7QRSTV0WXYZ123"),
+        false,
+    )
+    .unwrap();
 
     let content = fs::read_to_string(tmp.path().join("members/incoming/alice.json")).unwrap();
-    assert_eq!(content, "{}");
+    assert!(content.contains("\"member_id\": \"alice\""));
 }
 
 #[test]
@@ -106,12 +169,22 @@ fn test_save_member_content_incoming_already_exists_no_force() {
     let tmp = TempDir::new().unwrap();
     let incoming_dir = tmp.path().join("members/incoming");
     fs::create_dir_all(&incoming_dir).unwrap();
-    fs::write(incoming_dir.join("alice.json"), "old").unwrap();
+    fs::write(
+        incoming_dir.join("alice.json"),
+        build_public_key_json("alice", "01HY0G8N3P5X7QRSTV0WXYZ123"),
+    )
+    .unwrap();
 
-    let result = save_member_content(tmp.path(), MemberStatus::Incoming, "alice", "new", false);
+    let result = save_member_content(
+        tmp.path(),
+        MemberStatus::Incoming,
+        "alice",
+        &build_public_key_json("alice", "01HY0G8N3P5X7QRSTV0WXYZ124"),
+        false,
+    );
     assert!(result.is_err());
     let content = fs::read_to_string(incoming_dir.join("alice.json")).unwrap();
-    assert_eq!(content, "old");
+    assert!(content.contains("01HY0G8N3P5X7QRSTV0WXYZ123"));
 }
 
 #[test]
@@ -119,12 +192,69 @@ fn test_save_member_content_force_overwrite() {
     let tmp = TempDir::new().unwrap();
     let incoming_dir = tmp.path().join("members/incoming");
     fs::create_dir_all(&incoming_dir).unwrap();
-    fs::write(incoming_dir.join("alice.json"), "old").unwrap();
+    fs::write(
+        incoming_dir.join("alice.json"),
+        build_public_key_json("alice", "01HY0G8N3P5X7QRSTV0WXYZ123"),
+    )
+    .unwrap();
 
-    save_member_content(tmp.path(), MemberStatus::Incoming, "alice", "new", true).unwrap();
+    save_member_content(
+        tmp.path(),
+        MemberStatus::Incoming,
+        "alice",
+        &build_public_key_json("alice", "01HY0G8N3P5X7QRSTV0WXYZ124"),
+        true,
+    )
+    .unwrap();
 
     let content = fs::read_to_string(incoming_dir.join("alice.json")).unwrap();
-    assert_eq!(content, "new");
+    assert!(content.contains("01HY0G8N3P5X7QRSTV0WXYZ124"));
+}
+
+#[test]
+fn test_save_member_content_rejects_kid_conflict_with_active_member() {
+    let tmp = TempDir::new().unwrap();
+    let active_dir = tmp.path().join("members/active");
+    fs::create_dir_all(&active_dir).unwrap();
+    fs::write(
+        active_dir.join("alice.json"),
+        build_public_key_json("alice", "01HY0G8N3P5X7QRSTV0WXYZ123"),
+    )
+    .unwrap();
+
+    let result = save_member_content(
+        tmp.path(),
+        MemberStatus::Incoming,
+        "bob",
+        &build_public_key_json("bob", "01HY0G8N3P5X7QRSTV0WXYZ123"),
+        false,
+    );
+
+    assert!(result.is_err());
+    assert!(!tmp.path().join("members/incoming/bob.json").exists());
+}
+
+#[test]
+fn test_save_member_content_rejects_kid_conflict_with_incoming_member() {
+    let tmp = TempDir::new().unwrap();
+    let incoming_dir = tmp.path().join("members/incoming");
+    fs::create_dir_all(&incoming_dir).unwrap();
+    fs::write(
+        incoming_dir.join("alice.json"),
+        build_public_key_json("alice", "01HY0G8N3P5X7QRSTV0WXYZ123"),
+    )
+    .unwrap();
+
+    let result = save_member_content(
+        tmp.path(),
+        MemberStatus::Incoming,
+        "bob",
+        &build_public_key_json("bob", "01HY0G8N3P5X7QRSTV0WXYZ123"),
+        false,
+    );
+
+    assert!(result.is_err());
+    assert!(!incoming_dir.join("bob.json").exists());
 }
 
 #[test]
@@ -132,9 +262,19 @@ fn test_save_member_content_active_error_uses_active_directory_name() {
     let tmp = TempDir::new().unwrap();
     let active_dir = tmp.path().join("members/active");
     fs::create_dir_all(&active_dir).unwrap();
-    fs::write(active_dir.join("alice.json"), "old").unwrap();
+    fs::write(
+        active_dir.join("alice.json"),
+        build_public_key_json("alice", "01HY0G8N3P5X7QRSTV0WXYZ123"),
+    )
+    .unwrap();
 
-    let result = save_member_content(tmp.path(), MemberStatus::Active, "alice", "new", false);
+    let result = save_member_content(
+        tmp.path(),
+        MemberStatus::Active,
+        "alice",
+        &build_public_key_json("alice", "01HY0G8N3P5X7QRSTV0WXYZ124"),
+        false,
+    );
     let err = result.unwrap_err().to_string();
 
     assert!(err.contains("active/"));
@@ -187,4 +327,8 @@ fn build_public_key_json(member_id: &str, kid: &str) -> String {
   "signature": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
 }}"#
     )
+}
+
+fn test_kid(index: usize) -> String {
+    format!("01HY0G8N3P5X7QRSTV0WXYZ{:03}", index)
 }
