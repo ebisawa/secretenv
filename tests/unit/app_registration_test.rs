@@ -3,9 +3,10 @@
 
 use crate::test_utils::setup_test_keystore_from_fixtures;
 use secretenv::app::context::options::CommonCommandOptions;
-use secretenv::app::registration::command::build_join_registration;
+use secretenv::app::registration::command::{apply_registration, build_join_registration};
 use secretenv::app::registration::key_plan::resolve_registration_key_plan;
 use secretenv::app::registration::types::{RegistrationKeyPlan, RegistrationMode};
+use secretenv::io::keystore::storage::load_public_key;
 use tempfile::TempDir;
 
 fn build_common_options(home: &TempDir, workspace: &TempDir) -> CommonCommandOptions {
@@ -90,6 +91,47 @@ fn test_build_join_registration_requires_ssh_context_for_generated_key() {
         error
             .to_string()
             .contains("SSH signing context is required for key generation"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn test_apply_join_registration_rejects_duplicate_kid_in_workspace() {
+    let home_dir = setup_test_keystore_from_fixtures("alice@example.com");
+    let workspace_dir = TempDir::new().unwrap();
+    std::fs::create_dir_all(workspace_dir.path().join("members/active")).unwrap();
+    std::fs::create_dir_all(workspace_dir.path().join("members/incoming")).unwrap();
+    std::fs::create_dir_all(workspace_dir.path().join("secrets")).unwrap();
+    let common = build_common_options(&home_dir, &workspace_dir);
+    let keystore_root = home_dir.path().join("keys");
+    let key_plan = resolve_registration_key_plan("alice@example.com", &keystore_root).unwrap();
+    let kid = match &key_plan {
+        RegistrationKeyPlan::UseExisting { kid, .. } => kid.clone(),
+        other => panic!("expected existing key plan, got {other:?}"),
+    };
+    let public_key = load_public_key(&keystore_root, "alice@example.com", &kid).unwrap();
+    let existing = serde_json::to_string_pretty(&public_key).unwrap();
+    std::fs::write(
+        workspace_dir
+            .path()
+            .join("members/active")
+            .join("duplicate-owner.json"),
+        existing,
+    )
+    .unwrap();
+
+    let prepared = build_join_registration(
+        &common,
+        "alice@example.com".to_string(),
+        None,
+        key_plan,
+        None,
+    )
+    .unwrap();
+
+    let error = apply_registration(&prepared, false).unwrap_err();
+    assert!(
+        error.to_string().contains("kid"),
         "unexpected error: {error}"
     );
 }

@@ -8,7 +8,8 @@ use crate::io::keystore::resolver::KeystoreResolver;
 use crate::io::keystore::storage::load_public_key;
 use crate::io::workspace::detection::resolve_workspace_creation_path;
 use crate::io::workspace::members::{
-    active_member_file_path, incoming_member_file_path, MemberStatus,
+    active_member_file_path, ensure_member_document_kid_is_unique, incoming_member_file_path,
+    MemberStatus,
 };
 use crate::io::workspace::setup;
 use crate::Result;
@@ -35,12 +36,28 @@ pub(crate) fn register_member(
     let member_file = member_file_path(workspace_path, member_id, target);
 
     if !member_file.exists() {
-        save_member_document(&member_file, member_id, kid, keystore_root)?;
+        save_member_document(
+            &member_file,
+            workspace_path,
+            member_id,
+            kid,
+            false,
+            keystore_root,
+            target,
+        )?;
         return Ok(RegistrationResult::NewMember);
     }
 
     if overwrite {
-        save_member_document(&member_file, member_id, kid, keystore_root)?;
+        save_member_document(
+            &member_file,
+            workspace_path,
+            member_id,
+            kid,
+            true,
+            keystore_root,
+            target,
+        )?;
         return Ok(RegistrationResult::Updated);
     }
 
@@ -78,11 +95,25 @@ fn member_file_path(workspace_path: &Path, member_id: &str, target: Registration
 
 fn save_member_document(
     member_file: &Path,
+    workspace_path: &Path,
     member_id: &str,
     kid: &str,
+    overwrite: bool,
     keystore_root: &Path,
+    target: RegistrationTarget,
 ) -> Result<()> {
     let public_key = load_public_key(keystore_root, member_id, kid)?;
+    let status = match target {
+        RegistrationTarget::Active => MemberStatus::Active,
+        RegistrationTarget::Incoming => MemberStatus::Incoming,
+    };
+    ensure_member_document_kid_is_unique(
+        workspace_path,
+        status,
+        member_id,
+        &public_key.protected.kid,
+        overwrite && member_file.exists(),
+    )?;
     setup::save_member_document(member_file, &public_key)
 }
 

@@ -4,7 +4,10 @@
 use super::paths::{
     ensure_members_dir, incoming_member_file_path, member_file_path, members_dir, MemberStatus,
 };
-use super::store::load_json_files_in_dir;
+use super::store::{
+    ensure_workspace_member_kid_uniqueness, load_json_files_in_dir, load_member_file_from_path,
+    MemberKidCandidate,
+};
 use crate::support::path::display_path_relative_to_cwd;
 use crate::{Error, Result};
 use std::fs;
@@ -23,7 +26,7 @@ fn build_promotion_plan(
     let incoming_dir = members_dir(workspace_path, MemberStatus::Incoming);
     let active_dir = members_dir(workspace_path, MemberStatus::Active);
 
-    match member_ids {
+    let plans = match member_ids {
         Some(ids) => ids
             .iter()
             .map(|member_id| {
@@ -50,7 +53,7 @@ fn build_promotion_plan(
                     member_id: member_id.clone(),
                 })
             })
-            .collect(),
+            .collect::<Result<Vec<_>>>(),
         None => load_json_files_in_dir(&incoming_dir)?
             .into_iter()
             .map(|source| {
@@ -82,8 +85,10 @@ fn build_promotion_plan(
                     member_id,
                 })
             })
-            .collect(),
-    }
+            .collect::<Result<Vec<_>>>(),
+    }?;
+    ensure_promotion_kids_are_unique(workspace_path, &plans)?;
+    Ok(plans)
 }
 
 fn execute_promotion_plan(workspace_path: &Path, plans: &[PromotionPlan]) -> Result<Vec<String>> {
@@ -114,4 +119,24 @@ pub fn promote_specified_incoming_members(
 ) -> Result<Vec<String>> {
     let plans = build_promotion_plan(workspace_path, Some(member_ids))?;
     execute_promotion_plan(workspace_path, &plans)
+}
+
+fn ensure_promotion_kids_are_unique(workspace_path: &Path, plans: &[PromotionPlan]) -> Result<()> {
+    let candidates = plans
+        .iter()
+        .map(|plan| {
+            let public_key = load_member_file_from_path(&plan.source)?;
+            Ok(MemberKidCandidate {
+                member_id: plan.member_id.clone(),
+                kid: public_key.protected.kid,
+                status: MemberStatus::Active,
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
+    ensure_workspace_member_kid_uniqueness(
+        workspace_path,
+        &candidates,
+        &[],
+        &[MemberStatus::Active],
+    )
 }
