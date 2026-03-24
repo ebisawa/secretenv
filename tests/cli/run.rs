@@ -245,3 +245,75 @@ fn test_run_preserves_exit_code() {
         .assert()
         .code(42);
 }
+
+#[cfg(unix)]
+#[test]
+fn test_run_does_not_inherit_nonstandard_parent_env() {
+    let (workspace_dir, home_dir, _ssh_temp, ssh_priv) = setup_workspace_with_default_file();
+
+    cmd()
+        .arg("run")
+        .arg("--workspace")
+        .arg(workspace_dir.path())
+        .arg("--")
+        .arg("sh")
+        .arg("-c")
+        .arg("if [ -z \"${LEAK_ME+x}\" ]; then echo absent; else echo present; fi")
+        .env("LEAK_ME", "top-secret")
+        .env("SECRETENV_HOME", home_dir.path())
+        .env("SECRETENV_SSH_KEY", ssh_priv.to_str().unwrap())
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("absent"));
+}
+
+#[cfg(unix)]
+#[test]
+fn test_run_preserves_standard_env_vars() {
+    let (workspace_dir, home_dir, _ssh_temp, ssh_priv) = setup_workspace_with_default_file();
+
+    cmd()
+        .arg("run")
+        .arg("--workspace")
+        .arg(workspace_dir.path())
+        .arg("--")
+        .arg("sh")
+        .arg("-c")
+        .arg("test -n \"$PATH\" && test -n \"$HOME\" && echo ok")
+        .env("SECRETENV_HOME", home_dir.path())
+        .env("SECRETENV_SSH_KEY", ssh_priv.to_str().unwrap())
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("ok"));
+}
+
+#[cfg(unix)]
+#[test]
+fn test_run_secret_env_overrides_standard_env_vars() {
+    let (workspace_dir, home_dir, _ssh_temp, ssh_priv) = setup_workspace_with_default_file();
+
+    cmd()
+        .arg("set")
+        .arg("PATH")
+        .arg("secret_path")
+        .arg("--workspace")
+        .arg(workspace_dir.path())
+        .env("SECRETENV_HOME", home_dir.path())
+        .env("SECRETENV_SSH_KEY", ssh_priv.to_str().unwrap())
+        .assert()
+        .success();
+
+    cmd()
+        .arg("run")
+        .arg("--workspace")
+        .arg(workspace_dir.path())
+        .arg("--")
+        .arg("/bin/sh")
+        .arg("-c")
+        .arg("printf %s \"$PATH\"")
+        .env("SECRETENV_HOME", home_dir.path())
+        .env("SECRETENV_SSH_KEY", ssh_priv.to_str().unwrap())
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("secret_path"));
+}

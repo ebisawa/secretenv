@@ -488,6 +488,8 @@ secretenv run -n staging -- ./my-app
 secretenv run -- python manage.py runserver
 ```
 
+`run` does not inherit the parent process environment wholesale. The child process keeps only standard variables such as `PATH` and `HOME`, then overlays secret values on top.
+
 ### Bulk Importing a .env File
 
 ```bash
@@ -949,6 +951,7 @@ Even if the same member participates in multiple projects, their HPKE key is reg
 - No plaintext `.env` file is left on disk
 - The latest secrets are decrypted on each run, so value updates take effect immediately
 - Signature verification runs automatically, preventing command execution with tampered secrets
+- It reduces accidental leakage of arbitrary parent-shell environment variables into the child process
 
 ---
 

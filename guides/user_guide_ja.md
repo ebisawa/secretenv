@@ -488,6 +488,8 @@ secretenv run -n staging -- ./my-app
 secretenv run -- python manage.py runserver
 ```
 
+`run` は親プロセスの環境変数をそのまま引き継ぎません。子プロセスには `PATH` や `HOME` などの標準的な環境変数だけを残し、secret の値をその上に注入します。
+
 ### .env ファイルの一括インポート
 
 ```bash
@@ -949,6 +951,7 @@ secretenv encrypt -i ~/.ssh/id_ed25519_work secret.env
 - 平文の `.env` ファイルがディスクに残らない
 - 実行のたびに最新の secrets を復号するため、値の更新が即座に反映される
 - 署名検証が自動で実行され、改ざんされた secrets でのコマンド実行を防げる
+- 親シェルの任意環境変数を子プロセスへ漏らしにくい
 
 ---
 
