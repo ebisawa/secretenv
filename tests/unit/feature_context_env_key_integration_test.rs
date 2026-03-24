@@ -43,6 +43,7 @@ fn generate_and_export(
             .unwrap_or("2026-01-01T00:00:00Z"),
         &public_key.protected.expires_at,
         password,
+        false,
     )
     .expect("export should succeed");
 
@@ -61,7 +62,7 @@ fn test_env_key_roundtrip_with_attested_keys() {
     std::env::set_var(ENV_KEY_PASSWORD, password);
 
     let (verified_key, loaded_member_id) =
-        load_private_key_from_env().expect("load from env should succeed");
+        load_private_key_from_env(false).expect("load from env should succeed");
 
     assert_eq!(loaded_member_id, member_id);
     assert_eq!(verified_key.proof().member_id, member_id);
@@ -86,7 +87,7 @@ fn test_env_key_wrong_password_error() {
     std::env::set_var(ENV_PRIVATE_KEY, &exported);
     std::env::set_var(ENV_KEY_PASSWORD, "different-wrong-password");
 
-    let result = load_private_key_from_env();
+    let result = load_private_key_from_env(false);
     assert!(result.is_err(), "wrong password should fail");
 }
 
@@ -142,7 +143,7 @@ fn test_env_key_roundtrip_preserves_key_material_for_decryption() {
     std::env::set_var(ENV_KEY_PASSWORD, password);
 
     let (verified_key, _member_id) =
-        load_private_key_from_env().expect("load from env should succeed");
+        load_private_key_from_env(false).expect("load from env should succeed");
 
     // Verify the loaded key matches the public key (simulates what CryptoContext does)
     let result = verify_own_public_key(verified_key.document(), &public_key);

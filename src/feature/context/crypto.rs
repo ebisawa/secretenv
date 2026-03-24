@@ -127,8 +127,8 @@ impl CryptoContext {
     /// Uses SECRETENV_PRIVATE_KEY and SECRETENV_KEY_PASSWORD environment variables
     /// instead of the local keystore and SSH key decryption. Public keys are loaded
     /// from the workspace member files.
-    pub fn load_from_env(workspace_path: PathBuf) -> Result<Self> {
-        let (verified_key, member_id) = env_key::load_private_key_from_env()?;
+    pub fn load_from_env(workspace_path: PathBuf, debug: bool) -> Result<Self> {
+        let (verified_key, member_id) = env_key::load_private_key_from_env(debug)?;
         let kid = verified_key.proof().kid.clone();
 
         // Load own public key from workspace and verify consistency

@@ -45,6 +45,7 @@ pub fn encrypt_private_key_with_password(
     created_at: &str,
     expires_at: &str,
     password: &str,
+    debug: bool,
 ) -> Result<PrivateKey> {
     let salt = password_key_derivation::generate_salt();
 
@@ -62,13 +63,14 @@ pub fn encrypt_private_key_with_password(
         &salt,
         kid,
         &DEFAULT_ARGON2_PARAMS,
+        debug,
     )?;
 
     let encrypted = serialize_and_encrypt(
         plaintext,
         &enc_key,
         &protected,
-        false,
+        debug,
         "encrypt_private_key_with_password",
     )?;
 
@@ -82,6 +84,7 @@ pub fn encrypt_private_key_with_password(
 pub fn decrypt_private_key_with_password(
     private_key: &PrivateKey,
     password: &str,
+    debug: bool,
 ) -> Result<PrivateKeyPlaintext> {
     let params = match &private_key.protected.alg {
         PrivateKeyAlgorithm::Argon2id { m, t, p, aead, .. } => {
@@ -112,6 +115,7 @@ pub fn decrypt_private_key_with_password(
         &salt,
         &private_key.protected.kid,
         &params,
+        debug,
     )?;
 
     decrypt_and_deserialize(
@@ -120,7 +124,7 @@ pub fn decrypt_private_key_with_password(
         &aad,
         &ct,
         &private_key.protected.kid,
-        false,
+        debug,
         "decrypt_private_key_with_password",
     )
 }

@@ -142,7 +142,8 @@ impl ExecutionContext {
             require_workspace(options, "environment variable key loading (CI mode)")?;
         let keystore_root = options.resolve_keystore_root()?;
 
-        let key_ctx = CryptoContext::load_from_env(workspace_root.root_path.clone())?;
+        let key_ctx =
+            CryptoContext::load_from_env(workspace_root.root_path.clone(), options.verbose)?;
         let member_id = key_ctx.member_id.clone();
 
         Ok(Self {

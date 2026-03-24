@@ -50,6 +50,7 @@ fn test_export_produces_valid_base64url() {
         "2026-01-01T00:00:00Z",
         "2027-01-01T00:00:00Z",
         "strong-password-42",
+        false,
     )
     .expect("export should succeed");
 
@@ -81,6 +82,7 @@ fn test_export_roundtrip() {
         "2026-01-01T00:00:00Z",
         "2027-01-01T00:00:00Z",
         password,
+        false,
     )
     .expect("export should succeed");
 
@@ -94,7 +96,7 @@ fn test_export_roundtrip() {
         serde_json::from_slice(&json_bytes).expect("should be valid JSON");
 
     // Decrypt with password
-    let decrypted = decrypt_private_key_with_password(&private_key, password)
+    let decrypted = decrypt_private_key_with_password(&private_key, password, false)
         .expect("decryption should succeed");
 
     assert_eq!(plaintext, decrypted);
@@ -115,6 +117,7 @@ fn test_export_preserves_metadata() {
         created_at,
         expires_at,
         "strong-password-42",
+        false,
     )
     .expect("export should succeed");
 
@@ -141,6 +144,7 @@ fn test_export_uses_argon2id_kdf() {
         "2026-01-01T00:00:00Z",
         "2027-01-01T00:00:00Z",
         "strong-password-42",
+        false,
     )
     .expect("export should succeed");
 
@@ -171,6 +175,7 @@ fn test_export_password_too_short_fails() {
         "2026-01-01T00:00:00Z",
         "2027-01-01T00:00:00Z",
         "short",
+        false,
     );
 
     assert!(result.is_err(), "password shorter than 8 chars should fail");
@@ -193,6 +198,7 @@ fn test_export_password_7_chars_fails() {
         "2026-01-01T00:00:00Z",
         "2027-01-01T00:00:00Z",
         "1234567",
+        false,
     );
 
     assert!(result.is_err(), "7-char password should fail");
@@ -209,6 +215,7 @@ fn test_export_password_8_chars_succeeds() {
         "2026-01-01T00:00:00Z",
         "2027-01-01T00:00:00Z",
         "12345678",
+        false,
     );
 
     assert!(result.is_ok(), "8-char password should succeed");

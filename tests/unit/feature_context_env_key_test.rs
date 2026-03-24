@@ -54,6 +54,7 @@ fn build_exported_key(plaintext: &PrivateKeyPlaintext, password: &str) -> String
         "2026-01-01T00:00:00Z",
         "2027-01-01T00:00:00Z",
         password,
+        false,
     )
     .expect("export should succeed")
 }
@@ -84,7 +85,7 @@ fn test_decode_env_private_key() {
     std::env::set_var(ENV_PRIVATE_KEY, &exported);
     std::env::set_var(ENV_KEY_PASSWORD, password);
 
-    let (verified_key, member_id) = load_private_key_from_env().expect("should succeed");
+    let (verified_key, member_id) = load_private_key_from_env(false).expect("should succeed");
     assert_eq!(member_id, "alice@example.com");
     assert_eq!(verified_key.proof().kid, "01HN8Z3Q4R5S6T7V8W9X0Y1Z2A");
     assert_eq!(verified_key.proof().ssh_fpr, None);
@@ -101,7 +102,7 @@ fn test_env_key_missing_password_error() {
     std::env::set_var(ENV_PRIVATE_KEY, &exported);
     std::env::remove_var(ENV_KEY_PASSWORD);
 
-    let result = load_private_key_from_env();
+    let result = load_private_key_from_env(false);
     assert!(result.is_err());
     let err = result.unwrap_err().to_string();
     assert!(
@@ -117,7 +118,7 @@ fn test_env_key_invalid_base64_error() {
     std::env::set_var(ENV_PRIVATE_KEY, "not-valid-base64!!!");
     std::env::set_var(ENV_KEY_PASSWORD, "strong-password-42");
 
-    let result = load_private_key_from_env();
+    let result = load_private_key_from_env(false);
     assert!(result.is_err());
 }
 
@@ -251,7 +252,7 @@ fn test_env_key_rejects_sshsig_algorithm() {
     std::env::set_var(ENV_PRIVATE_KEY, &encoded);
     std::env::set_var(ENV_KEY_PASSWORD, "test-password");
 
-    let result = load_private_key_from_env();
+    let result = load_private_key_from_env(false);
     assert!(result.is_err(), "SshSig key should be rejected");
     let err = result.unwrap_err().to_string();
     assert!(

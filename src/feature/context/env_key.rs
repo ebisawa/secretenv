@@ -30,7 +30,9 @@ pub fn is_env_key_mode() -> bool {
 /// decrypts it using SECRETENV_KEY_PASSWORD, and validates the key material.
 ///
 /// Returns the verified private key and the member_id from the protected header.
-pub fn load_private_key_from_env() -> Result<(crate::model::verified::VerifiedPrivateKey, String)> {
+pub fn load_private_key_from_env(
+    debug: bool,
+) -> Result<(crate::model::verified::VerifiedPrivateKey, String)> {
     let encoded = Zeroizing::new(std::env::var(ENV_PRIVATE_KEY).map_err(|e| match e {
         std::env::VarError::NotPresent => Error::Config {
             message: format!("{} environment variable is not set", ENV_PRIVATE_KEY),
@@ -105,7 +107,7 @@ pub fn load_private_key_from_env() -> Result<(crate::model::verified::VerifiedPr
     let member_id = private_key.protected.member_id.clone();
     let kid = private_key.protected.kid.clone();
 
-    let plaintext = decrypt_private_key_with_password(&private_key, &password)?;
+    let plaintext = decrypt_private_key_with_password(&private_key, &password, debug)?;
 
     let verified_key = validate_and_wrap_private_key_password(plaintext, &member_id, &kid)?;
 

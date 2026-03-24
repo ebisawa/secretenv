@@ -12,6 +12,7 @@ use crate::Result;
 use argon2::Argon2;
 use rand::rngs::OsRng;
 use rand::RngCore;
+use tracing::debug;
 use zeroize::Zeroizing;
 
 /// Argon2id parameters for password hashing
@@ -106,11 +107,27 @@ pub fn derive_key_from_password(
     salt: &Salt,
     kid: &str,
     params: &Argon2Params,
+    debug_enabled: bool,
 ) -> Result<XChaChaKey> {
     validate_argon2_params(params)?;
 
+    if debug_enabled {
+        debug!(
+            "[CRYPTO] Argon2id: password hash (kid: {}, m: {}, t: {}, p: {})",
+            kid,
+            params.m(),
+            params.t(),
+            params.p()
+        );
+    }
     let ikm = argon2id_hash(password, salt, params)?;
 
+    if debug_enabled {
+        debug!(
+            "[CRYPTO] HKDF-SHA256: password key derivation (kid: {})",
+            kid
+        );
+    }
     let info = Info::from_string(&format!(
         "{}:{}",
         context::PASSWORD_PRIVATE_KEY_ENC_INFO_PREFIX_V3,

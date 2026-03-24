@@ -59,6 +59,7 @@ fn setup_env_key_workspace() -> (TempDir, TempDir, TempDir, String) {
         &private_key.protected.created_at,
         &private_key.protected.expires_at,
         TEST_PASSWORD,
+        false,
     )
     .expect("should export private key");
 

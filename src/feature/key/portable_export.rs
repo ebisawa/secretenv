@@ -32,11 +32,12 @@ pub fn export_private_key_portable(
     created_at: &str,
     expires_at: &str,
     password: &str,
+    debug: bool,
 ) -> Result<String> {
     validate_password_length(password)?;
 
     let private_key = encrypt_private_key_with_password(
-        plaintext, member_id, kid, created_at, expires_at, password,
+        plaintext, member_id, kid, created_at, expires_at, password, debug,
     )?;
 
     let jcs_bytes = jcs::normalize(&private_key)?;

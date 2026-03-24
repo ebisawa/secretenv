@@ -173,6 +173,7 @@ pub fn export_private_key_command(
         &loaded.created_at,
         &loaded.expires_at,
         password,
+        options.verbose,
     )?;
 
     Ok(crate::feature::key::portable_export::PortableExportOutput {
