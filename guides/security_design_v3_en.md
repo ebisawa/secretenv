@@ -926,7 +926,23 @@ To verify the signer's own public key from the workspace:
 4. Verify the PublicKey document's self-signature using the Ed25519 public key
 5. Standard attestation verification also applies
 
-This provides equivalent trust guarantees to the local keystore path, since the private key's authenticity is established by successful authenticated decryption, and the public key's correspondence is verified by component matching.
+This provides equivalent key-correspondence verification to the local keystore path, since the private key's authenticity is established by successful authenticated decryption, and the public key's correspondence is verified by component matching.
+
+However, the workspace `members/active/` directory itself remains outside the trust boundary. This verification does not turn an attacker-controlled checkout into trusted input. Therefore env mode may be used only in a trusted CI context that satisfies all of the following:
+
+- **trusted workflow**: the workflow / job definition that consumes secrets is maintainer-controlled and cannot be modified or triggered from attacker-controlled PR content
+- **trusted ref**: the checkout consumed by secretenv is a protected branch, protected tag, post-merge ref, or equivalent trusted ref
+- **trusted runner**: the runner handling secrets is trusted and is not shared with untrusted workloads
+
+Env mode must not be used in:
+
+- fork PRs
+- untrusted PRs
+- `pull_request_target`
+- jobs that perform an attacker-controlled checkout
+- jobs running on untrusted runners
+
+Typical allowed cases are post-merge workflows on protected branches and deploy jobs on protected tags. PR validation workflows that expose secrets are out of scope.
 
 ---
 

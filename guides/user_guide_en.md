@@ -726,15 +726,31 @@ As a guideline, retain old keys for 1–3 months after rewrap completion.
 
 ## 12. CI/CD Integration
 
-secretenv supports CI/CD environments through portable private key export and environment variable-based key loading. This eliminates the need for SSH keys, `ssh-agent`, or a local keystore in CI runners.
+secretenv supports CI/CD environments through portable private key export and environment variable-based key loading, **but only in trusted CI contexts**. This eliminates the need for SSH keys, `ssh-agent`, or a local keystore in CI runners.
 
 ### Overview
 
 In CI mode, secretenv reads the private key and password from environment variables instead of the local keystore. Public keys are resolved from the workspace's `members/active/` directory (which is available in the Git checkout).
 
+This matters because `members/active/` is checkout-derived input outside the trust boundary. Env mode must therefore be limited to **trusted workflow / trusted ref / trusted runner** contexts.
+
+### Allowed CI Contexts
+
+- post-merge workflows on protected branches
+- release / deploy workflows on protected tags
+- manual dispatch jobs started by trusted maintainers on trusted refs
+
+### Forbidden CI Contexts
+
+- fork PRs
+- untrusted PRs
+- `pull_request_target`
+- jobs that checkout attacker-controlled refs after secrets are injected
+- jobs on untrusted runners
+
 ### Minimal CI Requirements
 
-Only three things are needed in a CI environment:
+Only three things are needed in a trusted CI context:
 
 1. `SECRETENV_PRIVATE_KEY` environment variable — the exported private key (Base64url-encoded)
 2. `SECRETENV_KEY_PASSWORD` environment variable — the password used during export
@@ -816,10 +832,12 @@ jobs:
         run: secretenv run -- ./deploy.sh
 ```
 
+This example assumes a **trusted post-merge workflow on a protected branch**. Do not reuse the same pattern for `pull_request` or `pull_request_target` jobs that expose secrets.
+
 ### Example: Generic CI Configuration
 
 ```bash
-# Any CI platform that supports secret environment variables
+# Any CI platform that checks out a trusted ref and supports secret environment variables
 export SECRETENV_PRIVATE_KEY="<registered secret>"
 export SECRETENV_KEY_PASSWORD="<registered secret>"
 
@@ -841,6 +859,7 @@ All operations are supported in environment variable mode:
 ### Security Considerations
 
 - **Password exposure**: `SECRETENV_KEY_PASSWORD` persists in process memory and may be visible via `/proc/*/environ` on Linux. This is consistent with how CI platforms handle secrets.
+- **Trusted CI only**: Use env mode only in trusted workflow / trusted ref / trusted runner contexts. In attacker-controlled checkouts, `members/active/` cannot be treated as a trustworthy public key source.
 - **Dedicated CI member**: Always use a dedicated CI member rather than a human member's key. This allows independent rotation and revocation.
 - **Key rotation**: When rotating the CI member's key, re-export with `key export --private` and update the CI secret variables.
 - **Least privilege**: Only add the CI member to the secrets it actually needs access to.

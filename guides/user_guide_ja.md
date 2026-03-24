@@ -726,15 +726,31 @@ secretenv key activate <kid>
 
 ## 12. CI/CD 連携
 
-secretenv は、ポータブルな秘密鍵エクスポートと環境変数ベースの鍵読み込みにより、CI/CD 環境をサポートします。CI ランナーに SSH 鍵、`ssh-agent`、ローカルキーストアは不要です。
+secretenv は、ポータブルな秘密鍵エクスポートと環境変数ベースの鍵読み込みにより、**trusted CI context に限って** CI/CD 環境をサポートします。CI ランナーに SSH 鍵、`ssh-agent`、ローカルキーストアは不要です。
 
 ### 概要
 
 CI モードでは、secretenv はローカルキーストアではなく環境変数から秘密鍵とパスワードを読み取ります。公開鍵は workspace の `members/active/` ディレクトリ（Git チェックアウトに含まれる）から解決されます。
 
+ここで重要なのは、`members/active/` は checkout 由来の入力であり trust boundary 外だという点です。したがって、env モードは **trusted workflow / trusted ref / trusted runner** を満たす job でのみ使ってください。
+
+### 使ってよい CI コンテキスト
+
+- protected branch の post-merge workflow
+- protected tag 上の release / deploy workflow
+- trusted maintainer が起動し、trusted ref を checkout する manual dispatch
+
+### 使ってはいけない CI コンテキスト
+
+- fork PR
+- untrusted PR
+- `pull_request_target`
+- secrets 注入後に attacker-controlled な ref を checkout する job
+- untrusted runner 上の job
+
 ### CI に必要な最小構成
 
-CI 環境で必要なものは 3 つだけです。
+trusted CI context で必要なものは 3 つだけです。
 
 1. `SECRETENV_PRIVATE_KEY` 環境変数 -- エクスポートされた秘密鍵（Base64url エンコード済み）
 2. `SECRETENV_KEY_PASSWORD` 環境変数 -- エクスポート時に使用したパスワード
@@ -816,10 +832,12 @@ jobs:
         run: secretenv run -- ./deploy.sh
 ```
 
+この例は **protected branch への push 後に実行される trusted workflow** を前提にしています。`pull_request` や `pull_request_target` に secrets を渡して同じ構成を使ってはいけません。
+
 ### 例: 汎用 CI 設定
 
 ```bash
-# シークレット環境変数をサポートする任意の CI プラットフォーム
+# trusted ref を checkout する任意の CI プラットフォーム
 export SECRETENV_PRIVATE_KEY="<登録済みシークレット>"
 export SECRETENV_KEY_PASSWORD="<登録済みシークレット>"
 
@@ -841,6 +859,7 @@ secretenv decrypt ca.pem.encrypted --out ca.pem
 ### セキュリティに関する注意事項
 
 - **パスワードの露出**: `SECRETENV_KEY_PASSWORD` はプロセスメモリに残存し、Linux では `/proc/*/environ` を通じて可視になる場合があります。これは CI プラットフォームがシークレットを取り扱う方法と整合的です。
+- **trusted CI 限定**: env モードは trusted workflow / trusted ref / trusted runner でのみ使用してください。attacker-controlled な checkout では `members/active/` を公開鍵ソースとして信頼できません。
 - **CI 専用メンバー**: 人間のメンバーの鍵ではなく、必ず CI 専用メンバーを使用してください。これにより独立したローテーションと失効が可能になります。
 - **鍵のローテーション**: CI メンバーの鍵をローテーションする場合は、`key export --private` で再エクスポートし、CI シークレット変数を更新してください。
 - **最小権限**: CI メンバーは実際にアクセスが必要な secrets のみに追加してください。

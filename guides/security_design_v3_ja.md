@@ -926,7 +926,23 @@ workspace から署名者自身の公開鍵を検証する手順:
 4. PublicKey 文書の自己署名を Ed25519 公開鍵で検証する
 5. 標準の attestation 検証も適用される
 
-これにより、ローカルキーストア経由の場合と同等の信頼保証が提供される。秘密鍵の真正性は認証復号の成功により確立され、公開鍵の対応はコンポーネント照合により検証されるためである。
+これにより、ローカルキーストア経由の場合と同等の鍵対応検証が提供される。秘密鍵の真正性は認証復号の成功により確立され、公開鍵の対応はコンポーネント照合により検証されるためである。
+
+ただし、workspace の `members/active/` 自体は trust boundary 外である。この検証は checkout を trusted input に変えるものではない。したがって、env モードで `SECRETENV_PRIVATE_KEY` を使用してよいのは、以下をすべて満たす trusted CI context に限られる:
+
+- **trusted workflow**: シークレットを扱う workflow / job 定義が maintainer 管理下にあり、attacker-controlled な PR から変更・起動できない
+- **trusted ref**: secretenv が参照する checkout が protected branch / protected tag / post-merge ref 等の trusted ref である
+- **trusted runner**: シークレットを扱う runner が trusted であり、untrusted workload と共有されない
+
+以下では env モードを使用してはならない:
+
+- fork PR
+- untrusted PR
+- `pull_request_target`
+- attacker-controlled な checkout を伴う job
+- untrusted runner 上の job
+
+代表例として、protected branch の post-merge workflow や protected tag 上の deploy job は許容される。一方、PR 検証系 workflow に secrets を出して env モードを使う運用は想定しない。
 
 ---
 
