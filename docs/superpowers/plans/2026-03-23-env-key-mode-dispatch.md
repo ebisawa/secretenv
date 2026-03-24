@@ -520,9 +520,243 @@ git commit -m "test: add dispatch tests for ExecutionContext::resolve()"
 
 ---
 
-### Task 9: Final verification
+### Task 9: CLI integration tests for env key mode
 
-- [ ] **Step 1: Run full test suite**
+**Files:**
+- Create: `tests/cli/env_key_mode.rs`
+- Modify: `tests/cli_integration.rs` (register new module)
+
+These tests exercise the full CLI command pipeline with `SECRETENV_PRIVATE_KEY` and
+`SECRETENV_KEY_PASSWORD` environment variables, verifying that SSH is not required.
+Uses the same `setup_workspace()` helper pattern as existing CLI integration tests,
+then exports the private key and uses it via env vars.
+
+The test flow:
+1. `setup_workspace()` — creates workspace with SSH key (normal init)
+2. `key export --private` — exports the private key to a portable string
+3. Run commands with `SECRETENV_PRIVATE_KEY` + `SECRETENV_KEY_PASSWORD` env vars
+   (without `SECRETENV_SSH_KEY`) to verify env-key mode works end-to-end.
+
+- [ ] **Step 1: Create `tests/cli/env_key_mode.rs`**
+
+```rust
+// Copyright 2026 Satoshi Ebisawa
+// SPDX-License-Identifier: Apache-2.0
+
+//! CLI integration tests for environment variable key mode (CI mode).
+//!
+//! Verifies that encrypt, decrypt, set, get, and run commands work
+//! with SECRETENV_PRIVATE_KEY and SECRETENV_KEY_PASSWORD instead of SSH.
+
+use crate::cli::common::{cmd, setup_workspace, TEST_MEMBER_ID};
+use predicates::prelude::*;
+use std::fs;
+
+const CI_PASSWORD: &str = "strong-ci-test-password-42";
+
+/// Setup: init workspace with SSH, export private key, return env vars for CI mode.
+///
+/// Returns (workspace_dir, home_dir, exported_key_base64url)
+fn setup_ci_env() -> (tempfile::TempDir, tempfile::TempDir, String) {
+    let (workspace_dir, home_dir, _ssh_temp, ssh_priv) = setup_workspace();
+
+    // Export private key with password protection
+    let output = cmd()
+        .arg("key")
+        .arg("export")
+        .arg("--private")
+        .arg("--member-id")
+        .arg(TEST_MEMBER_ID)
+        .env("SECRETENV_HOME", home_dir.path())
+        .env("SECRETENV_SSH_KEY", ssh_priv.to_str().unwrap())
+        .env("SECRETENV_KEY_EXPORT_PASSWORD", CI_PASSWORD)
+        .output()
+        .unwrap();
+
+    assert!(
+        output.status.success(),
+        "key export --private failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let exported_key = String::from_utf8(output.stdout)
+        .unwrap()
+        .trim()
+        .to_string();
+
+    (workspace_dir, home_dir, exported_key)
+}
+
+/// Helper: build a cmd with CI env vars (no SSH key).
+fn ci_cmd() -> assert_cmd::Command {
+    cmd()
+}
+
+// ============================================================================
+// set + get roundtrip via env key mode
+// ============================================================================
+
+#[test]
+fn test_env_key_set_and_get_roundtrip() {
+    let (workspace_dir, home_dir, exported_key) = setup_ci_env();
+
+    // set via env key mode (no SSH key)
+    ci_cmd()
+        .arg("set")
+        .arg("DATABASE_URL")
+        .arg("postgres://ci-host/db")
+        .arg("--workspace")
+        .arg(workspace_dir.path())
+        .env("SECRETENV_HOME", home_dir.path())
+        .env("SECRETENV_PRIVATE_KEY", &exported_key)
+        .env("SECRETENV_KEY_PASSWORD", CI_PASSWORD)
+        .env_remove("SECRETENV_SSH_KEY")
+        .assert()
+        .success();
+
+    // get via env key mode
+    ci_cmd()
+        .arg("get")
+        .arg("DATABASE_URL")
+        .arg("--workspace")
+        .arg(workspace_dir.path())
+        .env("SECRETENV_HOME", home_dir.path())
+        .env("SECRETENV_PRIVATE_KEY", &exported_key)
+        .env("SECRETENV_KEY_PASSWORD", CI_PASSWORD)
+        .env_remove("SECRETENV_SSH_KEY")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("postgres://ci-host/db"));
+}
+
+// ============================================================================
+// encrypt + decrypt roundtrip via env key mode
+// ============================================================================
+
+#[test]
+fn test_env_key_encrypt_decrypt_file_roundtrip() {
+    let (workspace_dir, home_dir, exported_key) = setup_ci_env();
+
+    let original_content = b"TOP SECRET DATA\n";
+    let input_file = home_dir.path().join("secret.txt");
+    fs::write(&input_file, original_content).unwrap();
+
+    let encrypted_file = home_dir.path().join("secret.txt.encrypted");
+    let decrypted_file = home_dir.path().join("decrypted.txt");
+
+    // encrypt via env key mode
+    ci_cmd()
+        .arg("encrypt")
+        .arg(input_file.to_str().unwrap())
+        .arg("--out")
+        .arg(encrypted_file.to_str().unwrap())
+        .arg("--workspace")
+        .arg(workspace_dir.path())
+        .env("SECRETENV_HOME", home_dir.path())
+        .env("SECRETENV_PRIVATE_KEY", &exported_key)
+        .env("SECRETENV_KEY_PASSWORD", CI_PASSWORD)
+        .env_remove("SECRETENV_SSH_KEY")
+        .assert()
+        .success();
+
+    assert!(encrypted_file.exists(), "Encrypted file should exist");
+
+    // decrypt via env key mode
+    ci_cmd()
+        .arg("decrypt")
+        .arg(encrypted_file.to_str().unwrap())
+        .arg("--out")
+        .arg(decrypted_file.to_str().unwrap())
+        .arg("--workspace")
+        .arg(workspace_dir.path())
+        .env("SECRETENV_HOME", home_dir.path())
+        .env("SECRETENV_PRIVATE_KEY", &exported_key)
+        .env("SECRETENV_KEY_PASSWORD", CI_PASSWORD)
+        .env_remove("SECRETENV_SSH_KEY")
+        .assert()
+        .success();
+
+    let decrypted = fs::read(&decrypted_file).unwrap();
+    assert_eq!(decrypted, original_content, "Decrypted should match original");
+}
+
+// ============================================================================
+// Error cases
+// ============================================================================
+
+#[test]
+fn test_env_key_missing_password_fails() {
+    let (workspace_dir, home_dir, exported_key) = setup_ci_env();
+
+    ci_cmd()
+        .arg("get")
+        .arg("FOO")
+        .arg("--workspace")
+        .arg(workspace_dir.path())
+        .env("SECRETENV_HOME", home_dir.path())
+        .env("SECRETENV_PRIVATE_KEY", &exported_key)
+        .env_remove("SECRETENV_KEY_PASSWORD")
+        .env_remove("SECRETENV_SSH_KEY")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("SECRETENV_KEY_PASSWORD"));
+}
+
+#[test]
+fn test_env_key_wrong_password_fails() {
+    let (workspace_dir, home_dir, exported_key) = setup_ci_env();
+
+    // Set a value first (via SSH so we have something to read)
+    let (_ws, _hm, _ssh_temp, ssh_priv) = setup_workspace();
+    // Actually re-use the exported key with wrong password
+    ci_cmd()
+        .arg("set")
+        .arg("TEST_KEY")
+        .arg("test_value")
+        .arg("--workspace")
+        .arg(workspace_dir.path())
+        .env("SECRETENV_HOME", home_dir.path())
+        .env("SECRETENV_PRIVATE_KEY", &exported_key)
+        .env("SECRETENV_KEY_PASSWORD", "wrong-password-definitely")
+        .env_remove("SECRETENV_SSH_KEY")
+        .assert()
+        .failure();
+}
+```
+
+- [ ] **Step 2: Register the module in `tests/cli_integration.rs`**
+
+The CLI integration tests are organized under `tests/cli/`. Check `tests/cli_integration.rs`
+structure and add `mod env_key_mode;` inside the `mod cli` block, or at the appropriate level.
+
+- [ ] **Step 3: Verify the `key export --private` password input mechanism**
+
+The `setup_ci_env()` helper uses `SECRETENV_KEY_EXPORT_PASSWORD` env var to provide
+the password non-interactively. Verify that `cli/key/operations.rs` supports this env var.
+If not, adjust the helper to use `--password` flag or stdin pipe.
+
+- [ ] **Step 4: Run the new tests**
+
+Run: `cargo test --test cli_integration env_key_mode`
+Expected: all 4 tests pass
+
+- [ ] **Step 5: Run clippy and fmt**
+
+Run: `cargo clippy -- -D warnings && cargo fmt -- --check`
+Expected: clean
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add tests/cli/env_key_mode.rs tests/cli_integration.rs
+git commit -m "test: add CLI integration tests for env key mode (CI mode)"
+```
+
+---
+
+### Task 10: Final verification
+
+- [ ] **Step 1: Run full test suite (unit + CLI integration)**
 
 Run: `cargo test`
 Expected: all tests pass, no new warnings
