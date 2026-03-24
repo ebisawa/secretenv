@@ -46,6 +46,8 @@ pub struct EnvKeyLoadResult {
 ///
 /// Reads SECRETENV_PRIVATE_KEY (Base64url-encoded PrivateKey JSON),
 /// decrypts it using SECRETENV_KEY_PASSWORD, and validates the key material.
+/// This path intentionally does not resolve the caller's own PublicKey
+/// from the workspace during key loading.
 pub fn load_private_key_from_env(debug: bool) -> Result<EnvKeyLoadResult> {
     // Safety: clear sensitive env vars on every exit path.
     // This is intentional security hygiene to minimize secret exposure.

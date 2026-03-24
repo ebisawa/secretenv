@@ -141,7 +141,7 @@ fn test_env_key_roundtrip_preserves_key_material_for_decryption() {
 }
 
 #[test]
-fn test_load_crypto_context_from_env_without_workspace_member_file() {
+fn test_load_crypto_context_from_env_does_not_require_workspace_member_file() {
     let _guard = EnvGuard::new(&[ENV_PRIVATE_KEY, ENV_KEY_PASSWORD]);
     let password = "strong-test-password-42";
     let (exported, _plaintext, public_key) =

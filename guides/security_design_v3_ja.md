@@ -910,19 +910,18 @@ HKDF info 文字列（`secretenv:password-private-key-enc@3:{kid}`）は SSH ベ
 
 #### 7.9.5 環境変数モードにおける公開鍵検証
 
-環境変数モードではローカルキーストアは利用できない。公開鍵（署名者自身のものを含む）は、ローカルキーストアの代わりに workspace の `members/active/` ディレクトリから解決される。
+環境変数モードは decrypt-only である。鍵ロード時は、Base64url デコード済みの exported PrivateKey を `SECRETENV_KEY_PASSWORD` で復号し、その PrivateKey document 自体に対する検証だけを行う。
 
-workspace から署名者自身の公開鍵を検証する手順:
+鍵ロード時に行う検証は以下である:
 
-1. `members/active/<member_id>.json` を検索する（`member_id` は環境変数鍵の `protected.member_id` から取得）
-2. 通常の PublicKey 検証と同じ手順で、その文書の自己署名を検証する
-3. 通常の PublicKey 検証と同じ手順で、標準の attestation 検証を適用する
-4. 検証済み PublicKey の `protected.member_id` と `protected.kid` が、env モードで復号された秘密鍵の `member_id` / `kid` と一致することを確認する
-5. 検証済み PublicKey の `identity.keys.sig.x` と `identity.keys.kem.x` が、復号された秘密鍵平文の対応する公開鍵成分と一致することを確認する
+1. `SECRETENV_PRIVATE_KEY` を Base64url デコードする
+2. `SECRETENV_KEY_PASSWORD` で復号する
+3. PrivateKey document の構造と保護方式を検証する
+4. 復号後平文の `sig.d` / `sig.x` および `kem.d` / `kem.x` の鍵ペア整合性を検証する
 
-これにより、env モードでも通常の公開鍵検証と同じ cryptographic verification を用いたうえで、秘密鍵との対応関係を確認する。tampered または unverifiable な member file は load 時点で reject される。一方、期限切れ PublicKey は通常の検証経路と同様に warning 扱いであり、checkout 自体の trust を与えるものではない。
+鍵ロード時に、署名者自身の PublicKey を workspace の `members/active/` から取得して照合してはならない。したがって、`members/active/<member_id>.json` の不在や内容不一致は env 鍵ロードの失敗条件ではない。
 
-ただし、workspace の `members/active/` 自体は trust boundary 外である。この検証は checkout を trusted input に変えるものではない。したがって、env モードで `SECRETENV_PRIVATE_KEY` を使用してよいのは、以下をすべて満たす trusted CI context に限られる:
+一方で、`run` / `decrypt` / `get` 実行時の署名検証や member 解決では、通常どおり workspace checkout を参照しうる。workspace は trust boundary 外の入力であり、その点は env モードでも変わらない。したがって、env モードで `SECRETENV_PRIVATE_KEY` を使用してよいのは、以下をすべて満たす trusted CI context に限られる:
 
 - **trusted workflow**: シークレットを扱う workflow / job 定義が maintainer 管理下にあり、attacker-controlled な PR から変更・起動できない
 - **trusted ref**: secretenv が参照する checkout が protected branch / protected tag / post-merge ref 等の trusted ref である
@@ -1190,7 +1189,7 @@ recipients の完全性は **Ed25519 署名**で保護される（wrap は `prot
 | **HPKE info = AAD** | wrap で同一 bytes を使う | defence-in-depth が欠落する |
 | **PublicKey 検証** | 自己署名と attestation を検証する | 改ざん済み PublicKey を受理し得る |
 | **署名鍵の解決元** | keystore を署名検証の公開鍵ソースに使わない | ローカル状態に依存した誤検証が起こり得る |
-| **env mode** | trusted CI context でのみ利用し、workspace 側 PublicKey 検証を省略しない | attacker-controlled checkout で秘密鍵を誤用し得る |
+| **env mode** | trusted CI context でのみ利用し、鍵ロード時に self PublicKey の workspace lookup を行わない | attacker-controlled checkout で秘密鍵を誤用し得る |
 
 ### 11.2 入力検証と DoS 耐性
 

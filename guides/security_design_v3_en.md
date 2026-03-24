@@ -910,19 +910,18 @@ If operations can place `SECRETENV_PRIVATE_KEY` and `SECRETENV_KEY_PASSWORD` in 
 
 #### 7.9.5 Public Key Verification in Environment Variable Mode
 
-In environment variable mode, the local keystore is not available. Public keys (including the signer's own) are resolved from the workspace's `members/active/` directory instead.
+Environment variable mode is decrypt-only. At key-load time, the implementation only decrypts the exported PrivateKey from `SECRETENV_PRIVATE_KEY` with `SECRETENV_KEY_PASSWORD` and validates the PrivateKey document itself.
 
-To verify the signer's own public key from the workspace:
+The key-load path performs the following checks:
 
-1. Look up `members/active/<member_id>.json` (where `member_id` is from the environment variable key's `protected.member_id`)
-2. Verify the document's self-signature using the same PublicKey verification path used elsewhere
-3. Apply the standard attestation verification using the same PublicKey verification path used elsewhere
-4. Confirm the verified PublicKey's `protected.member_id` and `protected.kid` match the `member_id` / `kid` of the env-loaded private key
-5. Confirm the verified PublicKey's `identity.keys.sig.x` and `identity.keys.kem.x` match the corresponding public components from the decrypted private key plaintext
+1. Base64url-decode `SECRETENV_PRIVATE_KEY`
+2. Decrypt it with `SECRETENV_KEY_PASSWORD`
+3. Validate the PrivateKey document structure and protection method
+4. Validate keypair consistency for `sig.d` / `sig.x` and `kem.d` / `kem.x`
 
-This means env mode uses the same cryptographic PublicKey verification as ordinary verification paths before checking correspondence with the private key. Tampered or otherwise unverifiable member files are rejected at load time. Expired PublicKeys remain warnings, consistent with ordinary verification, and this process does not make the checkout itself trusted.
+The implementation must not resolve the caller's own PublicKey from `members/active/` during env-key loading. Therefore the absence of `members/active/<member_id>.json`, or mismatches in that file, are not load-time failures for env mode.
 
-However, the workspace `members/active/` directory itself remains outside the trust boundary. This verification does not turn an attacker-controlled checkout into trusted input. Therefore env mode may be used only in a trusted CI context that satisfies all of the following:
+However, `run`, `decrypt`, and `get` still use the normal signature-verification and member-resolution rules, which may read from the workspace checkout. The checkout remains outside the trust boundary in env mode as well. Therefore env mode may be used only in a trusted CI context that satisfies all of the following:
 
 - **trusted workflow**: the workflow / job definition that consumes secrets is maintainer-controlled and cannot be modified or triggered from attacker-controlled PR content
 - **trusted ref**: the checkout consumed by secretenv is a protected branch, protected tag, post-merge ref, or equivalent trusted ref
@@ -1190,7 +1189,7 @@ These scenarios share a common structure: context bindings (`sid`, `kid`, `k`, `
 | **HPKE info = AAD** | The wrap path uses the same bytes in both places | Defence-in-depth is lost |
 | **PublicKey verification** | Self-signature and attestation are both verified | A tampered PublicKey may be accepted |
 | **Signature key source** | The keystore is not used as a public-key source for signature verification | Verification may accidentally depend on local state |
-| **env mode** | Only used in trusted CI contexts, with workspace-side PublicKey verification still enforced | Private keys may be used in attacker-controlled checkouts |
+| **env mode** | Only used in trusted CI contexts, without self PublicKey workspace lookup during key loading | Private keys may be used in attacker-controlled checkouts |
 
 ### 11.2 Input Validation and DoS Resistance
 
