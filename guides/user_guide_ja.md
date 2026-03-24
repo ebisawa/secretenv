@@ -17,9 +17,10 @@
 9. [ファイルの暗号化・復号](#9-ファイルの暗号化復号)
 10. [メンバー管理](#10-メンバー管理)
 11. [鍵の管理とローテーション](#11-鍵の管理とローテーション)
-12. [運用ガイドライン](#12-運用ガイドライン)
-13. [よくある質問（FAQ）](#13-よくある質問faq)
-14. [コマンドリファレンス（早見表）](#14-コマンドリファレンス早見表)
+12. [CI/CD 連携](#12-cicd-連携)
+13. [運用ガイドライン](#13-運用ガイドライン)
+14. [よくある質問（FAQ）](#14-よくある質問faq)
+15. [コマンドリファレンス（早見表）](#15-コマンドリファレンス早見表)
 
 ---
 
@@ -721,7 +722,130 @@ secretenv key activate <kid>
 
 ---
 
-## 12. 運用ガイドライン
+## 12. CI/CD 連携
+
+secretenv は、ポータブルな秘密鍵エクスポートと環境変数ベースの鍵読み込みにより、CI/CD 環境をサポートします。CI ランナーに SSH 鍵、`ssh-agent`、ローカルキーストアは不要です。
+
+### 概要
+
+CI モードでは、secretenv はローカルキーストアではなく環境変数から秘密鍵とパスワードを読み取ります。公開鍵は workspace の `members/active/` ディレクトリ（Git チェックアウトに含まれる）から解決されます。
+
+### CI に必要な最小構成
+
+CI 環境で必要なものは 3 つだけです。
+
+1. `SECRETENV_PRIVATE_KEY` 環境変数 -- エクスポートされた秘密鍵（Base64url エンコード済み）
+2. `SECRETENV_KEY_PASSWORD` 環境変数 -- エクスポート時に使用したパスワード
+3. Workspace（`.secretenv/` ディレクトリを含む Git リポジトリ）
+
+`SECRETENV_HOME`、ローカルキーストア、SSH 鍵、設定ファイルは不要です。
+
+### セットアップ手順
+
+#### ステップ 1: CI 専用メンバーを作成する
+
+CI 用の専用メンバーを作成します（人間のメンバーの鍵を流用しないでください）。
+
+```bash
+# SSH 鍵にアクセスできる開発者のマシンで実行
+secretenv key new --member-id ci@example.com
+secretenv init --member-id ci@example.com --force
+```
+
+#### ステップ 2: CI メンバーを受信者に追加する
+
+```bash
+git add .secretenv/members/active/ci@example.com.json
+git commit -m "Add CI member"
+git push
+
+# マージ後: CI メンバーを全暗号ファイルに追加
+secretenv rewrap
+git add .secretenv/secrets/
+git commit -m "Rewrap secrets for CI member"
+git push
+```
+
+#### ステップ 3: 秘密鍵をエクスポートする
+
+```bash
+secretenv key export --private --member-id ci@example.com --out ci-key.txt
+# パスワードの入力と確認を求められます（最低 8 文字）
+```
+
+出力ファイルには Base64url エンコードされたテキストが 1 行含まれます。
+
+#### ステップ 4: CI シークレット変数に登録する
+
+CI プラットフォームに 2 つのシークレット変数を登録します。
+
+| 変数 | 値 |
+|------|-----|
+| `SECRETENV_PRIVATE_KEY` | `ci-key.txt` の内容 |
+| `SECRETENV_KEY_PASSWORD` | エクスポート時に入力したパスワード |
+
+登録後、`ci-key.txt` ファイルは安全に削除してください。
+
+#### ステップ 5: CI ジョブで使用する
+
+CI ジョブで secretenv の全コマンドが使用可能になります。`member_id` は秘密鍵から自動的に決定されます。
+
+### 例: GitHub Actions
+
+```yaml
+name: Deploy
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install secretenv
+        run: cargo install --path .
+
+      - name: Run with secrets
+        env:
+          SECRETENV_PRIVATE_KEY: ${{ secrets.SECRETENV_PRIVATE_KEY }}
+          SECRETENV_KEY_PASSWORD: ${{ secrets.SECRETENV_KEY_PASSWORD }}
+        run: secretenv run -- ./deploy.sh
+```
+
+### 例: 汎用 CI 設定
+
+```bash
+# シークレット環境変数をサポートする任意の CI プラットフォーム
+export SECRETENV_PRIVATE_KEY="<登録済みシークレット>"
+export SECRETENV_KEY_PASSWORD="<登録済みシークレット>"
+
+# 全 secretenv コマンドが動作
+secretenv get DATABASE_URL
+secretenv run -- ./my-app
+secretenv decrypt ca.pem.encrypted --out ca.pem
+```
+
+### サポートされる操作
+
+環境変数モードでは全ての操作がサポートされます。
+
+- **復号**（`run`, `decrypt`, `get`）: 環境変数の KEM 秘密鍵を使用
+- **暗号化**（`encrypt`, `set`）: 環境変数の署名鍵を使用、受信者の公開鍵は workspace から取得
+- **Rewrap**: 環境変数の署名鍵を使用、公開鍵は workspace から取得
+- **検証**: workspace の公開鍵を使用
+
+### セキュリティに関する注意事項
+
+- **パスワードの露出**: `SECRETENV_KEY_PASSWORD` はプロセスメモリに残存し、Linux では `/proc/*/environ` を通じて可視になる場合があります。これは CI プラットフォームがシークレットを取り扱う方法と整合的です。
+- **CI 専用メンバー**: 人間のメンバーの鍵ではなく、必ず CI 専用メンバーを使用してください。これにより独立したローテーションと失効が可能になります。
+- **鍵のローテーション**: CI メンバーの鍵をローテーションする場合は、`key export --private` で再エクスポートし、CI シークレット変数を更新してください。
+- **最小権限**: CI メンバーは実際にアクセスが必要な secrets のみに追加してください。
+
+---
+
+## 13. 運用ガイドライン
 
 ### 退職者が出たときのチェックリスト
 
@@ -741,7 +865,9 @@ secretenv key activate <kid>
 
 ### CI/CD での利用と `--force` のリスク
 
-CI/CD 環境では TTY（対話端末）が使えないため、`rewrap` の TOFU 確認を自動でスキップする `--force` が必要になる場合があります。
+CI/CD 環境での secretenv のセットアップについては、[12章: CI/CD 連携](#12-cicd-連携) を参照してください。推奨される方法は環境変数ベースの鍵読み込みを使用するもので、通常の操作に `--force` は不要です。
+
+それでも `--force` が必要な場合（例: CI での `rewrap`）は、以下のリスクに注意してください。
 
 **`--force` のリスク**: 3章で説明した通り、TOFU 確認は公開鍵すり替え攻撃に対する「最後の防御層」です。`--force` でこれをスキップすると、不正な公開鍵が紛れ込んでも気付けない可能性があります。
 
@@ -752,18 +878,6 @@ CI/CD で `--force` を安全に使うためのルール:
 3. **`--force` の使用を限定する**: `--force` は CI/CD パイプラインなど限られた場所でのみ使用し、日常の対話操作では使わない
 
 なお、online 検証で明示的に失敗したメンバーは `--force` 使用時でも昇格が拒否されます。
-
-```yaml
-# GitHub Actions の例
-- name: Run app with secrets
-  env:
-    SECRETENV_MEMBER_ID: ci@example.com
-    SECRETENV_HOME: /tmp/secretenv
-  run: |
-    secretenv run --force -- ./my-app
-```
-
-**推奨**: CI/CD 用の専用メンバー ID（例: `ci@example.com`）を作成し、ローテーション管理を明確にします。
 
 ### `secretenv inspect` による定期監査
 
@@ -792,7 +906,7 @@ secretenv inspect .secretenv/secrets/default.kvenc
 
 ---
 
-## 13. よくある質問（FAQ）
+## 14. よくある質問（FAQ）
 
 ### Q: サーバーは必要ですか？
 
@@ -838,7 +952,7 @@ secretenv encrypt -i ~/.ssh/id_ed25519_work secret.env
 
 ---
 
-## 14. コマンドリファレンス（早見表）
+## 15. コマンドリファレンス（早見表）
 
 ### 共通オプション（全コマンドで使用可能）
 
@@ -902,6 +1016,8 @@ secretenv encrypt -i ~/.ssh/id_ed25519_work secret.env
 | `secretenv key list` | 鍵一覧を表示 |
 | `secretenv key activate <kid>` | 特定の鍵を active にする |
 | `secretenv key remove <kid>` | 鍵を削除 |
+| `secretenv key export [<kid>] [--member-id <id>]` | 公開鍵をエクスポート |
+| `secretenv key export --private [<kid>] [--member-id <id>] [--out <path>]` | 秘密鍵をエクスポート（パスワード保護、CI/CD 用） |
 
 ### 設定
 

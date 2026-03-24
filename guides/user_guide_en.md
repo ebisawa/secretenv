@@ -17,9 +17,10 @@
 9. [File Encryption and Decryption](#9-file-encryption-and-decryption)
 10. [Member Management](#10-member-management)
 11. [Key Management and Rotation](#11-key-management-and-rotation)
-12. [Operational Guidelines](#12-operational-guidelines)
-13. [FAQ](#13-faq)
-14. [Command Reference](#14-command-reference)
+12. [CI/CD Integration](#12-cicd-integration)
+13. [Operational Guidelines](#13-operational-guidelines)
+14. [FAQ](#14-faq)
+15. [Command Reference](#15-command-reference)
 
 ---
 
@@ -721,7 +722,130 @@ As a guideline, retain old keys for 1–3 months after rewrap completion.
 
 ---
 
-## 12. Operational Guidelines
+## 12. CI/CD Integration
+
+secretenv supports CI/CD environments through portable private key export and environment variable-based key loading. This eliminates the need for SSH keys, `ssh-agent`, or a local keystore in CI runners.
+
+### Overview
+
+In CI mode, secretenv reads the private key and password from environment variables instead of the local keystore. Public keys are resolved from the workspace's `members/active/` directory (which is available in the Git checkout).
+
+### Minimal CI Requirements
+
+Only three things are needed in a CI environment:
+
+1. `SECRETENV_PRIVATE_KEY` environment variable — the exported private key (Base64url-encoded)
+2. `SECRETENV_KEY_PASSWORD` environment variable — the password used during export
+3. A workspace (Git repository containing `.secretenv/` directory)
+
+No `SECRETENV_HOME`, local keystore, SSH key, or config file is required.
+
+### Setup Workflow
+
+#### Step 1: Create a Dedicated CI Member
+
+Create a dedicated member for CI (do not reuse a human member's key).
+
+```bash
+# On a developer machine with SSH key access
+secretenv key new --member-id ci@example.com
+secretenv init --member-id ci@example.com --force
+```
+
+#### Step 2: Add the CI Member to Recipients
+
+```bash
+git add .secretenv/members/active/ci@example.com.json
+git commit -m "Add CI member"
+git push
+
+# After merge: add CI member to all encrypted files
+secretenv rewrap
+git add .secretenv/secrets/
+git commit -m "Rewrap secrets for CI member"
+git push
+```
+
+#### Step 3: Export the Private Key
+
+```bash
+secretenv key export --private --member-id ci@example.com --out ci-key.txt
+# You will be prompted to enter and confirm a password (minimum 8 characters)
+```
+
+The output file contains a single line of Base64url-encoded text.
+
+#### Step 4: Register in CI Secret Variables
+
+Register two secret variables in your CI platform:
+
+| Variable | Value |
+|----------|-------|
+| `SECRETENV_PRIVATE_KEY` | Contents of `ci-key.txt` |
+| `SECRETENV_KEY_PASSWORD` | The password you entered during export |
+
+After registering, securely delete the `ci-key.txt` file.
+
+#### Step 5: Use in CI Jobs
+
+CI jobs can now use any secretenv command. The `member_id` is automatically determined from the private key.
+
+### Example: GitHub Actions
+
+```yaml
+name: Deploy
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install secretenv
+        run: cargo install --path .
+
+      - name: Run with secrets
+        env:
+          SECRETENV_PRIVATE_KEY: ${{ secrets.SECRETENV_PRIVATE_KEY }}
+          SECRETENV_KEY_PASSWORD: ${{ secrets.SECRETENV_KEY_PASSWORD }}
+        run: secretenv run -- ./deploy.sh
+```
+
+### Example: Generic CI Configuration
+
+```bash
+# Any CI platform that supports secret environment variables
+export SECRETENV_PRIVATE_KEY="<registered secret>"
+export SECRETENV_KEY_PASSWORD="<registered secret>"
+
+# All secretenv commands work
+secretenv get DATABASE_URL
+secretenv run -- ./my-app
+secretenv decrypt ca.pem.encrypted --out ca.pem
+```
+
+### Supported Operations
+
+All operations are supported in environment variable mode:
+
+- **Decryption** (`run`, `decrypt`, `get`): uses the KEM private key from the environment variable
+- **Encryption** (`encrypt`, `set`): uses the signing key from the environment variable, recipient public keys from the workspace
+- **Rewrap**: uses the signing key from the environment variable, public keys from the workspace
+- **Verify**: uses public keys from the workspace
+
+### Security Considerations
+
+- **Password exposure**: `SECRETENV_KEY_PASSWORD` persists in process memory and may be visible via `/proc/*/environ` on Linux. This is consistent with how CI platforms handle secrets.
+- **Dedicated CI member**: Always use a dedicated CI member rather than a human member's key. This allows independent rotation and revocation.
+- **Key rotation**: When rotating the CI member's key, re-export with `key export --private` and update the CI secret variables.
+- **Least privilege**: Only add the CI member to the secrets it actually needs access to.
+
+---
+
+## 13. Operational Guidelines
 
 ### Checklist When a Member Leaves
 
@@ -741,7 +865,9 @@ For true security, always rotate any values that departing or removed members ma
 
 ### Using `--force` in CI/CD and Its Risks
 
-CI/CD environments typically lack a TTY (interactive terminal), so `--force` may be required to automatically skip the TOFU confirmation in `rewrap`.
+For setting up secretenv in CI/CD environments, see [Chapter 12: CI/CD Integration](#12-cicd-integration). The recommended approach uses environment variable-based key loading, which does not require `--force` for normal operations.
+
+If `--force` is still needed (e.g., for `rewrap` in CI), note the following risks.
 
 **Risk of `--force`**: As explained in Chapter 3, the TOFU check is the "last line of defense" against public key substitution attacks. Skipping it with `--force` means a fraudulent public key could go undetected.
 
@@ -752,18 +878,6 @@ Rules for safe use of `--force` in CI/CD:
 3. **Limit `--force` usage**: Use `--force` only in limited contexts like CI/CD pipelines, not in day-to-day interactive use.
 
 Note: Members who explicitly fail online verification are still rejected for promotion even when `--force` is used.
-
-```yaml
-# GitHub Actions example
-- name: Run app with secrets
-  env:
-    SECRETENV_MEMBER_ID: ci@example.com
-    SECRETENV_HOME: /tmp/secretenv
-  run: |
-    secretenv run --force -- ./my-app
-```
-
-**Recommendation**: Create a dedicated member ID for CI/CD (e.g., `ci@example.com`) and manage its rotation explicitly.
 
 ### Regular Auditing with `secretenv inspect`
 
@@ -792,7 +906,7 @@ However, decrypted plaintext files should be added to `.gitignore`.
 
 ---
 
-## 13. FAQ
+## 14. FAQ
 
 ### Q: Is a server required?
 
@@ -838,7 +952,7 @@ Even if the same member participates in multiple projects, their HPKE key is reg
 
 ---
 
-## 14. Command Reference
+## 15. Command Reference
 
 ### Common Options (Available for All Commands)
 
@@ -902,6 +1016,8 @@ Even if the same member participates in multiple projects, their HPKE key is reg
 | `secretenv key list` | List keys |
 | `secretenv key activate <kid>` | Activate a specific key |
 | `secretenv key remove <kid>` | Remove a key |
+| `secretenv key export [<kid>] [--member-id <id>]` | Export public key |
+| `secretenv key export --private [<kid>] [--member-id <id>] [--out <path>]` | Export private key (password-protected, for CI/CD) |
 
 ### Configuration
 

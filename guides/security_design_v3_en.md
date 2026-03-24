@@ -6,8 +6,8 @@
 
 | Item | Value |
 |------|-------|
-| Version | 1.3 |
-| Date | 2026-03-19 |
+| Version | 1.4 |
+| Date | 2026-03-23 |
 
 ### Purpose of This Document
 
@@ -884,6 +884,51 @@ Since PrivateKey protection derives IKM from SSH signatures, **any entity that c
 **Clarifying design intent**: The equivalence between SSH signing capability and PrivateKey decryption capability is an intentional design decision. SecretEnv uses the existing SSH authentication infrastructure as a trust anchor for cryptographic key protection, eliminating the need for additional password or master key management. This tradeoff means that the SSH key's protection level becomes the upper bound of SecretEnv's secret protection level. Therefore, proper SSH key management (setting passphrases, restricting agent forwarding, considering hardware token use) is essential to SecretEnv's security.
 
 Operationally, local keystore file permissions and SSH key handling must not be treated as separate concerns. Even if `private.json` has safe filesystem permissions, any actor on the same host that can freely use the SSH key or agent socket can ultimately decrypt the SecretEnv private key as well.
+
+### 7.9 Password-Based Key Protection (`argon2id-hkdf-sha256`)
+
+As an alternative to SSH-based protection, SecretEnv supports password-based private key protection using `argon2id-hkdf-sha256`. This scheme is designed for CI/CD environments where SSH keys and `ssh-agent` are unavailable.
+
+#### 7.9.1 Use Case
+
+CI platforms provide "secret variables" that are stored securely and exposed as environment variables at runtime. This protection scheme enables exporting a SecretEnv private key in a portable, password-protected format that can be registered as a CI secret variable and used without any SSH infrastructure.
+
+#### 7.9.2 Key Derivation Pipeline
+
+```
+Password + salt (16 bytes, random) → Argon2id (m=47104, t=1, p=1) → 32-byte IKM
+IKM + salt → HKDF-SHA256 (info: "secretenv:password-private-key-enc@3:{kid}") → 32-byte encryption key
+```
+
+The salt is intentionally reused for both Argon2id and HKDF steps. This is safe because the two algorithms have different internal structures and the salt serves different roles in each (Argon2id uses it as a salt parameter, HKDF uses it as the salt input to HKDF-Extract).
+
+The HKDF info string (`secretenv:password-private-key-enc@3:{kid}`) differs from the SSH-based scheme (`secretenv:private-key-enc@3:{kid}`) to ensure domain separation between the two key derivation paths.
+
+#### 7.9.3 Argon2id Parameters and Password Requirements
+
+- Default parameters at export time: m=47104 (46 MiB), t=1, p=1 (OWASP recommended)
+- Parameters are recorded in the `alg` object of the private key document and read from it at decryption time (not hardcoded)
+- Minimum parameter validation at decryption: m >= 19456 (19 MiB), t >= 1, p >= 1 (reject trivially weak parameters)
+- Minimum password length: 8 characters
+- Future parameter changes are forward-compatible: existing keys retain their recorded parameters
+
+#### 7.9.4 Security Trade-offs in CI Environments
+
+Environment variables (`SECRETENV_KEY_PASSWORD`) persist in process memory and may be visible via `/proc/*/environ` on Linux. This is an accepted trade-off consistent with how CI platforms handle secret variables. The password and decrypted key material are zeroized after use where the Rust type system permits (using the `zeroize` crate).
+
+#### 7.9.5 Public Key Verification in Environment Variable Mode
+
+In environment variable mode, the local keystore is not available. Public keys (including the signer's own) are resolved from the workspace's `members/active/` directory instead.
+
+To verify the signer's own public key from the workspace:
+
+1. Look up `members/active/<member_id>.json` (where `member_id` is from the environment variable key's `protected.member_id`)
+2. Verify `identity.keys.sig.x` matches the Ed25519 public key from the decrypted private key plaintext
+3. Verify `identity.keys.kem.x` matches the X25519 public key from the decrypted private key plaintext (trustworthy because it is protected by AAD-bound authenticated encryption)
+4. Verify the PublicKey document's self-signature using the Ed25519 public key
+5. Standard attestation verification also applies
+
+This provides equivalent trust guarantees to the local keystore path, since the private key's authenticity is established by successful authenticated decryption, and the public key's correspondence is verified by component matching.
 
 ---
 
