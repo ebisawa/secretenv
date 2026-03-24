@@ -11,6 +11,7 @@ use crate::format::schema::document::parse_kv_signature_token;
 use crate::model::kv_enc::document::KvEncDocument;
 use crate::model::kv_enc::verified::VerifiedKvEncDocument;
 use crate::model::verification::SignatureVerificationProof;
+use crate::support::limits::validate_wrap_count;
 use crate::Result;
 
 pub fn verify_kv_content(
@@ -64,6 +65,7 @@ pub fn verify_kv_document(
     workspace_path: Option<&std::path::Path>,
     debug: bool,
 ) -> Result<VerifiedKvEncDocument> {
+    validate_wrap_count(doc.wrap.wrap.len(), "Document")?;
     let signature = parse_kv_signature_token(&doc.signature_token)?;
 
     let loaded = load_verifying_key_from_signature(&signature, workspace_path, debug)?;

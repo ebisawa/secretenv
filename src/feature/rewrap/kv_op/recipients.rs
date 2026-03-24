@@ -16,6 +16,7 @@ use uuid::Uuid;
 
 use super::reencrypt::decrypt_and_reencrypt_kv;
 use crate::feature::envelope::unwrap::unwrap_master_key_for_kv;
+use crate::support::limits::validate_wrap_count;
 
 /// Remove recipients from kv-enc content.
 ///
@@ -80,6 +81,10 @@ pub fn add_kv_recipients(
     )?;
     let attested_pubkeys =
         resolve_attested_recipients(key_ctx, new_recipients, &current_recipients, debug)?;
+    validate_wrap_count(
+        wrap_data.wrap.len() + attested_pubkeys.len(),
+        "Updated wrap set",
+    )?;
 
     for attested in &attested_pubkeys {
         let wrap_item = build_wrap_item_for_kv(sid, attested, &master_key, debug)?;

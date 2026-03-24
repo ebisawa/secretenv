@@ -13,6 +13,7 @@ use secretenv::feature::envelope::wrap::WrapFormat;
 use secretenv::feature::envelope::wrap::{
     build_wrap_item_for_file, build_wrap_item_for_kv, build_wraps_for_recipients,
 };
+use secretenv::support::limits::MAX_WRAP_ITEMS;
 use tempfile::TempDir;
 use uuid::Uuid;
 
@@ -110,4 +111,22 @@ fn test_build_wraps_for_recipients_kv() {
     assert_eq!(wrap_items.len(), 2);
     assert_eq!(wrap_items[0].rid, ALICE_MEMBER_ID);
     assert_eq!(wrap_items[1].rid, "bob@example.com");
+}
+
+#[test]
+fn test_build_wraps_for_recipients_rejects_count_over_limit() {
+    let ssh_temp = TempDir::new().unwrap();
+    let (ssh_priv, _ssh_pub_path, ssh_pub_content) = create_temp_ssh_keypair_in_dir(&ssh_temp);
+    let (_private_key, public_key) =
+        keygen_test(ALICE_MEMBER_ID, &ssh_priv, &ssh_pub_content).unwrap();
+    let sid = Uuid::new_v4();
+    let attested_member = make_attested_public_key(public_key);
+    let attested_members = vec![attested_member; MAX_WRAP_ITEMS + 1];
+    let master_key = create_test_master_key();
+
+    let result =
+        build_wraps_for_recipients(&attested_members, &sid, &master_key, WrapFormat::Kv, false);
+
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("wrap count"));
 }

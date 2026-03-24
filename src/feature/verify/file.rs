@@ -9,7 +9,7 @@ use crate::format::content::FileEncContent;
 use crate::model::file_enc::FileEncDocument;
 use crate::model::file_enc::VerifiedFileEncDocument;
 use crate::model::verification::SignatureVerificationProof;
-use crate::{Error, Result};
+use crate::Result;
 
 use super::key_loader::load_verifying_key_from_signature;
 use super::report::{build_error_report, build_success_report};
@@ -95,17 +95,7 @@ pub fn verify_file_document(
     workspace_path: Option<&std::path::Path>,
     debug: bool,
 ) -> Result<VerifiedFileEncDocument> {
-    // DoS protection: check wrap count limit
-    if doc.protected.wrap.len() > crate::support::limits::MAX_WRAP_ITEMS {
-        return Err(Error::Crypto {
-            message: format!(
-                "Document exceeds maximum wrap count ({} > {})",
-                doc.protected.wrap.len(),
-                crate::support::limits::MAX_WRAP_ITEMS
-            ),
-            source: None,
-        });
-    }
+    crate::support::limits::validate_wrap_count(doc.protected.wrap.len(), "Document")?;
 
     let signature = &doc.signature;
 

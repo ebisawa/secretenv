@@ -12,6 +12,7 @@ use crate::feature::rewrap::common::{
 };
 use crate::model::file_enc::FileEncDocumentProtected;
 use crate::model::file_enc::VerifiedFileEncDocument;
+use crate::support::limits::validate_wrap_count;
 use crate::Result;
 
 /// Remove recipients from file-enc content.
@@ -76,6 +77,10 @@ pub fn add_file_recipients(
     let current_recipients = protected.recipients();
     let attested_pubkeys =
         resolve_attested_recipients(key_ctx, new_recipients, &current_recipients, debug)?;
+    validate_wrap_count(
+        protected.wrap.len() + attested_pubkeys.len(),
+        "Updated wrap set",
+    )?;
 
     for attested in &attested_pubkeys {
         let wrap_item = build_wrap_item_for_file(attested, &protected.sid, &content_key, debug)?;

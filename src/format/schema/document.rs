@@ -13,6 +13,7 @@ use crate::model::public_key::PublicKey;
 use crate::model::signature::Signature;
 use crate::support::fs::load_text;
 use crate::support::json_limits::validate_json_limits;
+use crate::support::limits::validate_wrap_count;
 use crate::support::path::display_path_relative_to_cwd;
 use crate::{Error, Result};
 use serde::de::DeserializeOwned;
@@ -66,29 +67,32 @@ pub fn parse_private_key_file(path: &Path) -> Result<PrivateKey> {
 }
 
 pub fn parse_file_enc_str(content: &str, source_name: &str) -> Result<FileEncDocument> {
-    parse_json_document_str(
+    let doc = parse_json_document_str(
         content,
         source_name,
         "FileEncDocument",
         Validator::validate_file_enc_document,
-    )
+    )?;
+    validate_file_enc_limits(doc)
 }
 
 pub fn parse_file_enc_bytes(bytes: &[u8], source_name: &str) -> Result<FileEncDocument> {
-    parse_json_document_bytes(
+    let doc = parse_json_document_bytes(
         bytes,
         source_name,
         "FileEncDocument",
         Validator::validate_file_enc_document,
-    )
+    )?;
+    validate_file_enc_limits(doc)
 }
 
 pub fn parse_file_enc_file(path: &Path) -> Result<FileEncDocument> {
-    parse_json_document_file(
+    let doc = parse_json_document_file(
         path,
         "FileEncDocument",
         Validator::validate_file_enc_document,
-    )
+    )?;
+    validate_file_enc_limits(doc)
 }
 
 pub fn parse_kv_head_token(token: &str) -> Result<KvHeader> {
@@ -96,7 +100,8 @@ pub fn parse_kv_head_token(token: &str) -> Result<KvHeader> {
 }
 
 pub fn parse_kv_wrap_token(token: &str) -> Result<KvWrap> {
-    parse_json_token(token, "WRAP token", Validator::validate_kv_wrap)
+    let wrap = parse_json_token(token, "WRAP token", Validator::validate_kv_wrap)?;
+    validate_kv_wrap_limits(wrap)
 }
 
 pub fn parse_kv_entry_token(token: &str) -> Result<KvEntryValue> {
@@ -169,4 +174,14 @@ where
         message: format!("Failed to deserialize {} from {}: {}", kind, source_name, e),
         source: Some(Box::new(e)),
     })
+}
+
+fn validate_file_enc_limits(doc: FileEncDocument) -> Result<FileEncDocument> {
+    validate_wrap_count(doc.protected.wrap.len(), "FileEncDocument")?;
+    Ok(doc)
+}
+
+fn validate_kv_wrap_limits(wrap: KvWrap) -> Result<KvWrap> {
+    validate_wrap_count(wrap.wrap.len(), "WRAP token")?;
+    Ok(wrap)
 }
