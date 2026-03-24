@@ -73,6 +73,8 @@ pub mod feature_inspect_verification_test;
 pub mod feature_key_generate_test;
 #[path = "unit/feature_key_manage_test.rs"]
 pub mod feature_key_manage_test;
+#[path = "unit/feature_key_portable_export_test.rs"]
+pub mod feature_key_portable_export_test;
 #[path = "unit/feature_key_protection_password_encryption_test.rs"]
 pub mod feature_key_protection_password_encryption_test;
 #[path = "unit/feature_key_protection_password_key_derivation_test.rs"]

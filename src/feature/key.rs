@@ -6,6 +6,7 @@
 pub mod generate;
 pub mod manage;
 pub mod material;
+pub mod portable_export;
 pub mod protection;
 pub mod public_key_document;
 
