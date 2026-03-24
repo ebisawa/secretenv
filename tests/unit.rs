@@ -19,6 +19,8 @@ pub use test_utils::keygen_helpers;
 #[path = "../tests/cli/common.rs"]
 pub mod cli_common;
 
+#[path = "unit/app_context_env_dispatch_test.rs"]
+pub mod app_context_env_dispatch_test;
 #[path = "unit/app_identity_test.rs"]
 pub mod app_identity_test;
 #[path = "unit/app_key_github_test.rs"]
