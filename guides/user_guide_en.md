@@ -787,6 +787,7 @@ git push
 #### Step 3: Export the Private Key
 
 ```bash
+# Run this on a developer machine with SSH signer and local keystore access
 secretenv key export --private --member-id ci@example.com --out ci-key.txt
 # You will be prompted to enter and confirm a password (minimum 8 characters)
 ```
@@ -802,11 +803,11 @@ Register two secret variables in your CI platform:
 | `SECRETENV_PRIVATE_KEY` | Contents of `ci-key.txt` |
 | `SECRETENV_KEY_PASSWORD` | The password you entered during export |
 
-After registering, securely delete the `ci-key.txt` file.
+After registering, securely delete the `ci-key.txt` file. Do not relay the private key through CI job logs, stdout, or ad-hoc artifacts.
 
 #### Step 5: Use in CI Jobs
 
-CI jobs can now use any secretenv command. The `member_id` is automatically determined from the private key.
+CI jobs can use only the secret-operation commands that already support environment-variable key mode. The `member_id` is automatically determined from the private key.
 
 ### Example: GitHub Actions
 
@@ -841,7 +842,7 @@ This example assumes a **trusted post-merge workflow on a protected branch**. Do
 export SECRETENV_PRIVATE_KEY="<registered secret>"
 export SECRETENV_KEY_PASSWORD="<registered secret>"
 
-# All secretenv commands work
+# Only env-mode-supported commands work
 secretenv get DATABASE_URL
 secretenv run -- ./my-app
 secretenv decrypt ca.pem.encrypted --out ca.pem
@@ -849,19 +850,23 @@ secretenv decrypt ca.pem.encrypted --out ca.pem
 
 ### Supported Operations
 
-All operations are supported in environment variable mode:
+Environment variable mode guarantees only the secret-operation commands currently implemented for env dispatch:
 
 - **Decryption** (`run`, `decrypt`, `get`): uses the KEM private key from the environment variable
-- **Encryption** (`encrypt`, `set`): uses the signing key from the environment variable, recipient public keys from the workspace
-- **Rewrap**: uses the signing key from the environment variable, public keys from the workspace
-- **Verify**: uses public keys from the workspace
+- **Encrypt/update** (`encrypt`, `set`, `unset`, `import`): uses the signing key from the environment variable, recipient public keys from the workspace
+- **Rewrap** (`rewrap`): uses the signing key from the environment variable, public keys from the workspace
+
+The following commands remain unavailable in CI environment-variable mode because they require a local keystore and SSH signer:
+
+- **Key lifecycle** (`key new`, `key list`, `key activate`, `key remove`, `key export`, `key export --private`)
+- **Setup** (`init`, `join`)
 
 ### Security Considerations
 
 - **Password exposure**: `SECRETENV_KEY_PASSWORD` persists in process memory and may be visible via `/proc/*/environ` on Linux. This is consistent with how CI platforms handle secrets.
 - **Trusted CI only**: Use env mode only in trusted workflow / trusted ref / trusted runner contexts. In attacker-controlled checkouts, `members/active/` cannot be treated as a trustworthy public key source.
 - **Dedicated CI member**: Always use a dedicated CI member rather than a human member's key. This allows independent rotation and revocation.
-- **Key rotation**: When rotating the CI member's key, re-export with `key export --private` and update the CI secret variables.
+- **Key rotation**: Rotate the CI member key and re-export with `key export --private` on a developer machine with SSH signer and local keystore access, then update the CI platform's secret store.
 - **Least privilege**: Only add the CI member to the secrets it actually needs access to.
 
 ---

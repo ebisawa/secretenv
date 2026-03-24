@@ -12,6 +12,7 @@ use crate::app::registration::key_plan::resolve_registration_key_plan;
 use crate::app::registration::types::{
     PreparedRegistration, RegistrationMode, RegistrationOutcome, RegistrationResult,
 };
+use crate::cli::common::env_mode::reject_env_key_mode;
 use crate::cli::common::options::CommonOptions;
 use crate::cli::common::ssh::resolve_ssh_context;
 use crate::cli::identity_prompt;
@@ -25,6 +26,11 @@ pub(crate) fn execute_registration_command(
     member_id: Option<String>,
     mode: RegistrationMode,
 ) -> Result<(), Error> {
+    reject_env_key_mode(match mode {
+        RegistrationMode::Init => "init",
+        RegistrationMode::Join => "join",
+    })?;
+
     let options = CommonCommandOptions::from(&common);
     let keystore_root = options.resolve_keystore_root()?;
     let member_id =

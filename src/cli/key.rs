@@ -13,6 +13,7 @@
 use clap::{Args, Subcommand};
 use std::path::PathBuf;
 
+use crate::cli::common::env_mode::reject_env_key_mode;
 use crate::cli::common::options::CommonOptions;
 use crate::Result;
 
@@ -140,6 +141,8 @@ pub struct ExportArgs {
 }
 
 pub fn run(args: KeyArgs) -> Result<()> {
+    reject_env_key_mode("key")?;
+
     match args.command {
         KeyCommand::Activate(args) => operations::run_activate(args),
         KeyCommand::Export(args) => {

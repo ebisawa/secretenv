@@ -16,6 +16,8 @@ use secretenv::io::keystore::storage::load_private_key;
 use tempfile::TempDir;
 
 const TEST_PASSWORD: &str = "cli-integration-test-password-42";
+const ENV_MODE_UNSUPPORTED_MESSAGE: &str =
+    "requires a local keystore and SSH signer; run it on a developer machine";
 
 // ============================================================================
 // Setup Helper
@@ -193,4 +195,68 @@ fn test_env_key_wrong_password_fails() {
         .arg(workspace_dir.path())
         .assert()
         .failure();
+}
+
+#[test]
+fn test_env_key_mode_rejects_key_new() {
+    let (_workspace_dir, home_dir, _ssh_temp, exported_key) = setup_env_key_workspace();
+
+    env_key_cmd(&home_dir, &exported_key, TEST_PASSWORD)
+        .arg("key")
+        .arg("new")
+        .arg("--member-id")
+        .arg(TEST_MEMBER_ID)
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("environment-variable key mode"))
+        .stderr(predicate::str::contains(ENV_MODE_UNSUPPORTED_MESSAGE));
+}
+
+#[test]
+fn test_env_key_mode_rejects_private_key_export() {
+    let (_workspace_dir, home_dir, _ssh_temp, exported_key) = setup_env_key_workspace();
+
+    env_key_cmd(&home_dir, &exported_key, TEST_PASSWORD)
+        .arg("key")
+        .arg("export")
+        .arg("--private")
+        .arg("--stdout")
+        .arg("--member-id")
+        .arg(TEST_MEMBER_ID)
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("environment-variable key mode"))
+        .stderr(predicate::str::contains(ENV_MODE_UNSUPPORTED_MESSAGE));
+}
+
+#[test]
+fn test_env_key_mode_rejects_init() {
+    let (workspace_dir, home_dir, _ssh_temp, exported_key) = setup_env_key_workspace();
+
+    env_key_cmd(&home_dir, &exported_key, TEST_PASSWORD)
+        .arg("init")
+        .arg("--workspace")
+        .arg(workspace_dir.path())
+        .arg("--member-id")
+        .arg(TEST_MEMBER_ID)
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("environment-variable key mode"))
+        .stderr(predicate::str::contains(ENV_MODE_UNSUPPORTED_MESSAGE));
+}
+
+#[test]
+fn test_env_key_mode_rejects_join() {
+    let (workspace_dir, home_dir, _ssh_temp, exported_key) = setup_env_key_workspace();
+
+    env_key_cmd(&home_dir, &exported_key, TEST_PASSWORD)
+        .arg("join")
+        .arg("--workspace")
+        .arg(workspace_dir.path())
+        .arg("--member-id")
+        .arg(TEST_MEMBER_ID)
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("environment-variable key mode"))
+        .stderr(predicate::str::contains(ENV_MODE_UNSUPPORTED_MESSAGE));
 }
