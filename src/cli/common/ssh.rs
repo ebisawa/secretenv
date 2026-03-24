@@ -8,6 +8,7 @@ use crate::app::context::{
     CommonCommandOptions, SshSigningContext,
 };
 use crate::cli::identity_prompt::select_ssh_key;
+use crate::feature::context::env_key::is_env_key_mode;
 use crate::Result;
 use tracing::debug;
 
@@ -29,4 +30,19 @@ pub fn resolve_ssh_context_for_active_key(
     let ctx = resolve_ssh_context_by_active_key(options)?;
     debug!("[SSH] Using SSH key: {}", ctx.fingerprint);
     Ok(ctx)
+}
+
+/// Resolve SSH context if needed, skipping in env-var key mode.
+///
+/// Returns `None` when `SECRETENV_PRIVATE_KEY` is set (CI mode),
+/// causing the app layer to use environment variable key loading.
+pub fn resolve_ssh_context_optional(
+    options: &CommonCommandOptions,
+) -> Result<Option<SshSigningContext>> {
+    if is_env_key_mode() {
+        debug!("[SSH] Environment variable key mode active, skipping SSH resolution");
+        Ok(None)
+    } else {
+        Ok(Some(resolve_ssh_context_for_active_key(options)?))
+    }
 }

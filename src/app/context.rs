@@ -102,6 +102,30 @@ impl ExecutionContext {
         })
     }
 
+    /// Dispatch to SSH-based or environment variable key loading.
+    ///
+    /// When `ssh_ctx` is `None`, env-var mode is assumed and
+    /// `load_from_env()` handles key resolution.
+    pub fn resolve(
+        options: &CommonCommandOptions,
+        member_id: Option<String>,
+        explicit_kid: Option<&str>,
+        ssh_ctx: Option<SshSigningContext>,
+    ) -> Result<Self> {
+        match ssh_ctx {
+            Some(ctx) => Self::load(options, member_id, explicit_kid, ctx),
+            None => {
+                if member_id.is_some() {
+                    tracing::warn!(
+                        "Ignoring --member-id in environment variable key mode \
+                         (member_id is derived from SECRETENV_PRIVATE_KEY)"
+                    );
+                }
+                Self::load_from_env(options)
+            }
+        }
+    }
+
     /// Load execution context from environment variables (CI mode).
     ///
     /// Uses SECRETENV_PRIVATE_KEY and SECRETENV_KEY_PASSWORD instead of
