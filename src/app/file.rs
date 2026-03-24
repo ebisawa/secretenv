@@ -39,9 +39,9 @@ impl EncryptFileSession {
         options: &CommonCommandOptions,
         member_id: Option<String>,
         input_path: &Path,
-        ssh_ctx: SshSigningContext,
+        ssh_ctx: Option<SshSigningContext>,
     ) -> Result<Self> {
-        let execution = ExecutionContext::load(options, member_id, None, ssh_ctx)?;
+        let execution = ExecutionContext::resolve(options, member_id, None, ssh_ctx)?;
         let workspace_root = execution
             .workspace_root
             .clone()
@@ -91,9 +91,9 @@ impl DecryptFileSession {
         options: &CommonCommandOptions,
         member_id: Option<String>,
         kid: Option<&str>,
-        ssh_ctx: SshSigningContext,
+        ssh_ctx: Option<SshSigningContext>,
     ) -> Result<ExecutionContext> {
-        ExecutionContext::load(options, member_id, kid, ssh_ctx)
+        ExecutionContext::resolve(options, member_id, kid, ssh_ctx)
     }
 }
 
@@ -162,7 +162,7 @@ pub fn encrypt_file_command(
     member_id: Option<String>,
     no_signer_pub: bool,
     input_path: &Path,
-    ssh_ctx: SshSigningContext,
+    ssh_ctx: Option<SshSigningContext>,
 ) -> Result<String> {
     let session = EncryptFileSession::load(options, member_id, input_path, ssh_ctx)?;
     let verified_keys = session.verified_recipient_keys(options.verbose)?;
@@ -180,7 +180,7 @@ pub fn decrypt_file_command(
     member_id: Option<String>,
     kid: Option<&str>,
     input_path: &Path,
-    ssh_ctx: SshSigningContext,
+    ssh_ctx: Option<SshSigningContext>,
 ) -> Result<Zeroizing<Vec<u8>>> {
     let session = DecryptFileSession::load_input(input_path)?;
     let execution = DecryptFileSession::load_execution(options, member_id, kid, ssh_ctx)?;

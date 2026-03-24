@@ -14,7 +14,7 @@ pub fn execute_env_command(
     member_id: Option<String>,
     file_name: Option<&str>,
     command_args: &[String],
-    ssh_ctx: SshSigningContext,
+    ssh_ctx: Option<SshSigningContext>,
 ) -> Result<i32> {
     let (cmd, cmd_args) = split_command_args(command_args)?;
     let env_vars = build_run_env_command(options, member_id, file_name, ssh_ctx)?;

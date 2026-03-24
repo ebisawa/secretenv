@@ -20,14 +20,14 @@ use super::types::{
 pub fn execute_rewrap_batch(
     request: &RewrapBatchRequest,
     plan: &RewrapBatchPlan,
-    ssh_ctx: SshSigningContext,
+    ssh_ctx: Option<SshSigningContext>,
 ) -> Result<RewrapBatchOutcome> {
     if !request.accepted_promotions.is_empty() {
         promote_members(&plan.workspace_root, &request.accepted_promotions)?;
     }
 
     let execution =
-        ExecutionContext::load(&request.options, request.member_id.clone(), None, ssh_ctx)?;
+        ExecutionContext::resolve(&request.options, request.member_id.clone(), None, ssh_ctx)?;
     let mut processed_files = Vec::new();
     let mut failed_files = Vec::new();
 

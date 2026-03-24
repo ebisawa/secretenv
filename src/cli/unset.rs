@@ -8,7 +8,7 @@ use clap::Args;
 use crate::app::context::CommonCommandOptions;
 use crate::app::kv::unset_kv_command;
 use crate::cli::common::options::CommonOptions;
-use crate::cli::common::ssh::resolve_ssh_context_for_active_key;
+use crate::cli::common::ssh::resolve_ssh_context_optional;
 use crate::Result;
 
 #[derive(Args)]
@@ -39,7 +39,7 @@ pub struct UnsetArgs {
 
 pub fn run(args: UnsetArgs) -> Result<()> {
     let options = CommonCommandOptions::from(&args.common);
-    let ssh_ctx = resolve_ssh_context_for_active_key(&options)?;
+    let ssh_ctx = resolve_ssh_context_optional(&options)?;
     let outcome = unset_kv_command(
         options,
         args.member_id.clone(),

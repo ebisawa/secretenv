@@ -85,10 +85,10 @@ impl KvReadSession {
         options: &CommonCommandOptions,
         member_id: Option<String>,
         file_name: Option<&str>,
-        ssh_ctx: SshSigningContext,
+        ssh_ctx: Option<SshSigningContext>,
     ) -> Result<Self> {
         let file = KvFileSession::load(options, file_name)?;
-        let execution = ExecutionContext::load(options, member_id, None, ssh_ctx)?;
+        let execution = ExecutionContext::resolve(options, member_id, None, ssh_ctx)?;
         Ok(Self { file, execution })
     }
 }
@@ -99,7 +99,7 @@ struct KvWriteSession {
     member_id: Option<String>,
     target: KvFileTarget,
     allow_missing: bool,
-    ssh_ctx: SshSigningContext,
+    ssh_ctx: Option<SshSigningContext>,
 }
 
 pub struct KvWriteOutcome {
@@ -113,7 +113,7 @@ impl KvWriteSession {
         member_id: Option<String>,
         file_name: Option<&str>,
         allow_missing: bool,
-        ssh_ctx: SshSigningContext,
+        ssh_ctx: Option<SshSigningContext>,
     ) -> Result<Self> {
         let target = KvFileTarget::resolve(&options, file_name)?;
         Ok(Self {
@@ -144,7 +144,7 @@ impl KvWriteSession {
         } = self;
         let file_path = target.file_path.clone();
         lock::with_file_lock(&file_path, move || {
-            let execution = ExecutionContext::load(&options, member_id, None, ssh_ctx)?;
+            let execution = ExecutionContext::resolve(&options, member_id, None, ssh_ctx)?;
             let member_id = execution.member_id;
             let write_ctx = KvWriteContext::new(
                 &member_id,
@@ -194,7 +194,7 @@ pub fn get_kv_command(
     file_name: Option<&str>,
     key: Option<&str>,
     all: bool,
-    ssh_ctx: SshSigningContext,
+    ssh_ctx: Option<SshSigningContext>,
 ) -> Result<BTreeMap<String, String>> {
     let session = KvReadSession::load(options, member_id, file_name, ssh_ctx)?;
     let content = session.file.kv_content();
@@ -230,7 +230,7 @@ pub fn set_kv_command(
     entries: Vec<(String, String)>,
     no_signer_pub: bool,
     success_message: Option<&str>,
-    ssh_ctx: SshSigningContext,
+    ssh_ctx: Option<SshSigningContext>,
 ) -> Result<KvWriteOutcome> {
     let session = KvWriteSession::new(options, member_id, file_name, true, ssh_ctx)?;
     session.execute(
@@ -255,7 +255,7 @@ pub fn unset_kv_command(
     key: &str,
     no_signer_pub: bool,
     success_message: Option<&str>,
-    ssh_ctx: SshSigningContext,
+    ssh_ctx: Option<SshSigningContext>,
 ) -> Result<KvWriteOutcome> {
     let session = KvWriteSession::new(options, member_id, file_name, false, ssh_ctx)?;
     session.execute(
@@ -278,7 +278,7 @@ pub fn import_kv_command(
     dotenv_content: &str,
     no_signer_pub: bool,
     success_message: Option<&str>,
-    ssh_ctx: SshSigningContext,
+    ssh_ctx: Option<SshSigningContext>,
 ) -> Result<(KvWriteOutcome, usize)> {
     validate_dotenv_strict(dotenv_content)?;
     let kv_map = parse_dotenv(dotenv_content)?;
@@ -300,7 +300,7 @@ pub fn build_run_env_command(
     options: &CommonCommandOptions,
     member_id: Option<String>,
     file_name: Option<&str>,
-    ssh_ctx: SshSigningContext,
+    ssh_ctx: Option<SshSigningContext>,
 ) -> Result<BTreeMap<String, String>> {
     let session = KvReadSession::load(options, member_id, file_name, ssh_ctx)?;
     let content = session.file.content().to_string();
