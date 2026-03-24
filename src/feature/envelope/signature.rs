@@ -31,9 +31,8 @@ pub(crate) fn build_signing_context<'a>(
     debug: bool,
 ) -> Result<SigningContext<'a>> {
     let signer_pub = load_signer_public_key_if_needed(
-        &key_ctx.keystore_root,
+        key_ctx.pub_key_source.as_ref(),
         &key_ctx.member_id,
-        &key_ctx.kid,
         no_signer_pub,
     )?;
     Ok(SigningContext {

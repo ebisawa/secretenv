@@ -160,7 +160,7 @@ fn test_set_kv_entry_resets_disclosed_after_recipient_removal() {
 
     let ctx = KvWriteContext {
         member_id: ALICE_MEMBER_ID.to_string(),
-        key_ctx: key_ctx.clone(),
+        key_ctx,
         token_codec: None,
         no_signer_pub: false,
         verbose: false,
@@ -194,7 +194,7 @@ fn test_set_kv_entry_new_entry_has_disclosed_false() {
 
     let ctx = KvWriteContext {
         member_id: ALICE_MEMBER_ID.to_string(),
-        key_ctx: key_ctx.clone(),
+        key_ctx,
         token_codec: None,
         no_signer_pub: false,
         verbose: false,

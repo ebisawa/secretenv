@@ -145,9 +145,10 @@ impl KvWriteSession {
         let file_path = target.file_path.clone();
         lock::with_file_lock(&file_path, move || {
             let execution = ExecutionContext::load(&options, member_id, None, ssh_ctx)?;
+            let member_id = execution.member_id;
             let write_ctx = KvWriteContext::new(
-                &execution.member_id,
-                execution.key_ctx.clone(),
+                &member_id,
+                execution.key_ctx,
                 no_signer_pub,
                 options.verbose,
             );

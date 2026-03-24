@@ -362,10 +362,17 @@ fn setup_crypto_ctx_for_test(
     // Derive workspace path from keystore_root (sibling directory)
     let workspace_path = keystore_root.parent().map(|p| p.join("workspace"));
 
+    let pub_key_source: Box<dyn secretenv::io::keystore::public_key_source::PublicKeySource> =
+        Box::new(
+            secretenv::io::keystore::public_key_source::KeystorePublicKeySource::new(
+                keystore_root.to_path_buf(),
+            ),
+        );
+
     secretenv::feature::context::crypto::CryptoContext {
         member_id: member_id.to_string(),
         kid: kid.to_string(),
-        keystore_root: keystore_root.to_path_buf(),
+        pub_key_source,
         workspace_path,
         private_key: verified_private,
         signing_key,

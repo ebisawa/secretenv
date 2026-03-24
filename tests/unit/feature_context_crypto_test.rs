@@ -147,14 +147,15 @@ fn test_crypto_context_load() {
     // Verify context
     assert_eq!(key_ctx.member_id, ALICE_MEMBER_ID);
     assert_eq!(key_ctx.kid, *kid);
-    assert_eq!(key_ctx.keystore_root, keystore_root);
+    // Verify pub_key_source works by loading the signer's public key
+    let loaded = key_ctx.pub_key_source.load_public_key(ALICE_MEMBER_ID);
+    assert!(loaded.is_ok());
 }
 
 #[test]
 fn test_crypto_context_load_without_explicit_kid() {
     // Setup test keystore
     let temp_dir = setup_test_keystore_from_fixtures(ALICE_MEMBER_ID);
-    let keystore_root = temp_dir.path().join("keys");
 
     // Load CryptoContext without explicit kid (should use active key)
     let key_ctx = setup_member_key_context(&temp_dir, ALICE_MEMBER_ID, None);
@@ -162,5 +163,7 @@ fn test_crypto_context_load_without_explicit_kid() {
     // Verify context
     assert_eq!(key_ctx.member_id, ALICE_MEMBER_ID);
     assert!(!key_ctx.kid.is_empty());
-    assert_eq!(key_ctx.keystore_root, keystore_root);
+    // Verify pub_key_source works by loading the signer's public key
+    let loaded = key_ctx.pub_key_source.load_public_key(ALICE_MEMBER_ID);
+    assert!(loaded.is_ok());
 }

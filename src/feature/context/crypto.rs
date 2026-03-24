@@ -16,6 +16,7 @@ use crate::feature::key::protection::decrypt_private_key;
 use crate::io::config::paths::get_base_dir;
 use crate::io::keystore::helpers::resolve_kid;
 use crate::io::keystore::paths::get_keystore_root_from_base;
+use crate::io::keystore::public_key_source::{KeystorePublicKeySource, PublicKeySource};
 use crate::io::keystore::storage::load_private_key;
 use crate::io::ssh::backend::SignatureBackend;
 use crate::model::identifiers::jwk;
@@ -26,11 +27,10 @@ use crate::support::base64url::{b64_decode, b64_decode_array};
 use crate::{Error, Result};
 
 /// Context for cryptographic operations requiring member keys
-#[derive(Clone)]
 pub struct CryptoContext {
     pub member_id: String,
     pub kid: String,
-    pub keystore_root: PathBuf,
+    pub pub_key_source: Box<dyn PublicKeySource>,
     pub workspace_path: Option<PathBuf>,
     pub private_key: VerifiedPrivateKey,
     pub signing_key: SigningKey,
@@ -106,10 +106,13 @@ impl CryptoContext {
         )?);
         let signing_key = SigningKey::from_bytes(&sig_key_bytes);
 
+        let pub_key_source: Box<dyn PublicKeySource> =
+            Box::new(KeystorePublicKeySource::new(keystore_root));
+
         Ok(Self {
             member_id: member_id.to_string(),
             kid,
-            keystore_root,
+            pub_key_source,
             workspace_path,
             private_key: decrypted_key,
             signing_key,

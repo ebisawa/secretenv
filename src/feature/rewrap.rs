@@ -48,9 +48,8 @@ impl<'a> RewrapContext<'a> {
     /// Load signer's public key if needed.
     pub(crate) fn load_signer_pub(&self) -> Result<Option<PublicKey>> {
         load_signer_public_key_if_needed(
-            &self.key_ctx.keystore_root,
+            self.key_ctx.pub_key_source.as_ref(),
             self.member_id,
-            &self.key_ctx.kid,
             self.options.no_signer_pub,
         )
     }

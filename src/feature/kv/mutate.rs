@@ -93,7 +93,7 @@ fn set_kv_new_file(
 ) -> Result<KvSetResult> {
     let recipients = list_active_member_ids(workspace_root)?;
     let verified_members = load_and_verify_recipient_public_keys(
-        &ctx.key_ctx.keystore_root,
+        ctx.key_ctx.pub_key_source.as_ref(),
         &recipients,
         ctx.verbose,
     )?;

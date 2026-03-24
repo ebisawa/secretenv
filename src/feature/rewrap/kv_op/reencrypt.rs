@@ -36,8 +36,11 @@ pub(super) fn encrypt_kv_with_recipients(
     disclosed: bool,
     debug: bool,
 ) -> Result<String> {
-    let verified_members =
-        load_and_verify_recipient_public_keys(&key_ctx.keystore_root, new_recipients, debug)?;
+    let verified_members = load_and_verify_recipient_public_keys(
+        key_ctx.pub_key_source.as_ref(),
+        new_recipients,
+        debug,
+    )?;
     let signing = build_signing_context(key_ctx, no_signer_pub, debug)?;
     encrypt_and_sign_kv_map(
         decrypted_content,
@@ -79,8 +82,11 @@ pub fn decrypt_and_reencrypt_kv(
     let decrypted_content = decrypt_kv_content(content, key_ctx, debug)?;
     let token_codec = detect_token_codec_from_kv_content(content);
 
-    let verified_members =
-        load_and_verify_recipient_public_keys(&key_ctx.keystore_root, new_recipients, debug)?;
+    let verified_members = load_and_verify_recipient_public_keys(
+        key_ctx.pub_key_source.as_ref(),
+        new_recipients,
+        debug,
+    )?;
     let signing = build_signing_context(key_ctx, no_signer_pub, debug)?;
     encrypt_and_sign_kv_map(
         &decrypted_content,

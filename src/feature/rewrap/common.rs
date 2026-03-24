@@ -8,7 +8,6 @@
 
 use crate::feature::context::crypto::CryptoContext;
 use crate::feature::verify::recipients::verify_recipient_public_keys;
-use crate::io::keystore::public_keys::load_public_keys_for_member_ids;
 use crate::model::common::RemovedRecipient;
 use crate::model::public_key::{PublicKey, VerifiedPublicKeyAttested};
 use crate::support::time::current_timestamp;
@@ -108,7 +107,9 @@ pub fn build_new_recipients(
     new_recipients: &[String],
     current_recipients: &[String],
 ) -> Result<(Vec<PublicKey>, Vec<String>)> {
-    let new_pubkeys = load_public_keys_for_member_ids(&key_ctx.keystore_root, new_recipients)?;
+    let new_pubkeys = key_ctx
+        .pub_key_source
+        .load_public_keys_for_member_ids(new_recipients)?;
 
     // Filter out duplicates
     let mut filtered_recipients = Vec::new();

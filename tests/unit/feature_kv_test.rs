@@ -146,7 +146,7 @@ fn test_set_kv_entry_new_file() {
     // Set context
     let ctx = KvWriteContext {
         member_id: ALICE_MEMBER_ID.to_string(),
-        key_ctx: key_ctx.clone(),
+        key_ctx,
         token_codec: Some(TokenCodec::JsonJcs),
         no_signer_pub: false,
         verbose: false,
@@ -187,7 +187,7 @@ fn test_set_kv_entry_existing_file() {
     // Set context
     let ctx = KvWriteContext {
         member_id: ALICE_MEMBER_ID.to_string(),
-        key_ctx: key_ctx.clone(),
+        key_ctx,
         token_codec: None, // Preserve existing codec
         no_signer_pub: false,
         verbose: false,
@@ -227,7 +227,7 @@ fn test_unset_kv_entry() {
     // Unset context
     let ctx = KvWriteContext {
         member_id: ALICE_MEMBER_ID.to_string(),
-        key_ctx: key_ctx.clone(),
+        key_ctx,
         token_codec: None,
         no_signer_pub: false,
         verbose: false,
@@ -262,7 +262,7 @@ fn test_unset_kv_entry_not_found() {
     // Unset context
     let ctx = KvWriteContext {
         member_id: ALICE_MEMBER_ID.to_string(),
-        key_ctx: key_ctx.clone(),
+        key_ctx,
         token_codec: None,
         no_signer_pub: false,
         verbose: false,
@@ -286,7 +286,7 @@ fn test_set_kv_entry_multiple_entries_new_file() {
 
     let ctx = KvWriteContext {
         member_id: ALICE_MEMBER_ID.to_string(),
-        key_ctx: key_ctx.clone(),
+        key_ctx,
         token_codec: Some(TokenCodec::JsonJcs),
         no_signer_pub: false,
         verbose: false,
@@ -324,7 +324,7 @@ fn test_set_kv_entry_multiple_entries_existing_file() {
 
     let ctx = KvWriteContext {
         member_id: ALICE_MEMBER_ID.to_string(),
-        key_ctx: key_ctx.clone(),
+        key_ctx,
         token_codec: None,
         no_signer_pub: false,
         verbose: false,

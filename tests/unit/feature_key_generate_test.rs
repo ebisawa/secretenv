@@ -486,31 +486,28 @@ fn test_build_public_key() {
 fn test_load_signer_public_key_if_needed_default() {
     let temp_dir = setup_test_keystore_from_fixtures(ALICE_MEMBER_ID);
     let keystore_root = temp_dir.path().join("keys");
-    let kids = list_kids(&keystore_root, ALICE_MEMBER_ID).unwrap();
-    let kid = kids.first().unwrap();
+    let pub_key_source =
+        secretenv::io::keystore::public_key_source::KeystorePublicKeySource::new(keystore_root);
 
     // no_signer_pub=false means DO embed the signer public key
-    let result =
-        load_signer_public_key_if_needed(&keystore_root, ALICE_MEMBER_ID, kid, false).unwrap();
+    let result = load_signer_public_key_if_needed(&pub_key_source, ALICE_MEMBER_ID, false).unwrap();
 
     assert!(result.is_some());
     assert_eq!(
         result.as_ref().unwrap().protected.member_id,
         ALICE_MEMBER_ID
     );
-    assert_eq!(&result.as_ref().unwrap().protected.kid, kid);
 }
 
 #[test]
 fn test_load_signer_public_key_if_needed_no_signer_pub() {
     let temp_dir = setup_test_keystore_from_fixtures(ALICE_MEMBER_ID);
     let keystore_root = temp_dir.path().join("keys");
-    let kids = list_kids(&keystore_root, ALICE_MEMBER_ID).unwrap();
-    let kid = kids.first().unwrap();
+    let pub_key_source =
+        secretenv::io::keystore::public_key_source::KeystorePublicKeySource::new(keystore_root);
 
     // no_signer_pub=true means DON'T embed the signer public key
-    let result =
-        load_signer_public_key_if_needed(&keystore_root, ALICE_MEMBER_ID, kid, true).unwrap();
+    let result = load_signer_public_key_if_needed(&pub_key_source, ALICE_MEMBER_ID, true).unwrap();
 
     assert!(result.is_none());
 }
