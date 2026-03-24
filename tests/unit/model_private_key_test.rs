@@ -151,3 +151,42 @@ fn test_private_key_roundtrip() {
     assert_eq!(original.protected.kid, deserialized.protected.kid);
     assert_eq!(original.protected.alg, deserialized.protected.alg);
 }
+
+#[test]
+fn test_private_key_plaintext_debug_redacts_secret_material() {
+    let plaintext = PrivateKeyPlaintext {
+        keys: IdentityKeysPrivate {
+            kem: JwkOkpPrivateKey {
+                kty: "OKP".to_string(),
+                crv: secretenv::model::identifiers::jwk::CRV_X25519.to_string(),
+                x: "public-kem".to_string(),
+                d: "private-kem".to_string(),
+            },
+            sig: JwkOkpPrivateKey {
+                kty: "OKP".to_string(),
+                crv: secretenv::model::identifiers::jwk::CRV_ED25519.to_string(),
+                x: "public-sig".to_string(),
+                d: "private-sig".to_string(),
+            },
+        },
+    };
+
+    let debug = format!("{:?}", plaintext);
+
+    assert!(
+        !debug.contains("private-kem"),
+        "private key plaintext debug output must not expose KEM secret"
+    );
+    assert!(
+        !debug.contains("private-sig"),
+        "private key plaintext debug output must not expose signature secret"
+    );
+    assert!(
+        !debug.contains("public-kem"),
+        "private key plaintext debug output must not expose nested structure"
+    );
+    assert!(
+        debug.contains("REDACTED"),
+        "private key plaintext debug output should indicate redaction"
+    );
+}

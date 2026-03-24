@@ -3,10 +3,11 @@
 
 //! Cryptographic data types with type safety
 
+use std::fmt;
 use zeroize::{Zeroize, Zeroizing};
 
 /// Plaintext data
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Plaintext(Vec<u8>);
 
 impl Zeroize for Plaintext {
@@ -63,6 +64,15 @@ impl From<&[u8]> for Plaintext {
 impl AsRef<[u8]> for Plaintext {
     fn as_ref(&self) -> &[u8] {
         &self.0
+    }
+}
+
+impl fmt::Debug for Plaintext {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Plaintext")
+            .field("data", &"[REDACTED]")
+            .field("len", &self.0.len())
+            .finish()
     }
 }
 

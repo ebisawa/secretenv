@@ -5,7 +5,7 @@
 //!
 //! HPKE Base mode: X25519-HKDF-SHA256 + ChaCha20-Poly1305
 
-use crate::crypto::crypto_error;
+use crate::crypto::crypto_operation_failed;
 use crate::crypto::types::data::{Aad, Ciphertext, Enc, Info, Plaintext};
 use crate::model::verified::VerifiedPrivateKey;
 use crate::support::base64url::b64_decode_array;
@@ -59,7 +59,7 @@ pub fn seal_base(
     plaintext: &Plaintext,
 ) -> Result<(Enc, Ciphertext)> {
     let pk_recip_hpke = <Kem as KemTrait>::PublicKey::from_bytes(pk_recip.as_bytes())
-        .map_err(|e| crypto_error("Invalid recipient public key", format!("{:?}", e)))?;
+        .map_err(|_| crypto_operation_failed("Invalid recipient public key"))?;
 
     let (enc, mut sender_ctx) = hpke::setup_sender::<Aead, Kdf, Kem, _>(
         &OpModeS::Base,
@@ -67,11 +67,11 @@ pub fn seal_base(
         info.as_bytes(),
         &mut OsRng,
     )
-    .map_err(|e| crypto_error("HPKE setup sender failed", format!("{:?}", e)))?;
+    .map_err(|_| crypto_operation_failed("HPKE setup sender failed"))?;
 
     let ciphertext = sender_ctx
         .seal(plaintext.as_bytes(), aad.as_bytes())
-        .map_err(|e| crypto_error("HPKE seal failed", format!("{:?}", e)))?;
+        .map_err(|_| crypto_operation_failed("HPKE seal failed"))?;
 
     Ok((
         Enc::from(enc.to_bytes().to_vec()),
@@ -89,10 +89,10 @@ pub fn open_base(
     ciphertext: &Ciphertext,
 ) -> Result<Zeroizing<Plaintext>> {
     let sk_recip_hpke = <Kem as KemTrait>::PrivateKey::from_bytes(sk_recip.as_bytes())
-        .map_err(|e| crypto_error("Invalid recipient secret key", format!("{:?}", e)))?;
+        .map_err(|_| crypto_operation_failed("Invalid recipient secret key"))?;
 
     let enc_parsed = <Kem as KemTrait>::EncappedKey::from_bytes(enc.as_bytes())
-        .map_err(|e| crypto_error("Invalid encapsulated key", format!("{:?}", e)))?;
+        .map_err(|_| crypto_operation_failed("Invalid encapsulated key"))?;
 
     let mut receiver_ctx = hpke::setup_receiver::<Aead, Kdf, Kem>(
         &OpModeR::Base,
@@ -100,15 +100,12 @@ pub fn open_base(
         &enc_parsed,
         info.as_bytes(),
     )
-    .map_err(|e| crypto_error("HPKE setup receiver failed", format!("{:?}", e)))?;
+    .map_err(|_| crypto_operation_failed("HPKE setup receiver failed"))?;
 
     let plaintext = receiver_ctx
         .open(ciphertext.as_bytes(), aad.as_bytes())
-        .map_err(|e| {
-            crypto_error(
-                "HPKE open failed (wrong key/info/AAD or tampered data)",
-                format!("{:?}", e),
-            )
+        .map_err(|_| {
+            crypto_operation_failed("HPKE open failed (wrong key/info/AAD or tampered data)")
         })?;
 
     Ok(Zeroizing::new(Plaintext::from(plaintext)))

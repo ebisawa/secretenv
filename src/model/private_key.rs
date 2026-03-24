@@ -87,7 +87,7 @@ pub struct EncryptedData {
 }
 
 /// Plaintext key material (inside encrypted.ct).
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Zeroize)]
+#[derive(Clone, Serialize, Deserialize, PartialEq, Zeroize)]
 #[zeroize(drop)]
 #[serde(deny_unknown_fields)]
 pub struct PrivateKeyPlaintext {
@@ -96,7 +96,7 @@ pub struct PrivateKeyPlaintext {
 }
 
 /// Identity Keys Private (KEM + Sig with private components)
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Zeroize)]
+#[derive(Clone, Serialize, Deserialize, PartialEq, Zeroize)]
 #[zeroize(drop)]
 #[serde(deny_unknown_fields)]
 pub struct IdentityKeysPrivate {
@@ -133,6 +133,24 @@ impl std::fmt::Debug for JwkOkpPrivateKey {
             .finish()
     }
 }
+
+impl std::fmt::Debug for PrivateKeyPlaintext {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PrivateKeyPlaintext")
+            .field("keys", &"[REDACTED]")
+            .finish()
+    }
+}
+
+impl std::fmt::Debug for IdentityKeysPrivate {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("IdentityKeysPrivate")
+            .field("kem", &"[REDACTED]")
+            .field("sig", &"[REDACTED]")
+            .finish()
+    }
+}
+
 impl PrivateKey {
     /// Create a new PrivateKey with the given parameters
     pub fn new(protected: PrivateKeyProtected, encrypted: EncryptedData) -> Self {

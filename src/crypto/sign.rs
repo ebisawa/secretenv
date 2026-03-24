@@ -14,7 +14,7 @@
 //! canonicalization (e.g., JCS normalization). Format-specific signing
 //! should be implemented in higher layers (e.g., `core/services/signature`).
 
-use crate::crypto::{crypto_error, crypto_error_with_source};
+use crate::crypto::{crypto_error, crypto_operation_failed};
 use crate::model::public_key::PublicKey;
 use crate::model::signature::Signature;
 use crate::Result;
@@ -85,7 +85,7 @@ pub fn verify_bytes(
     // Step 2: Decode signature and validate length (must be 64 bytes for Ed25519)
     let sig_bytes = URL_SAFE_NO_PAD
         .decode(&signature.sig)
-        .map_err(|e| crypto_error_with_source("Invalid signature Base64", format!("{}", e), e))?;
+        .map_err(|_| crypto_operation_failed("Invalid signature Base64"))?;
     if sig_bytes.len() != 64 {
         return Err(crypto_error(
             "Invalid signature length",
@@ -93,12 +93,12 @@ pub fn verify_bytes(
         ));
     }
     let sig = ed25519_dalek::Signature::from_slice(&sig_bytes)
-        .map_err(|e| crypto_error_with_source("Invalid signature format", format!("{}", e), e))?;
+        .map_err(|_| crypto_operation_failed("Invalid signature format"))?;
 
     // Step 3: Verify signature against canonical_bytes directly (RFC 8032 PureEdDSA)
-    verifying_key.verify(canonical_bytes, &sig).map_err(|e| {
-        crypto_error_with_source("Signature verification failed", format!("{}", e), e)
-    })?;
+    verifying_key
+        .verify(canonical_bytes, &sig)
+        .map_err(|_| crypto_operation_failed("Signature verification failed"))?;
 
     Ok(())
 }

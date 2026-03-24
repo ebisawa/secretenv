@@ -110,6 +110,23 @@ fn test_xchacha20_aad_mismatch_error() {
 }
 
 #[test]
+fn test_xchacha20_wrong_key_error_message_sanitized() {
+    let key = XChaChaKey::new([0x42u8; 32]);
+    let wrong_key = XChaChaKey::new([0x99u8; 32]);
+    let nonce = XChaChaNonce::new([0x01u8; NONCE_SIZE]);
+    let aad = Aad::from(b"test-aad" as &[u8]);
+    let plaintext = Plaintext::from(b"secret data" as &[u8]);
+
+    let ciphertext = encrypt(&key, &nonce, &aad, &plaintext).expect("encrypt should succeed");
+    let err = decrypt(&wrong_key, &nonce, &aad, &ciphertext).unwrap_err();
+
+    assert_eq!(
+        err.to_string(),
+        "Cryptographic error: Operation failed: XChaCha20-Poly1305 decryption failed"
+    );
+}
+
+#[test]
 fn test_xchacha20_empty_plaintext() {
     use secretenv::crypto::types::data::{Aad, Plaintext};
 
