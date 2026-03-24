@@ -251,7 +251,7 @@ pub fn make_decrypted_private_key_plaintext(
     let proof = DecryptionProof {
         member_id: member_id.to_string(),
         kid: kid.to_string(),
-        ssh_fpr: ssh_fpr.to_string(),
+        ssh_fpr: Some(ssh_fpr.to_string()),
     };
     VerifiedPrivateKey::new(plaintext, proof)
 }

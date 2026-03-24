@@ -203,7 +203,7 @@ fn validate_and_wrap_private_key(
     let proof = DecryptionProof {
         member_id: member_id.to_string(),
         kid: kid.to_string(),
-        ssh_fpr: ssh_fpr.to_string(),
+        ssh_fpr: Some(ssh_fpr.to_string()),
     };
     Ok(VerifiedPrivateKey::new(plaintext, proof))
 }

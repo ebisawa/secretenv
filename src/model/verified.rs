@@ -16,8 +16,8 @@ pub struct DecryptionProof {
     pub member_id: String,
     /// Key ID (ULID) from the encrypted document
     pub kid: String,
-    /// SSH fingerprint used for decryption (from PrivateKeyProtected.alg.fpr)
-    pub ssh_fpr: String,
+    /// SSH fingerprint used for decryption (None for non-SSH key protection)
+    pub ssh_fpr: Option<String>,
 }
 
 /// A PrivateKeyPlaintext that has been successfully decrypted and validated
