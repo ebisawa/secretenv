@@ -101,6 +101,26 @@ impl ExecutionContext {
             workspace_root,
         })
     }
+
+    /// Load execution context from environment variables (CI mode).
+    ///
+    /// Uses SECRETENV_PRIVATE_KEY and SECRETENV_KEY_PASSWORD instead of
+    /// the local keystore and SSH key decryption. Requires a workspace.
+    pub fn load_from_env(options: &CommonCommandOptions) -> Result<Self> {
+        let workspace_root =
+            require_workspace(options, "environment variable key loading (CI mode)")?;
+        let keystore_root = options.resolve_keystore_root()?;
+
+        let key_ctx = CryptoContext::load_from_env(workspace_root.root_path.clone())?;
+        let member_id = key_ctx.member_id.clone();
+
+        Ok(Self {
+            member_id,
+            key_ctx,
+            keystore_root,
+            workspace_root: Some(workspace_root),
+        })
+    }
 }
 
 /// Build SshSigningParams from CommonCommandOptions.

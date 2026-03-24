@@ -12,11 +12,14 @@ use std::path::PathBuf;
 use tracing::debug;
 use zeroize::Zeroizing;
 
+use crate::feature::context::env_key;
 use crate::feature::key::protection::decrypt_private_key;
 use crate::io::config::paths::get_base_dir;
 use crate::io::keystore::helpers::resolve_kid;
 use crate::io::keystore::paths::get_keystore_root_from_base;
-use crate::io::keystore::public_key_source::{KeystorePublicKeySource, PublicKeySource};
+use crate::io::keystore::public_key_source::{
+    KeystorePublicKeySource, PublicKeySource, WorkspacePublicKeySource,
+};
 use crate::io::keystore::storage::load_private_key;
 use crate::io::ssh::backend::SignatureBackend;
 use crate::model::identifiers::jwk;
@@ -118,6 +121,36 @@ impl CryptoContext {
             signing_key,
         })
     }
+
+    /// Load member keys from environment variables (CI mode)
+    ///
+    /// Uses SECRETENV_PRIVATE_KEY and SECRETENV_KEY_PASSWORD environment variables
+    /// instead of the local keystore and SSH key decryption. Public keys are loaded
+    /// from the workspace member files.
+    pub fn load_from_env(workspace_path: PathBuf) -> Result<Self> {
+        let (verified_key, member_id) = env_key::load_private_key_from_env()?;
+        let kid = verified_key.proof().kid.clone();
+
+        // Load own public key from workspace and verify consistency
+        let pub_key_source = WorkspacePublicKeySource::new(workspace_path.clone());
+        let own_public_key = pub_key_source.load_public_key(&member_id)?;
+        env_key::verify_own_public_key(verified_key.document(), &own_public_key)?;
+
+        let sig_key_bytes: Zeroizing<[u8; 32]> = Zeroizing::new(b64_decode_array(
+            &verified_key.document().keys.sig.d,
+            "Ed25519 private key",
+        )?);
+        let signing_key = SigningKey::from_bytes(&sig_key_bytes);
+
+        Ok(Self {
+            member_id,
+            kid,
+            pub_key_source: Box::new(pub_key_source),
+            workspace_path: Some(workspace_path),
+            private_key: verified_key,
+            signing_key,
+        })
+    }
 }
 
 /// Validate an OKP key (kty, crv, d/x length).
@@ -188,13 +221,41 @@ pub fn validate_ed25519_consistency(sig_d_bytes: &[u8], sig_x_bytes: &[u8]) -> R
     Ok(())
 }
 
-/// Validate private key plaintext and wrap in Decrypted type
+/// Validate private key plaintext and wrap in Decrypted type (SSH-based decryption)
 fn validate_and_wrap_private_key(
     plaintext: PrivateKeyPlaintext,
     member_id: &str,
     kid: &str,
     ssh_fpr: &str,
 ) -> Result<VerifiedPrivateKey> {
+    validate_private_key_material(&plaintext)?;
+
+    let proof = DecryptionProof {
+        member_id: member_id.to_string(),
+        kid: kid.to_string(),
+        ssh_fpr: Some(ssh_fpr.to_string()),
+    };
+    Ok(VerifiedPrivateKey::new(plaintext, proof))
+}
+
+/// Validate private key plaintext and wrap in Decrypted type (password-based decryption)
+pub fn validate_and_wrap_private_key_password(
+    plaintext: PrivateKeyPlaintext,
+    member_id: &str,
+    kid: &str,
+) -> Result<VerifiedPrivateKey> {
+    validate_private_key_material(&plaintext)?;
+
+    let proof = DecryptionProof {
+        member_id: member_id.to_string(),
+        kid: kid.to_string(),
+        ssh_fpr: None,
+    };
+    Ok(VerifiedPrivateKey::new(plaintext, proof))
+}
+
+/// Validate private key material (OKP structure and Ed25519 consistency)
+fn validate_private_key_material(plaintext: &PrivateKeyPlaintext) -> Result<()> {
     let kem = &plaintext.keys.kem;
     validate_okp_key(&kem.kty, &kem.crv, jwk::CRV_X25519, &kem.d, &kem.x, "KEM")?;
 
@@ -203,10 +264,5 @@ fn validate_and_wrap_private_key(
         validate_okp_key(&sig.kty, &sig.crv, jwk::CRV_ED25519, &sig.d, &sig.x, "Sig")?;
     validate_ed25519_consistency(&sig_d_bytes, &sig_x_bytes)?;
 
-    let proof = DecryptionProof {
-        member_id: member_id.to_string(),
-        kid: kid.to_string(),
-        ssh_fpr: Some(ssh_fpr.to_string()),
-    };
-    Ok(VerifiedPrivateKey::new(plaintext, proof))
+    Ok(())
 }
