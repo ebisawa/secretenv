@@ -109,6 +109,8 @@ pub mod feature_rewrap_test;
 pub mod feature_run_test;
 #[path = "unit/feature_verify_key_loader_test.rs"]
 pub mod feature_verify_key_loader_test;
+#[path = "unit/feature_verify_limits_test.rs"]
+pub mod feature_verify_limits_test;
 #[path = "unit/feature_verify_public_key_attestation_test.rs"]
 pub mod feature_verify_public_key_attestation_test;
 #[path = "unit/format_context_test.rs"]

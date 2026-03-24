@@ -11,6 +11,7 @@ use crate::model::common::WrapItem;
 use crate::model::identifiers::hpke;
 use crate::model::public_key::VerifiedPublicKeyAttested;
 use crate::support::base64url::{b64_decode_array, b64_encode};
+use crate::support::limits::validate_wrap_count;
 use crate::Result;
 use tracing::debug;
 use uuid::Uuid;
@@ -141,6 +142,7 @@ pub fn build_wraps_for_recipients(
     format: WrapFormat,
     debug: bool,
 ) -> Result<Vec<WrapItem>> {
+    validate_wrap_count(members.len(), "Recipients set")?;
     members
         .iter()
         .map(|member| match format {

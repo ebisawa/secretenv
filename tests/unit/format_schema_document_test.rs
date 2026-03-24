@@ -11,6 +11,7 @@ use secretenv::model::identifiers::{alg, format, hpke, private_key};
 use secretenv::model::kv_enc::entry::KvEntryValue;
 use secretenv::model::kv_enc::header::{KvHeader, KvWrap};
 use secretenv::model::signature::Signature;
+use secretenv::support::limits::MAX_WRAP_ITEMS;
 use uuid::Uuid;
 
 #[test]
@@ -177,4 +178,68 @@ fn test_parse_kv_signature_token_rejects_unknown_field_error() {
 
     let result = parse_kv_signature_token(&invalid_token);
     assert!(result.is_err());
+}
+
+#[test]
+fn test_parse_file_enc_str_rejects_wrap_count_over_limit() {
+    let sid = "123e4567-e89b-12d3-a456-426614174000";
+    let wrap_item = serde_json::json!({
+        "rid": "alice@example.com",
+        "kid": "01HY0G8N3P5X7QRSTV0WXYZ123",
+        "alg": hpke::ALG_HPKE_32_1_3,
+        "enc": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "ct": "AAAAAAAAAAAAAAAA"
+    });
+    let wrap: Vec<_> = (0..=MAX_WRAP_ITEMS).map(|_| wrap_item.clone()).collect();
+    let file_enc = serde_json::json!({
+        "protected": {
+            "format": format::FILE_ENC_V3,
+            "sid": sid,
+            "payload": {
+                "protected": {
+                    "format": format::FILE_PAYLOAD_V3,
+                    "sid": sid,
+                    "alg": { "aead": alg::AEAD_XCHACHA20_POLY1305 }
+                },
+                "encrypted": {
+                    "nonce": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+                    "ct": "AAAAAAAAAAAAAAAA"
+                }
+            },
+            "wrap": wrap,
+            "created_at": "2026-01-14T00:00:00Z",
+            "updated_at": "2026-01-14T00:00:00Z"
+        },
+        "signature": {
+            "alg": alg::SIGNATURE_ED25519,
+            "kid": "01HY0G8N3P5X7QRSTV0WXYZ123",
+            "sig": "QUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQQ"
+        }
+    });
+
+    let result = parse_file_enc_str(&file_enc.to_string(), "inline file-enc");
+    assert!(result.is_err());
+    let err = result.unwrap_err().to_string();
+    assert!(err.contains("wrap count") || err.contains("1000"));
+}
+
+#[test]
+fn test_parse_kv_wrap_token_rejects_wrap_count_over_limit() {
+    let wrap_item = WrapItem {
+        rid: "alice@example.com".to_string(),
+        kid: "01HY0G8N3P5X7QRSTV0WXYZ123".to_string(),
+        alg: hpke::ALG_HPKE_32_1_3.to_string(),
+        enc: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".to_string(),
+        ct: "AAAAAAAAAAAAAAAA".to_string(),
+    };
+    let wrap = KvWrap {
+        wrap: vec![wrap_item; MAX_WRAP_ITEMS + 1],
+        removed_recipients: None,
+    };
+    let wrap_token = TokenCodec::encode(TokenCodec::JsonJcs, &wrap).unwrap();
+
+    let result = parse_kv_wrap_token(&wrap_token);
+    assert!(result.is_err());
+    let err = result.unwrap_err().to_string();
+    assert!(err.contains("wrap count") || err.contains("1000"));
 }
