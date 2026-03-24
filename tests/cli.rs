@@ -9,6 +9,7 @@ pub mod common;
 pub mod config;
 pub mod decrypt;
 pub mod encrypt;
+pub mod env_key_mode;
 pub mod init;
 pub mod inspect;
 pub mod join;
