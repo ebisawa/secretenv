@@ -7,7 +7,7 @@ use crate::app::context::crypto::is_env_key_mode;
 use crate::Result;
 
 fn is_env_mode_command_allowed(command_label: &str) -> bool {
-    matches!(command_label, "run" | "decrypt" | "get")
+    matches!(command_label, "run" | "decrypt" | "get" | "list")
 }
 
 pub fn ensure_env_mode_command_allowed(command_label: &str) -> Result<()> {
@@ -21,7 +21,7 @@ pub fn ensure_env_mode_command_allowed(command_label: &str) -> Result<()> {
 
     Err(crate::Error::invalid_operation(format!(
         "'{}' is unavailable in environment-variable key mode; env mode only supports \
-         decrypt-only commands: run, decrypt, get.",
+         these commands: run, decrypt, get, list.",
         command_label
     )))
 }

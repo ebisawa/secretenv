@@ -910,7 +910,7 @@ HKDF info 文字列（`secretenv:password-private-key-enc@3:{kid}`）は SSH ベ
 
 #### 7.9.5 環境変数モードにおける公開鍵検証
 
-環境変数モードは decrypt-only である。鍵ロード時は、Base64url デコード済みの exported PrivateKey を `SECRETENV_KEY_PASSWORD` で復号し、その PrivateKey document 自体に対する検証だけを行う。
+環境変数モードで許可されるのは `run` / `decrypt` / `get` / `list` である。鍵ロード時は、Base64url デコード済みの exported PrivateKey を `SECRETENV_KEY_PASSWORD` で復号し、その PrivateKey document 自体に対する検証だけを行う。`list` は鍵ロードを伴わないメタデータ表示である。
 
 鍵ロード時に行う検証は以下である:
 

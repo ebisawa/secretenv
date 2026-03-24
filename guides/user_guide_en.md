@@ -730,7 +730,7 @@ secretenv supports CI/CD environments through portable private key export and en
 
 ### Overview
 
-In CI mode, secretenv reads the private key and password from environment variables instead of the local keystore. Environment variable-based key loading is decrypt-only: only `run`, `decrypt`, and `get` are supported.
+In CI mode, secretenv reads the private key and password from environment variables instead of the local keystore. Environment variable-based key loading guarantees read-only commands: `run`, `decrypt`, `get`, and `list` are supported.
 
 This still matters because the workspace checkout remains input to signature verification. Environment variable-based key loading must therefore be limited to **trusted workflow / trusted ref / trusted runner** contexts.
 
@@ -853,13 +853,14 @@ secretenv decrypt ca.pem.encrypted --out ca.pem
 Environment variable mode guarantees only the secret-operation commands currently implemented for env dispatch:
 
 - **Decryption** (`run`, `decrypt`, `get`): uses the KEM private key from the environment variable
+- **Listing** (`list`): shows kv-enc key names as metadata only
 
 All other commands remain unavailable in CI environment-variable mode:
 
 - **Secret mutation / re-signing** (`encrypt`, `set`, `unset`, `import`, `rewrap`)
 - **Key lifecycle** (`key new`, `key list`, `key activate`, `key remove`, `key export`, `key export --private`)
 - **Setup** (`init`, `join`)
-- **Other helper commands** (`list`, `inspect`, `member`, `config`, etc.)
+- **Other helper commands** (`inspect`, `member`, `config`, etc.)
 
 ### Security Considerations
 

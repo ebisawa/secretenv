@@ -3,7 +3,7 @@
 
 //! CLI integration tests for env key mode (CI mode)
 //!
-//! Tests that env key mode is restricted to decrypt-only operations:
+//! Tests that env key mode is restricted to read-only operations:
 //! `run`, `decrypt`, and `get`.
 
 use crate::cli::common::{cmd, setup_workspace, TEST_MEMBER_ID};
@@ -18,7 +18,8 @@ use std::path::PathBuf;
 use tempfile::TempDir;
 
 const TEST_PASSWORD: &str = "cli-integration-test-password-42";
-const ENV_MODE_UNSUPPORTED_MESSAGE: &str = "env mode only supports decrypt-only commands";
+const ENV_MODE_UNSUPPORTED_MESSAGE: &str =
+    "env mode only supports these commands: run, decrypt, get, list";
 
 // ============================================================================
 // Setup Helper
@@ -311,17 +312,27 @@ fn test_env_key_mode_rejects_rewrap() {
 }
 
 #[test]
-fn test_env_key_mode_rejects_list() {
-    let (workspace_dir, home_dir, _ssh_temp, _ssh_priv, exported_key) = setup_env_key_workspace();
+fn test_env_key_mode_allows_list() {
+    let (workspace_dir, home_dir, _ssh_temp, ssh_priv, exported_key) = setup_env_key_workspace();
+
+    cmd()
+        .arg("set")
+        .arg("LISTABLE_KEY")
+        .arg("listable-value")
+        .arg("--workspace")
+        .arg(workspace_dir.path())
+        .env("SECRETENV_HOME", home_dir.path())
+        .env("SECRETENV_SSH_KEY", ssh_priv.to_str().unwrap())
+        .assert()
+        .success();
 
     env_key_cmd(&home_dir, &exported_key, TEST_PASSWORD)
         .arg("list")
         .arg("--workspace")
         .arg(workspace_dir.path())
         .assert()
-        .failure()
-        .stderr(predicate::str::contains("environment-variable key mode"))
-        .stderr(predicate::str::contains(ENV_MODE_UNSUPPORTED_MESSAGE));
+        .success()
+        .stdout(predicate::str::contains("LISTABLE_KEY"));
 }
 
 #[test]
