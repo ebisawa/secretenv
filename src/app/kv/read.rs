@@ -3,10 +3,13 @@
 
 use std::collections::BTreeMap;
 
+use tracing::warn;
+
 use crate::app::context::execution::ExecutionContext;
 use crate::app::context::options::CommonCommandOptions;
 use crate::app::context::ssh::ResolvedSshSigner;
 use crate::app::errors::handle_kv_key_not_found_error;
+use crate::feature::context::expiry::build_key_expiry_warning;
 use crate::feature::kv::query::{
     decrypt_all_kv_values, decrypt_kv_value, list_kv_keys_with_disclosed,
 };
@@ -34,6 +37,9 @@ pub(crate) fn get_kv_command(
 ) -> Result<KvReadResult> {
     let file = KvFileSession::load(options, file_name)?;
     let execution = ExecutionContext::resolve(options, member_id, None, ssh_ctx)?;
+    if let Some(warning) = build_key_expiry_warning(&execution.key_ctx.expires_at)? {
+        warn!("{}", warning);
+    }
     let disclosed = list_kv_keys_with_disclosed(&file.kv_content())?;
     let mode = if all {
         KvReadMode::All
@@ -53,6 +59,9 @@ pub(crate) fn build_run_env_command(
 ) -> Result<BTreeMap<String, String>> {
     let file = KvFileSession::load(options, file_name)?;
     let execution = ExecutionContext::resolve(options, member_id, None, ssh_ctx)?;
+    if let Some(warning) = build_key_expiry_warning(&execution.key_ctx.expires_at)? {
+        warn!("{}", warning);
+    }
     let content = file.content().to_string();
     build_env_from_kv_contents(
         &[&content],

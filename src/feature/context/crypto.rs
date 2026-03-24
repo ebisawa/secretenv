@@ -22,6 +22,8 @@ pub struct CryptoContext {
     pub workspace_path: Option<PathBuf>,
     pub private_key: VerifiedPrivateKey,
     pub signing_key: SigningKey,
+    /// Key expiration timestamp (RFC 3339) from PrivateKeyProtected
+    pub expires_at: String,
 }
 
 pub(crate) fn build_signing_key(plaintext: &PrivateKeyPlaintext) -> Result<SigningKey> {

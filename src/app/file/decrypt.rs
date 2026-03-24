@@ -5,9 +5,12 @@ use std::path::Path;
 
 use zeroize::Zeroizing;
 
+use tracing::warn;
+
 use crate::app::context::execution::ExecutionContext;
 use crate::app::context::options::CommonCommandOptions;
 use crate::app::context::ssh::ResolvedSshSigner;
+use crate::feature::context::expiry::build_key_expiry_warning;
 use crate::feature::decrypt::decrypt_document;
 use crate::format::content::FileEncContent;
 use crate::support::fs::load_text;
@@ -48,6 +51,9 @@ pub fn decrypt_file_command(
 ) -> Result<Zeroizing<Vec<u8>>> {
     let session = DecryptFileSession::load_input(input_path)?;
     let execution = DecryptFileSession::load_execution(options, member_id, kid, ssh_ctx)?;
+    if let Some(warning) = build_key_expiry_warning(&execution.key_ctx.expires_at)? {
+        warn!("{}", warning);
+    }
     decrypt_document(
         &session.content,
         &execution.member_id,

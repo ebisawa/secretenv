@@ -377,6 +377,7 @@ fn setup_crypto_ctx_for_test(
         workspace_path,
         private_key: verified_private,
         signing_key,
+        expires_at: "2099-12-31T23:59:59Z".to_string(),
     }
 }
 

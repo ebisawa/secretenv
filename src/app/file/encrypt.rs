@@ -6,6 +6,7 @@ use std::path::Path;
 use crate::app::context::execution::ExecutionContext;
 use crate::app::context::options::CommonCommandOptions;
 use crate::app::context::ssh::ResolvedSshSigner;
+use crate::feature::context::expiry::enforce_key_not_expired_for_signing;
 use crate::feature::encrypt::encrypt_file_document;
 use crate::feature::envelope::signature::{build_signing_context, SigningContext};
 use crate::feature::verify::public_key::verify_recipient_public_keys;
@@ -30,6 +31,7 @@ impl EncryptFileSession {
         ssh_ctx: Option<ResolvedSshSigner>,
     ) -> Result<Self> {
         let execution = ExecutionContext::resolve(options, member_id, None, ssh_ctx)?;
+        enforce_key_not_expired_for_signing(&execution.key_ctx.expires_at)?;
         let workspace_root = execution
             .workspace_root
             .clone()

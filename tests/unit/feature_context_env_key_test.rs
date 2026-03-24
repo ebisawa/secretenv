@@ -145,12 +145,21 @@ fn test_decode_env_private_key() {
     std::env::set_var(ENV_PRIVATE_KEY, &exported);
     std::env::set_var(ENV_KEY_PASSWORD, password);
 
-    let (verified_key, member_id) = load_private_key_from_env(false).expect("should succeed");
-    assert_eq!(member_id, "alice@example.com");
-    assert_eq!(verified_key.proof().kid, "01HN8Z3Q4R5S6T7V8W9X0Y1Z2A");
-    assert_eq!(verified_key.proof().ssh_fpr, None);
-    assert_eq!(verified_key.document().keys.sig.x, plaintext.keys.sig.x);
-    assert_eq!(verified_key.document().keys.kem.x, plaintext.keys.kem.x);
+    let result = load_private_key_from_env(false).expect("should succeed");
+    assert_eq!(result.member_id, "alice@example.com");
+    assert_eq!(
+        result.verified_key.proof().kid,
+        "01HN8Z3Q4R5S6T7V8W9X0Y1Z2A"
+    );
+    assert_eq!(result.verified_key.proof().ssh_fpr, None);
+    assert_eq!(
+        result.verified_key.document().keys.sig.x,
+        plaintext.keys.sig.x
+    );
+    assert_eq!(
+        result.verified_key.document().keys.kem.x,
+        plaintext.keys.kem.x
+    );
 }
 
 #[test]

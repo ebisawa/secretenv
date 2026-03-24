@@ -61,19 +61,30 @@ fn test_env_key_roundtrip_with_attested_keys() {
     std::env::set_var(ENV_PRIVATE_KEY, &exported);
     std::env::set_var(ENV_KEY_PASSWORD, password);
 
-    let (verified_key, loaded_member_id) =
-        load_private_key_from_env(false).expect("load from env should succeed");
+    let result = load_private_key_from_env(false).expect("load from env should succeed");
 
-    assert_eq!(loaded_member_id, member_id);
-    assert_eq!(verified_key.proof().member_id, member_id);
-    assert_eq!(verified_key.proof().kid, public_key.protected.kid);
-    assert_eq!(verified_key.proof().ssh_fpr, None);
+    assert_eq!(result.member_id, member_id);
+    assert_eq!(result.verified_key.proof().member_id, member_id);
+    assert_eq!(result.verified_key.proof().kid, public_key.protected.kid);
+    assert_eq!(result.verified_key.proof().ssh_fpr, None);
 
     // Verify key material matches original
-    assert_eq!(verified_key.document().keys.sig.x, plaintext.keys.sig.x);
-    assert_eq!(verified_key.document().keys.sig.d, plaintext.keys.sig.d);
-    assert_eq!(verified_key.document().keys.kem.x, plaintext.keys.kem.x);
-    assert_eq!(verified_key.document().keys.kem.d, plaintext.keys.kem.d);
+    assert_eq!(
+        result.verified_key.document().keys.sig.x,
+        plaintext.keys.sig.x
+    );
+    assert_eq!(
+        result.verified_key.document().keys.sig.d,
+        plaintext.keys.sig.d
+    );
+    assert_eq!(
+        result.verified_key.document().keys.kem.x,
+        plaintext.keys.kem.x
+    );
+    assert_eq!(
+        result.verified_key.document().keys.kem.d,
+        plaintext.keys.kem.d
+    );
 }
 
 #[test]
@@ -166,11 +177,10 @@ fn test_env_key_roundtrip_preserves_key_material_for_decryption() {
     std::env::set_var(ENV_PRIVATE_KEY, &exported);
     std::env::set_var(ENV_KEY_PASSWORD, password);
 
-    let (verified_key, _member_id) =
-        load_private_key_from_env(false).expect("load from env should succeed");
+    let env_result = load_private_key_from_env(false).expect("load from env should succeed");
 
     // Verify the loaded key matches the public key (simulates what CryptoContext does)
-    let result = verify_own_public_key(&verified_key, &public_key, false);
+    let result = verify_own_public_key(&env_result.verified_key, &public_key, false);
     assert!(
         result.is_ok(),
         "env-loaded key should match its own public key: {:?}",

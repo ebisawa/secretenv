@@ -4,6 +4,7 @@
 use crate::app::context::execution::ExecutionContext;
 use crate::app::context::ssh::ResolvedSshSigner;
 use crate::app::member::mutation::promote_members;
+use crate::feature::context::expiry::enforce_key_not_expired_for_signing;
 use crate::feature::rewrap::file::rewrap_file_document;
 use crate::feature::rewrap::kv::rewrap_kv_document;
 use crate::feature::rewrap::RewrapOptions;
@@ -30,6 +31,7 @@ pub fn execute_rewrap_batch(
 
     let execution =
         ExecutionContext::resolve(&request.options, request.member_id.clone(), None, ssh_ctx)?;
+    enforce_key_not_expired_for_signing(&execution.key_ctx.expires_at)?;
     let mut processed_files = Vec::new();
     let mut failed_files = Vec::new();
 

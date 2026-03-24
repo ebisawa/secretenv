@@ -38,15 +38,19 @@ pub fn is_env_key_mode() -> bool {
     std::env::var_os(ENV_PRIVATE_KEY).is_some()
 }
 
+/// Result of loading a private key from environment variables
+#[derive(Debug)]
+pub struct EnvKeyLoadResult {
+    pub verified_key: VerifiedPrivateKey,
+    pub member_id: String,
+    pub expires_at: String,
+}
+
 /// Load private key from environment variables
 ///
 /// Reads SECRETENV_PRIVATE_KEY (Base64url-encoded PrivateKey JSON),
 /// decrypts it using SECRETENV_KEY_PASSWORD, and validates the key material.
-///
-/// Returns the verified private key and the member_id from the protected header.
-pub fn load_private_key_from_env(
-    debug: bool,
-) -> Result<(crate::model::verified::VerifiedPrivateKey, String)> {
+pub fn load_private_key_from_env(debug: bool) -> Result<EnvKeyLoadResult> {
     // Safety: clear sensitive env vars on every exit path.
     // This is intentional security hygiene to minimize secret exposure.
     // Note: std::env::remove_var is not thread-safe; this function must
@@ -104,11 +108,16 @@ pub fn load_private_key_from_env(
 
     let member_id = private_key.protected.member_id.clone();
     let kid = private_key.protected.kid.clone();
+    let expires_at = private_key.protected.expires_at.clone();
 
     let plaintext = decrypt_private_key_with_password(&private_key, &password, debug)?;
     let verified_key = validate_and_wrap_private_key_password(plaintext, &member_id, &kid)?;
 
-    Ok((verified_key, member_id))
+    Ok(EnvKeyLoadResult {
+        verified_key,
+        member_id,
+        expires_at,
+    })
 }
 
 /// Verify that a public key's components match the private key plaintext

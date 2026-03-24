@@ -5,6 +5,7 @@ use crate::app::context::execution::ExecutionContext;
 use crate::app::context::options::CommonCommandOptions;
 use crate::app::context::ssh::ResolvedSshSigner;
 use crate::app::errors::handle_kv_key_not_found_error;
+use crate::feature::context::expiry::enforce_key_not_expired_for_signing;
 use crate::feature::kv::mutate::{set_kv_entry, unset_kv_entry, KvWriteContext};
 use crate::format::content::KvEncContent;
 use crate::format::kv::dotenv::{parse_dotenv, validate_dotenv_strict};
@@ -150,6 +151,7 @@ where
     let file_path = target.file_path.clone();
     lock::with_file_lock(&file_path, move || {
         let execution = ExecutionContext::resolve(&options, member_id, None, ssh_ctx)?;
+        enforce_key_not_expired_for_signing(&execution.key_ctx.expires_at)?;
         let write_ctx = build_kv_write_context(&options, execution, no_signer_pub);
         let existing_content = load_existing_content(&target, allow_missing)?;
         let encrypted = operation(existing_content.as_ref(), &write_ctx, &target)?;

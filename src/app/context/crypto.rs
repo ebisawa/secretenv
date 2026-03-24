@@ -68,6 +68,7 @@ pub fn load_crypto_context(
         }
     };
 
+    let expires_at = encrypted_private_key.protected.expires_at.clone();
     let private_key = validate_and_wrap_private_key_ssh(
         private_key_plaintext,
         &encrypted_private_key.protected.member_id,
@@ -85,6 +86,7 @@ pub fn load_crypto_context(
         workspace_path,
         private_key,
         signing_key,
+        expires_at,
     })
 }
 
@@ -92,24 +94,25 @@ pub fn load_crypto_context_from_env(
     workspace_path: PathBuf,
     debug_enabled: bool,
 ) -> Result<CryptoContext> {
-    let (private_key, member_id) = env_key::load_private_key_from_env(debug_enabled)?;
-    let kid = private_key.proof().kid.clone();
+    let result = env_key::load_private_key_from_env(debug_enabled)?;
+    let kid = result.verified_key.proof().kid.clone();
 
     let pub_key_source = WorkspacePublicKeySource::new(workspace_path.clone());
-    let own_public_key = pub_key_source.load_public_key(&member_id)?;
+    let own_public_key = pub_key_source.load_public_key(&result.member_id)?;
     let verification =
-        env_key::verify_own_public_key(&private_key, &own_public_key, debug_enabled)?;
+        env_key::verify_own_public_key(&result.verified_key, &own_public_key, debug_enabled)?;
     for warning in verification.warnings {
         warn!("[CRYPTO] env own PublicKey warning: {}", warning);
     }
-    let signing_key = build_signing_key(private_key.document())?;
+    let signing_key = build_signing_key(result.verified_key.document())?;
 
     Ok(CryptoContext {
-        member_id,
+        member_id: result.member_id,
         kid,
         pub_key_source: Box::new(pub_key_source),
         workspace_path: Some(workspace_path),
-        private_key,
+        private_key: result.verified_key,
         signing_key,
+        expires_at: result.expires_at,
     })
 }
