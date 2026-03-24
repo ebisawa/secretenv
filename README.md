@@ -1,5 +1,7 @@
 # secretenv
 
+[日本語版 README はこちら](README_ja.md)
+
 Want to stop sending `.env` files over Slack or DMs?  
 But also do not want to rely on a dedicated server or an always-on secret management service?
 
@@ -38,6 +40,47 @@ git clone <secretenv-repo>
 cd secretenv
 cargo install --path .
 ```
+
+## Getting Started
+
+### 1. Initialize a workspace
+
+```bash
+cd /path/to/your-git-repo
+secretenv init --member-id alice@example.com
+```
+
+This creates a `.secretenv/` directory, generates your key pair, and registers you as the first member.
+
+### 2. Add secrets
+
+```bash
+# Add individual entries
+secretenv set DATABASE_URL "postgres://user:pass@localhost/mydb"
+secretenv set API_KEY "sk-your-api-key"
+
+# Or import an existing .env file
+secretenv import .env
+```
+
+### 3. Commit to Git
+
+```bash
+git add .secretenv/
+git commit -m "Initialize secretenv workspace"
+```
+
+### 4. Use your secrets
+
+```bash
+# Retrieve a single value
+secretenv get DATABASE_URL
+
+# Run a command with all secrets injected as environment variables
+secretenv run -- ./my-app
+```
+
+For detailed setup and operational guidance, see the [User Guide](guides/user_guide_en.md).
 
 ## Read More
 
