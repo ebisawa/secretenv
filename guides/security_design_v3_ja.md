@@ -912,7 +912,13 @@ HKDF info 文字列（`secretenv:password-private-key-enc@3:{kid}`）は SSH ベ
 
 #### 7.9.4 CI 環境におけるセキュリティ上のトレードオフ
 
-環境変数（`SECRETENV_KEY_PASSWORD`）はプロセスメモリに残存し、Linux では `/proc/*/environ` を通じて可視になる場合がある。これは CI プラットフォームがシークレット変数を取り扱う方法と整合的な、許容されたトレードオフである。パスワードと復号された鍵材料は、Rust の型システムが許す範囲で使用後にゼロ化される（`zeroize` クレートを使用）。
+環境変数（`SECRETENV_KEY_PASSWORD`）はプロセスメモリに残存し、Linux では `/proc/*/environ` を通じて可視になる場合がある。これは CI プラットフォームがシークレット変数を取り扱う方法と整合的な、許容されたトレードオフである。ここで許容しているのは「ランタイムで環境変数として展開されること」に伴う露出であり、「`SECRETENV_PRIVATE_KEY` と同じ secret backend に置いても backend compromise への独立防御になる」という意味ではない。パスワードと復号された鍵材料は、Rust の型システムが許す範囲で使用後にゼロ化される（`zeroize` クレートを使用）。
+
+このパスワード保護の主目的は、exported blob 単体が漏洩した場面での追加防御である。たとえば、エクスポート済みファイル、誤送信されたテキスト、artifact、クリップボード内容などから `SECRETENV_PRIVATE_KEY` 相当の blob だけが流出した場合、パスワードを別途知られない限り直ちに復号はできない。
+
+一方で、`SECRETENV_PRIVATE_KEY` と `SECRETENV_KEY_PASSWORD` を同じ CI secret backend に保存する構成では、パスワードはその backend 自体が侵害された場合の独立した防御層にはほぼならない。両方が同時に取得されるためである。したがって、この構成は「SSH なしで使える portable export」を実現するためのものではあるが、「同じ secret backend に置いても backend compromise に対して二重防御になる」ことを意味しない。
+
+運用上、`SECRETENV_PRIVATE_KEY` と `SECRETENV_KEY_PASSWORD` を別 trust domain に配置できるなら、防御効果は相対的に高くなる。しかし、一般的な CI で同じ secret backend に保存する構成では、パスワード保護の効果は主として blob 単体漏洩時の被害限定に留まる。
 
 #### 7.9.5 環境変数モードにおける公開鍵検証
 

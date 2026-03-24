@@ -912,7 +912,13 @@ The HKDF info string (`secretenv:password-private-key-enc@3:{kid}`) differs from
 
 #### 7.9.4 Security Trade-offs in CI Environments
 
-Environment variables (`SECRETENV_KEY_PASSWORD`) persist in process memory and may be visible via `/proc/*/environ` on Linux. This is an accepted trade-off consistent with how CI platforms handle secret variables. The password and decrypted key material are zeroized after use where the Rust type system permits (using the `zeroize` crate).
+Environment variables (`SECRETENV_KEY_PASSWORD`) persist in process memory and may be visible via `/proc/*/environ` on Linux. This is an accepted trade-off consistent with how CI platforms handle secret variables. What is accepted here is runtime exposure caused by environment-variable delivery, not the idea that storing `SECRETENV_KEY_PASSWORD` in the same secret backend as `SECRETENV_PRIVATE_KEY` creates an independent barrier against backend compromise. The password and decrypted key material are zeroized after use where the Rust type system permits (using the `zeroize` crate).
+
+The main security value of this password protection is defense when the exported blob leaks by itself. For example, if only the `SECRETENV_PRIVATE_KEY`-equivalent blob escapes through an exported file, copied text, artifact, or clipboard content, the key still cannot be decrypted immediately unless the password is also disclosed.
+
+By contrast, when `SECRETENV_PRIVATE_KEY` and `SECRETENV_KEY_PASSWORD` are stored in the same CI secret backend, the password provides little independent protection against compromise of that backend itself, because both values are typically obtained together. This configuration is therefore useful for portable SSH-free operation, but it must not be interpreted as "placing both in one secret backend still gives meaningful defense-in-depth against backend compromise."
+
+If operations can place `SECRETENV_PRIVATE_KEY` and `SECRETENV_KEY_PASSWORD` in separate trust domains, the password protection becomes more meaningful. In the common case where both are stored in the same CI secret backend, the practical protection is primarily limited to blob-only leakage scenarios.
 
 #### 7.9.5 Public Key Verification in Environment Variable Mode
 
