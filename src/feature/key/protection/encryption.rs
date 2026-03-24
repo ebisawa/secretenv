@@ -45,7 +45,7 @@ fn build_protected_header(
 }
 
 /// Serialize plaintext and encrypt with XChaCha20-Poly1305
-fn serialize_and_encrypt(
+pub(super) fn serialize_and_encrypt(
     plaintext: &PrivateKeyPlaintext,
     enc_key: &XChaChaKey,
     protected: &PrivateKeyProtected,
@@ -76,7 +76,7 @@ fn serialize_and_encrypt(
 }
 
 /// Decode encryption parameters from PrivateKey
-fn decode_encryption_params(
+pub(super) fn decode_encryption_params(
     private_key: &PrivateKey,
 ) -> Result<(Salt, XChaChaNonce, Ciphertext, Aad)> {
     // Decode salt
@@ -95,7 +95,7 @@ fn decode_encryption_params(
 }
 
 /// Decrypt and deserialize plaintext
-fn decrypt_and_deserialize(
+pub(super) fn decrypt_and_deserialize(
     enc_key: &XChaChaKey,
     nonce: &XChaChaNonce,
     aad: &Aad,
