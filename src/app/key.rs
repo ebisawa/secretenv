@@ -175,11 +175,12 @@ pub fn export_private_key_command(
         password,
     )?;
 
-    Ok(KeyExportPrivateResult {
+    Ok(crate::feature::key::portable_export::PortableExportOutput {
         member_id: loaded.member_id,
         kid: loaded.kid,
         encoded_key,
-    })
+    }
+    .into())
 }
 
 fn require_member_id(member_id: Option<String>) -> Result<String> {

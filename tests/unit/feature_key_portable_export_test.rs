@@ -181,3 +181,35 @@ fn test_export_password_too_short_fails() {
         err
     );
 }
+
+#[test]
+fn test_export_password_7_chars_fails() {
+    let plaintext = build_test_plaintext();
+
+    let result = export_private_key_portable(
+        &plaintext,
+        "alice@example.com",
+        "01HN8Z3Q4R5S6T7V8W9X0Y1Z2A",
+        "2026-01-01T00:00:00Z",
+        "2027-01-01T00:00:00Z",
+        "1234567",
+    );
+
+    assert!(result.is_err(), "7-char password should fail");
+}
+
+#[test]
+fn test_export_password_8_chars_succeeds() {
+    let plaintext = build_test_plaintext();
+
+    let result = export_private_key_portable(
+        &plaintext,
+        "alice@example.com",
+        "01HN8Z3Q4R5S6T7V8W9X0Y1Z2A",
+        "2026-01-01T00:00:00Z",
+        "2027-01-01T00:00:00Z",
+        "12345678",
+    );
+
+    assert!(result.is_ok(), "8-char password should succeed");
+}

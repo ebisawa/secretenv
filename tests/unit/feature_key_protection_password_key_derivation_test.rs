@@ -5,8 +5,7 @@
 
 use secretenv::crypto::types::primitives::Salt;
 use secretenv::feature::key::protection::password_key_derivation::{
-    derive_key_from_password, generate_salt, validate_argon2_params, Argon2Params,
-    DEFAULT_ARGON2_PARAMS,
+    derive_key_from_password, generate_salt, Argon2Params, DEFAULT_ARGON2_PARAMS,
 };
 
 #[test]
@@ -61,35 +60,26 @@ fn test_generate_salt_randomness() {
 
 #[test]
 fn test_validate_argon2_params_default_ok() {
-    assert!(validate_argon2_params(&DEFAULT_ARGON2_PARAMS).is_ok());
+    // DEFAULT_ARGON2_PARAMS values should pass constructor validation
+    assert!(Argon2Params::new(
+        DEFAULT_ARGON2_PARAMS.m(),
+        DEFAULT_ARGON2_PARAMS.t(),
+        DEFAULT_ARGON2_PARAMS.p()
+    )
+    .is_ok());
 }
 
 #[test]
 fn test_validate_argon2_params_m_too_low_fails() {
-    let params = Argon2Params {
-        m: 1024,
-        t: 1,
-        p: 1,
-    };
-    assert!(validate_argon2_params(&params).is_err());
+    assert!(Argon2Params::new(1024, 1, 1).is_err());
 }
 
 #[test]
 fn test_validate_argon2_params_t_zero_fails() {
-    let params = Argon2Params {
-        m: 47104,
-        t: 0,
-        p: 1,
-    };
-    assert!(validate_argon2_params(&params).is_err());
+    assert!(Argon2Params::new(47104, 0, 1).is_err());
 }
 
 #[test]
 fn test_validate_argon2_params_p_zero_fails() {
-    let params = Argon2Params {
-        m: 47104,
-        t: 1,
-        p: 0,
-    };
-    assert!(validate_argon2_params(&params).is_err());
+    assert!(Argon2Params::new(47104, 1, 0).is_err());
 }

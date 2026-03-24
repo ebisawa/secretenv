@@ -26,9 +26,9 @@ fn build_protected_header(
         member_id: member_id.to_string(),
         kid: kid.to_string(),
         alg: PrivateKeyAlgorithm::Argon2id {
-            m: params.m,
-            t: params.t,
-            p: params.p,
+            m: params.m(),
+            t: params.t(),
+            p: params.p(),
             salt: b64_encode(salt.as_bytes()),
             aead: alg::AEAD_XCHACHA20_POLY1305.to_string(),
         },
@@ -95,11 +95,7 @@ pub fn decrypt_private_key_with_password(
                     source: None,
                 });
             }
-            Argon2Params {
-                m: *m,
-                t: *t,
-                p: *p,
-            }
+            Argon2Params::new(*m, *t, *p)?
         }
         _ => {
             return Err(Error::Crypto {

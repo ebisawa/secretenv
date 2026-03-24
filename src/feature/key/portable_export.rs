@@ -12,6 +12,13 @@ use crate::model::private_key::PrivateKeyPlaintext;
 use crate::support::base64url::b64_encode;
 use crate::{Error, Result};
 
+/// Output of a portable private key export operation.
+pub struct PortableExportOutput {
+    pub member_id: String,
+    pub kid: String,
+    pub encoded_key: String,
+}
+
 const MIN_PASSWORD_LENGTH: usize = 8;
 
 /// Export a private key as a portable, password-protected Base64url string.

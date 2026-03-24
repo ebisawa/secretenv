@@ -128,3 +128,13 @@ pub struct KeyExportPrivateResult {
     pub kid: String,
     pub encoded_key: String,
 }
+
+impl From<feature_key::portable_export::PortableExportOutput> for KeyExportPrivateResult {
+    fn from(output: feature_key::portable_export::PortableExportOutput) -> Self {
+        Self {
+            member_id: output.member_id,
+            kid: output.kid,
+            encoded_key: output.encoded_key,
+        }
+    }
+}

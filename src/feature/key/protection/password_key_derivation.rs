@@ -17,12 +17,33 @@ use zeroize::Zeroizing;
 /// Argon2id parameters for password hashing
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Argon2Params {
+    m: u32,
+    t: u32,
+    p: u32,
+}
+
+impl Argon2Params {
+    /// Validate and construct Argon2id parameters.
+    pub fn new(m: u32, t: u32, p: u32) -> crate::Result<Self> {
+        let params = Self { m, t, p };
+        validate_argon2_params(&params)?;
+        Ok(params)
+    }
+
     /// Memory cost in KiB
-    pub m: u32,
+    pub fn m(&self) -> u32 {
+        self.m
+    }
+
     /// Time cost (iterations)
-    pub t: u32,
+    pub fn t(&self) -> u32 {
+        self.t
+    }
+
     /// Parallelism degree
-    pub p: u32,
+    pub fn p(&self) -> u32 {
+        self.p
+    }
 }
 
 /// Default Argon2id parameters: m=47104 KiB (46 MiB), t=1, p=1
@@ -106,7 +127,7 @@ fn argon2id_hash(
     params: &Argon2Params,
 ) -> Result<Zeroizing<[u8; 32]>> {
     let argon2_params =
-        argon2::Params::new(params.m, params.t, params.p, Some(32)).map_err(|e| {
+        argon2::Params::new(params.m(), params.t(), params.p(), Some(32)).map_err(|e| {
             crate::Error::Crypto {
                 message: format!("Invalid Argon2id parameters: {}", e),
                 source: None,
