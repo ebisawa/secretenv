@@ -6,32 +6,32 @@
 
 | Item | Value |
 |------|-------|
-| Version | 1.5 |
+| Version | 1.6 |
 | Date | 2026-03-25 |
 
 ### Purpose of This Document
 
-This document explains the security design of SecretEnv v3 for **security auditors**. Its primary purpose is to make it easy to determine what security claims SecretEnv makes, what assumptions those claims depend on, what an audit should verify, and what is explicitly out of scope.
+This document explains the security design of SecretEnv v3. Its primary purpose is to make it easy to determine what security claims SecretEnv makes, what assumptions those claims depend on, how those claims are ensured, and what is explicitly out of scope.
 
 This document is not an implementation manual. It prioritizes design intent, verification points, and residual risk over step-by-step restatement of every algorithm and data structure detail.
 
 ---
 
-## 1. Auditor Summary
+## 1. Security Overview
 
 SecretEnv is an offline-first encrypted file sharing CLI tool for safely sharing secrets such as `.env` files and certificates within a team. It can use a Git repository as a distribution medium, but does not depend on Git's existence.
 
-### 1.1 What to Check First
+### 1.1 Key Design Points
 
 1. **security claims**: what is cryptographically protected and what is delegated to operational assumptions
 2. **trust boundary**: local private keys and the local keystore are trusted; workspace public keys and encrypted files are not
 3. **limits of key identity**: self-signature and attestation show key consistency and key binding, but identity ultimately depends on TOFU and operator judgment
 4. **context binding**: `sid` / `kid` / `k` / `p` are used to prevent reuse and mix-ups
-5. **implementation audit**: the most important checks are signature-before-decrypt, preserving bindings, and respecting env-mode constraints
+5. **critical implementation invariants**: signature-before-decrypt, preserving bindings, and respecting env-mode constraints
 
-### 1.2 Security Claims and Audit View
+### 1.2 Security Claims and Verification
 
-| security claim | Main mechanism | What the audit should verify | Assumption | Residual risk |
+| security claim | Main mechanism | How this is ensured | Assumption | Residual risk |
 |---------------|----------------|------------------------------|------------|---------------|
 | **Confidentiality** | HPKE wrap + XChaCha20-Poly1305 | Only current recipients' public keys are used for wrapping | Recipient private keys are not compromised | Legitimate recipients can still exfiltrate plaintext |
 | **Tamper detection** | Ed25519 signatures | Signature verification always happens before decryption | Verification is never bypassed | A malicious legitimate signer is not prevented |
@@ -66,7 +66,7 @@ SecretEnv is an offline-first encrypted file sharing CLI tool for safely sharing
 
 The attacker model above assumes repository write access is properly controlled. In the main target environment of Git + GitHub operation, changes to `members/active/` are checked through PR review. Attackers with unrestricted write access to the repository, such as compromise of repository administrator privileges, are outside the scope of this model.
 
-If this assumption does not hold, repository-layer access control must be evaluated separately from SecretEnv's cryptographic design. Audits should distinguish between the security of the crypto design and the security of the distribution medium.
+If this assumption does not hold, repository-layer access control must be evaluated separately from SecretEnv's cryptographic design. It is important to distinguish between the security of the crypto design and the security of the distribution medium.
 
 ### 2.3 Trust Boundary
 
@@ -107,9 +107,9 @@ graph TB
 - Workspace `members/` directory — verified by signatures and attestation
 - Workspace `secrets/` directory — verified by signatures
 
-### 2.4 Audit Framing
+### 2.4 Design Scope Summary
 
-| Item | Audit interpretation |
+| Item | Implication |
 |------|----------------------|
 | **Guaranteed by design** | Confidentiality, tamper detection, context binding, key-generation binding, key consistency |
 | **Depends on operational assumptions** | Identity decisions, safe CI execution conditions, repository-layer access control |
@@ -373,17 +373,7 @@ generated → active → expired
 
 ### 4.4 Key Rotation
 
-Key rotation has two levels:
-
-**1. rewrap (Content Key maintained)**
-- DEK/MK is not changed
-- Only wraps are updated for recipient changes (member additions, key updates)
-- Payload re-encryption is not needed
-
-**2. rewrap --rotate-key (Content Key regenerated)**
-- New DEK/MK is generated
-- Payload is re-encrypted
-- For use after key compromise or for periodic rotation
+Key rotation is performed by the `rewrap` command. The behavior differs between file-enc and kv-enc and between recipient changes and explicit `--rotate-key`. See §6.7 for the full comparison after both protocols have been introduced.
 
 ### 4.5 Key Relationship Diagrams
 
@@ -582,14 +572,6 @@ payload.encrypted = { "nonce": b64url(nonce), "ct": b64url(ct) }
 
 **Important: Signature verification precedes decryption.** Decrypting a ciphertext with an invalid signature exposes the cryptographic primitive to malicious input and increases the attack surface for side-channel attacks.
 
-### 5.6 Difference Between rewrap and rotate-key
-
-| Operation | DEK | wrap | payload | Purpose |
-|-----------|-----|------|---------|---------|
-| `rewrap` (file-enc) | Maintained | Updated | Maintained | Recipient addition/removal/key update |
-| `rewrap` (kv-enc, on recipient removal) | Regenerated | Updated | Re-encrypted | Content Key is automatically regenerated when a recipient is removed |
-| `rewrap --rotate-key` | Regenerated | Updated | Re-encrypted | Content Key rotation |
-
 ---
 
 ## 6. kv-enc Protocol
@@ -726,6 +708,25 @@ When a recipient is removed from kv-enc:
 5. Update the WRAP line
 
 The `disclosed` flag makes visible the entries that may have been disclosed to the removed recipient, supporting the decision to update secrets.
+
+### 6.7 Key Rotation Behavior Across Both Formats
+
+`rewrap` updates wrap entries (recipient addition/removal). `rewrap --rotate-key` regenerates the content key and re-encrypts the entire payload.
+
+| Operation | Format | Content Key | Wrap | Payload |
+|-----------|--------|-------------|------|---------|
+| Add recipients | file-enc | DEK maintained | Added | Maintained |
+| Add recipients | kv-enc | MK maintained | Added | Maintained |
+| Remove recipients | file-enc | DEK maintained | Removed | Maintained |
+| Remove recipients | kv-enc | **MK regenerated** | Rebuilt | **Re-encrypted** |
+| `--rotate-key` | file-enc | DEK regenerated | Rebuilt | Re-encrypted |
+| `--rotate-key` | kv-enc | MK regenerated | Rebuilt | Re-encrypted |
+
+For recipient addition, both formats maintain the content key and add new wrap entries.
+
+For recipient removal, the behavior differs by format. In file-enc, the removed recipient's wrap entry is deleted and a removal history is recorded, but the DEK is unchanged; the removed recipient no longer possesses a wrap entry to recover the DEK. In kv-enc, the MK is always regenerated and all entries are re-encrypted. This is because the MK is a long-lived key from which per-entry CEKs are derived (§6.2) — if a removed member retains knowledge of the old MK (e.g., from a prior decryption session), they could derive CEKs for entries added after their removal. Regenerating the MK eliminates this risk.
+
+`--rotate-key` forces full re-encryption in both formats regardless of recipient changes, and is intended as a post-compromise damage-limitation measure.
 
 ---
 
@@ -1026,7 +1027,7 @@ When `binding_claims.github_account` exists, the fingerprint of `attestation.pub
 
 ## 9. Context Binding and Defence-in-Depth
 
-This chapter is the core reference for auditors reviewing implementation drift. SecretEnv intentionally places `sid` / `kid` / `k` / `p` in multiple locations so that the system cryptographically fixes what a ciphertext belongs to and which key generation it was created for.
+This chapter describes the binding design that prevents implementation drift. SecretEnv intentionally places `sid` / `kid` / `k` / `p` in multiple locations so that the system cryptographically fixes what a ciphertext belongs to and which key generation it was created for.
 
 ### 9.1 System of Binding Elements
 
@@ -1069,7 +1070,7 @@ Recipients (the list of rids in the wrap array) are **not** included in payload 
 
 Recipient integrity is protected by **Ed25519 signatures** (wraps are contained within `protected`, which is the signed data).
 
-### 9.5 Binding Matrix (Most Important Audit Table)
+### 9.5 Binding Matrix
 
 | Binding element | Protocol | HPKE info | HPKE AAD | CEK info | payload AAD | Signature | Attack defended against |
 |----------------|----------|-----------|----------|----------|-------------|-----------|------------------------|
@@ -1083,7 +1084,7 @@ Recipient integrity is protected by **Ed25519 signatures** (wraps are contained 
 | `k` | kv-enc payload | — | — | — | **included** | **included** | Swapping entries within the same file |
 | `p` | all protocols | **included** | **included** | **included** | **included** | — | Reusing data across different protocols |
 
-**Audit note** — During implementation review, confirm that each binding point in the table is still present, not replaced with another input, and compared as canonicalized bytes rather than as ad hoc string values.
+**Implementation note** — Each binding point in the table must remain present, must not be replaced with another input, and must be compared as canonicalized bytes rather than as ad hoc string values.
 
 ---
 
@@ -1174,11 +1175,13 @@ Recipient integrity is protected by **Ed25519 signatures** (wraps are contained 
 | **When it weakens** | `sid` is removed from CEK info or AAD |
 | **Expected failure point** | AEAD decryption failure due to CEK mismatch |
 
+These scenarios share a common structure: context bindings (`sid`, `kid`, `k`, `p`) and Ed25519 signatures form two independent layers of defense. Bypassing both simultaneously requires either compromise of the signer's private key or an implementation defect that removes a binding or reorders processing steps. The verification points in §11 are designed to detect such defects.
+
 ---
 
-## 11. Implementation Audit Checkpoints
+## 11. Implementation Verification Points
 
-### 11.1 Highest-Priority Audit Checks
+### 11.1 Highest-Priority Verification Points
 
 | Review target | Expected implementation behavior | Risk if violated |
 |---------------|----------------------------------|------------------|
@@ -1191,7 +1194,7 @@ Recipient integrity is protected by **Ed25519 signatures** (wraps are contained 
 
 ### 11.2 Input Validation and DoS Resistance
 
-Audits should confirm that the implementation uses conservative limits and strict parsing such as the following.
+The implementation enforces conservative limits and strict parsing as shown below.
 
 | Item | Expected limit / requirement | Purpose |
 |------|------------------------------|---------|
@@ -1205,13 +1208,13 @@ For base64url inputs, the implementation should reject invalid characters, paddi
 
 ### 11.3 Memory Handling of Secrets
 
-KEM private keys, signing private keys, DEK / MK / CEK values, and decrypted plaintext should be zeroized after use as far as the type system allows. Audits should at minimum verify that secret material is not retained in long-lived buffers or exposed through logs.
+KEM private keys, signing private keys, DEK / MK / CEK values, and decrypted plaintext should be zeroized after use as far as the type system allows. The design ensures that secret material is not retained in long-lived buffers or exposed through logs.
 
 However, complete erasure of secret material from process memory is not guaranteed. When key bytes are copied into cryptographic library types (e.g., `SigningKey::from_bytes`), the `Zeroize` wrapper clears the source buffer but cannot control copies held internally by the library. Additionally, the runtime allocator may leave residual data in freed pages, and compiler optimizations may create intermediate copies that are not zeroized. SecretEnv therefore treats memory zeroization as a best-effort defense-in-depth measure, not an absolute guarantee.
 
 ---
 
-## 12. Audit-Relevant Limitations and Non-Goals
+## 12. Limitations and Non-Goals
 
 ### 12.1 Scope of Forward Secrecy
 
@@ -1219,7 +1222,7 @@ HPKE Base mode provides ephemeral key isolation per wrap via ephemeral keys. How
 - If a recipient's long-term private key is compromised, **all existing wraps** for that recipient can be unwrapped
 - Running `rewrap --rotate-key` to regenerate the Content Key after compromise can prevent damage from spreading to newly encrypted data going forward
 
-**Audit interpretation:** SecretEnv does not claim strong system-wide forward secrecy. `--rotate-key` is a post-compromise damage-limitation measure, not a mechanism that restores protection for data encrypted before the compromise.
+**Design rationale:** SecretEnv does not claim strong system-wide forward secrecy. `--rotate-key` is a post-compromise damage-limitation measure, not a mechanism that restores protection for data encrypted before the compromise.
 
 ### 12.2 Irrecoverability of Past Disclosures
 
@@ -1231,7 +1234,7 @@ It is not possible to prevent a workspace member who has legitimately decrypted 
 
 ### 12.4 Policy-Less Design
 
-SecretEnv does not provide a centralized policy defining "who should hold which secret." Audits should evaluate the cryptographic design separately from the organization's approval and distribution process.
+SecretEnv does not provide a centralized policy defining "who should hold which secret." The cryptographic design should be evaluated separately from the organization's approval and distribution process.
 
 ### 12.5 No Compression
 
@@ -1321,4 +1324,4 @@ graph TB
     style CEK fill:#90EE90
 ```
 
-This diagram is a supporting overview for auditors who want a quick picture of which secret protects which object and where signatures or wraps are applied. For concrete binding points and verification order, prefer the main text in §9 and §11.
+This diagram provides a quick overview of which secret protects which object and where signatures or wraps are applied. For concrete binding points and verification order, prefer the main text in §9 and §11.
