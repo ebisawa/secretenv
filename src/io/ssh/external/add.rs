@@ -3,7 +3,9 @@
 
 //! Default implementation of the `SshAdd` trait using the system ssh-add command.
 
+use super::build_ssh_child_env;
 use super::traits::SshAdd;
+use crate::io::process::configure_child_env_os;
 use crate::io::ssh::agent::socket::resolve_agent_socket_path;
 use crate::io::ssh::SshError;
 use crate::{Error, Result};
@@ -26,23 +28,18 @@ impl DefaultSshAdd {
 impl SshAdd for DefaultSshAdd {
     fn list_keys(&self) -> Result<String> {
         let socket_path = resolve_agent_socket_path()?;
+        let mut command = Command::new(&self.ssh_add_path);
+        configure_child_env_os(
+            &mut command,
+            &build_ssh_child_env(Some(socket_path.as_path())),
+        );
 
-        let socket_path_str = socket_path.to_str().ok_or_else(|| {
-            Error::from(SshError::operation_failed(
-                "SSH agent socket path contains invalid UTF-8",
+        let output = command.arg("-L").output().map_err(|e| {
+            Error::from(SshError::operation_failed_with_source(
+                format!("Failed to run ssh-add -L: {}", e),
+                e,
             ))
         })?;
-
-        let output = Command::new(&self.ssh_add_path)
-            .arg("-L")
-            .env("SSH_AUTH_SOCK", socket_path_str)
-            .output()
-            .map_err(|e| {
-                Error::from(SshError::operation_failed_with_source(
-                    format!("Failed to run ssh-add -L: {}", e),
-                    e,
-                ))
-            })?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);

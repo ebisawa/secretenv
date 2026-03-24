@@ -3,6 +3,9 @@
 
 //! SSH public key retrieval utilities
 
+use super::build_ssh_child_env;
+use crate::io::process::configure_child_env_os;
+use crate::io::ssh::agent::socket::resolve_agent_socket_path;
 use crate::io::ssh::external::traits::{SshAdd, SshKeygen};
 use crate::io::ssh::protocol::constants as ssh;
 use crate::io::ssh::protocol::fingerprint::build_sha256_fingerprint;
@@ -35,7 +38,12 @@ pub fn load_ssh_public_key_from_keygen(
     ssh_keygen_path: &str,
     ssh_key_path: &Path,
 ) -> Result<String> {
-    let output = Command::new(ssh_keygen_path)
+    let mut command = Command::new(ssh_keygen_path);
+    configure_child_env_os(
+        &mut command,
+        &build_ssh_child_env(resolve_agent_socket_path().ok().as_deref()),
+    );
+    let output = command
         .args(["-y", "-f"])
         .arg(ssh_key_path)
         .output()

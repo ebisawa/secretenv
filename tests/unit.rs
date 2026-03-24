@@ -149,6 +149,8 @@ pub mod io_keystore_resolver_test;
 pub mod io_keystore_storage_permission_test;
 #[path = "unit/io_keystore_test.rs"]
 pub mod io_keystore_test;
+#[path = "unit/io_process_env_test.rs"]
+pub mod io_process_env_test;
 #[path = "unit/io_ssh_backend_test.rs"]
 pub mod io_ssh_backend_test;
 #[path = "unit/io_ssh_protocol_wire_test.rs"]
@@ -189,6 +191,8 @@ pub mod schema_validator_test;
 pub mod ssh_agent_socket_test;
 #[path = "unit/ssh_agent_validation_test.rs"]
 pub mod ssh_agent_validation_test;
+#[path = "unit/ssh_external_env_test.rs"]
+pub mod ssh_external_env_test;
 #[path = "unit/ssh_external_pubkey_test.rs"]
 pub mod ssh_external_pubkey_test;
 #[path = "unit/ssh_fingerprint_test.rs"]
