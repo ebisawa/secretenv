@@ -135,6 +135,8 @@ pub mod io_config_store_test;
 pub mod io_json_test;
 #[path = "unit/io_keystore_member_test.rs"]
 pub mod io_keystore_member_test;
+#[path = "unit/io_keystore_public_key_source_test.rs"]
+pub mod io_keystore_public_key_source_test;
 #[path = "unit/io_keystore_resolver_test.rs"]
 pub mod io_keystore_resolver_test;
 #[path = "unit/io_keystore_storage_permission_test.rs"]
