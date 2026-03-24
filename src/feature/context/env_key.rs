@@ -8,6 +8,7 @@
 
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
+use zeroize::Zeroizing;
 
 use crate::feature::context::crypto::validate_and_wrap_private_key_password;
 use crate::feature::key::protection::password_encryption::decrypt_private_key_with_password;
@@ -34,12 +35,12 @@ pub fn load_private_key_from_env() -> Result<(crate::model::verified::VerifiedPr
         message: format!("{} environment variable is not set", ENV_PRIVATE_KEY),
     })?;
 
-    let password = std::env::var(ENV_KEY_PASSWORD).map_err(|_| Error::Config {
+    let password = Zeroizing::new(std::env::var(ENV_KEY_PASSWORD).map_err(|_| Error::Config {
         message: format!(
             "{} environment variable is required when {} is set",
             ENV_KEY_PASSWORD, ENV_PRIVATE_KEY
         ),
-    })?;
+    })?);
 
     let json_bytes = URL_SAFE_NO_PAD.decode(&encoded).map_err(|e| Error::Parse {
         message: format!("Failed to decode {} as Base64url: {}", ENV_PRIVATE_KEY, e),
