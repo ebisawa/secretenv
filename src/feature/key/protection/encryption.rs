@@ -12,13 +12,11 @@ use crate::crypto::types::data::{Aad, Ciphertext, Plaintext};
 use crate::crypto::types::keys::XChaChaKey;
 use crate::crypto::types::primitives::{Salt, XChaChaNonce};
 use crate::feature::key::protection::binding::build_private_key_aad;
+use crate::io::ssh::backend::SignatureBackend;
 use crate::model::identifiers::{alg, format};
 use crate::model::private_key::{
     EncryptedData, PrivateKey, PrivateKeyAlgorithm, PrivateKeyPlaintext, PrivateKeyProtected,
 };
-
-const PROTECTION_METHOD_SSHSIG_ED25519_HKDF_SHA256: &str = "sshsig-ed25519-hkdf-sha256";
-use crate::io::ssh::backend::SignatureBackend;
 use crate::support::base64url::{b64_decode_array, b64_decode_ciphertext, b64_encode};
 use crate::{Error, Result};
 use tracing::debug;
@@ -36,8 +34,7 @@ fn build_protected_header(
         format: format::PRIVATE_KEY_V3.to_string(),
         member_id: member_id.clone(),
         kid: kid.clone(),
-        alg: PrivateKeyAlgorithm {
-            kdf: PROTECTION_METHOD_SSHSIG_ED25519_HKDF_SHA256.to_string(),
+        alg: PrivateKeyAlgorithm::SshSig {
             fpr: ssh_fpr.clone(),
             salt: b64_encode(salt.as_bytes()),
             aead: alg::AEAD_XCHACHA20_POLY1305.to_string(),
@@ -83,7 +80,7 @@ fn decode_encryption_params(
     private_key: &PrivateKey,
 ) -> Result<(Salt, XChaChaNonce, Ciphertext, Aad)> {
     // Decode salt
-    let salt_bytes: [u8; 16] = b64_decode_array(&private_key.protected.alg.salt, "salt")?;
+    let salt_bytes: [u8; 16] = b64_decode_array(private_key.protected.alg.salt(), "salt")?;
     let salt = Salt::new(salt_bytes);
 
     // Decode nonce and ciphertext

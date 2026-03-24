@@ -18,6 +18,7 @@ use crate::io::keystore::resolver::KeystoreResolver;
 use crate::io::keystore::storage::load_private_key;
 pub use crate::io::ssh::external::pubkey::SshKeyCandidate;
 use crate::io::workspace::detection::{resolve_optional_workspace, WorkspaceRoot};
+use crate::model::private_key::PrivateKeyAlgorithm;
 use crate::{Error, Result};
 use std::path::PathBuf;
 
@@ -146,7 +147,15 @@ pub fn resolve_ssh_context_by_active_key(
         message: format!("No active key for member: {}", member_id),
     })?;
     let private_key = load_private_key(&keystore_root, &member_id, &kid)?;
-    let target_fpr = &private_key.protected.alg.fpr;
+    let target_fpr = match &private_key.protected.alg {
+        PrivateKeyAlgorithm::SshSig { fpr, .. } => fpr.as_str(),
+        _ => {
+            return Err(crate::Error::Crypto {
+                message: "Expected SshSig algorithm for SSH signing context".to_string(),
+                source: None,
+            });
+        }
+    };
 
     let candidates = resolve_ssh_key_candidates(options)?;
     let matched = find_candidate_by_fingerprint(&candidates, target_fpr)?;

@@ -159,6 +159,8 @@ pub mod keystore_storage_test;
 pub mod keystore_test;
 #[path = "unit/model_file_enc_test.rs"]
 pub mod model_file_enc_test;
+#[path = "unit/model_private_key_algorithm_test.rs"]
+pub mod model_private_key_algorithm_test;
 #[path = "unit/model_private_key_test.rs"]
 pub mod model_private_key_test;
 #[path = "unit/model_public_key_test.rs"]

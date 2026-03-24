@@ -48,6 +48,9 @@ pub mod context {
 
     /// HKDF info prefix for PrivateKey encryption key derivation from SSH signature.
     pub const SSH_PRIVATE_KEY_ENC_INFO_PREFIX_V3: &str = "secretenv:private-key-enc@3";
+    /// HKDF info prefix for PrivateKey encryption key derivation from password.
+    pub const PASSWORD_PRIVATE_KEY_ENC_INFO_PREFIX_V3: &str =
+        "secretenv:password-private-key-enc@3";
     /// Message used to check determinism of SSH signing backend.
     pub const SSH_DETERMINISM_CHECK_MESSAGE: &[u8] = b"secretenv:determinism-check";
 
@@ -61,6 +64,8 @@ pub mod context {
 pub mod private_key {
     /// Production protection method identifier for v3 PrivateKey encryption.
     pub const PROTECTION_METHOD_SSHSIG_ED25519_HKDF_SHA256: &str = "sshsig-ed25519-hkdf-sha256";
+    /// Argon2id-based protection method identifier for portable PrivateKey encryption.
+    pub const PROTECTION_METHOD_ARGON2ID_HKDF_SHA256: &str = "argon2id-hkdf-sha256";
 }
 
 /// HPKE algorithm identifiers used in WRAP items.

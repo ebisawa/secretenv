@@ -19,6 +19,7 @@ use crate::io::keystore::paths::get_keystore_root_from_base;
 use crate::io::keystore::storage::load_private_key;
 use crate::io::ssh::backend::SignatureBackend;
 use crate::model::identifiers::jwk;
+use crate::model::private_key::PrivateKeyAlgorithm;
 use crate::model::private_key::PrivateKeyPlaintext;
 use crate::model::verified::{DecryptionProof, VerifiedPrivateKey};
 use crate::support::base64url::{b64_decode, b64_decode_array};
@@ -80,12 +81,23 @@ impl CryptoContext {
         let private_key_plaintext =
             decrypt_private_key(&encrypted_private_key, backend, ssh_pubkey, debug)?;
 
+        // Extract SSH fingerprint from SshSig algorithm variant
+        let ssh_fpr = match &encrypted_private_key.protected.alg {
+            PrivateKeyAlgorithm::SshSig { fpr, .. } => fpr.as_str(),
+            _ => {
+                return Err(Error::Crypto {
+                    message: "Expected SshSig algorithm for SSH-based decryption".to_string(),
+                    source: None,
+                });
+            }
+        };
+
         // Validate and create Decrypted wrapper
         let decrypted_key = validate_and_wrap_private_key(
             private_key_plaintext,
             &encrypted_private_key.protected.member_id,
             &encrypted_private_key.protected.kid,
-            &encrypted_private_key.protected.alg.fpr,
+            ssh_fpr,
         )?;
 
         let sig_key_bytes: Zeroizing<[u8; 32]> = Zeroizing::new(b64_decode_array(

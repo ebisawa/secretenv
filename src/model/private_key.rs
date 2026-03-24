@@ -42,21 +42,42 @@ pub struct PrivateKeyProtected {
     pub expires_at: String,
 }
 
-/// Algorithm configuration
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(deny_unknown_fields)]
-pub struct PrivateKeyAlgorithm {
-    /// Key derivation function: "sshsig-ed25519-hkdf-sha256"
-    pub kdf: String,
+/// Algorithm configuration (tagged by KDF method)
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "kdf")]
+pub enum PrivateKeyAlgorithm {
+    /// SSH-signature-based key derivation
+    #[serde(rename = "sshsig-ed25519-hkdf-sha256")]
+    SshSig {
+        fpr: String,
+        salt: String,
+        aead: String,
+    },
+    /// Argon2id password-based key derivation
+    #[serde(rename = "argon2id-hkdf-sha256")]
+    Argon2id {
+        m: u32,
+        t: u32,
+        p: u32,
+        salt: String,
+        aead: String,
+    },
+}
 
-    /// SSH public key fingerprint (sha256:...; prefix is case-insensitive)
-    pub fpr: String,
+impl PrivateKeyAlgorithm {
+    /// Salt value (common to all variants)
+    pub fn salt(&self) -> &str {
+        match self {
+            Self::SshSig { salt, .. } | Self::Argon2id { salt, .. } => salt,
+        }
+    }
 
-    /// Salt for key derivation (base64url, 16 bytes)
-    pub salt: String,
-
-    /// AEAD algorithm: "xchacha20-poly1305"
-    pub aead: String,
+    /// AEAD algorithm identifier (common to all variants)
+    pub fn aead(&self) -> &str {
+        match self {
+            Self::SshSig { aead, .. } | Self::Argon2id { aead, .. } => aead,
+        }
+    }
 }
 
 /// Encrypted key material
