@@ -7,7 +7,7 @@
 //! and verify report construction via the public verify_*_document_report API.
 
 use crate::cli_common::{ALICE_MEMBER_ID, BOB_MEMBER_ID, CAROL_MEMBER_ID, DAVE_MEMBER_ID};
-use crate::test_utils::setup_test_keystore;
+use crate::test_utils::{setup_test_keystore, EnvGuard};
 use secretenv::feature::inspect::inspect_document_with_verification;
 use secretenv::feature::verify::file::verify_file_document_report;
 use secretenv::feature::verify::kv::verify_kv_document_report;
@@ -64,6 +64,7 @@ fn build_common_opts(
 
 /// Helper: create a kv-enc encrypted file and return its content as String.
 fn create_kv_enc_content(member_id: &str) -> (tempfile::TempDir, String) {
+    let _guard = EnvGuard::new(&["SECRETENV_PRIVATE_KEY", "SECRETENV_KEY_PASSWORD"]);
     let temp_dir = setup_test_keystore(member_id);
     let test_dir = temp_dir.path().to_path_buf();
     let keystore_root = test_dir.join("keys");
@@ -92,6 +93,7 @@ fn create_kv_enc_content(member_id: &str) -> (tempfile::TempDir, String) {
 
 /// Helper: create a file-enc encrypted file and return its content as String.
 fn create_file_enc_content(member_id: &str) -> (tempfile::TempDir, String) {
+    let _guard = EnvGuard::new(&["SECRETENV_PRIVATE_KEY", "SECRETENV_KEY_PASSWORD"]);
     let temp_dir = setup_test_keystore(member_id);
     let test_dir = temp_dir.path().to_path_buf();
     let keystore_root = test_dir.join("keys");

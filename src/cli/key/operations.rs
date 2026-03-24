@@ -9,6 +9,9 @@ use crate::cli::common::ssh::resolve_ssh_context_for_active_key;
 use crate::cli::identity_prompt;
 use crate::support::path::display_path_relative_to_cwd;
 use crate::Result;
+use std::io::IsTerminal;
+use std::io::{self, BufRead};
+use zeroize::Zeroizing;
 
 use super::{ActivateArgs, ExportArgs, RemoveArgs};
 
@@ -82,14 +85,7 @@ pub fn run_export_private(args: ExportArgs) -> Result<()> {
         options.home.as_deref(),
     )?;
 
-    let password = dialoguer::Password::new()
-        .with_prompt("Enter password for key export")
-        .with_confirmation("Confirm password", "Passwords do not match")
-        .interact()
-        .map_err(|e| crate::Error::Io {
-            message: format!("Failed to read password: {}", e),
-            source: None,
-        })?;
+    let password = prompt_export_password()?;
 
     let ssh_ctx = resolve_ssh_context_for_active_key(&options)?;
 
@@ -97,7 +93,7 @@ pub fn run_export_private(args: ExportArgs) -> Result<()> {
         &options,
         Some(member_id),
         args.kid.clone(),
-        &password,
+        password.as_str(),
         ssh_ctx,
     )?;
 
@@ -113,4 +109,53 @@ pub fn run_export_private(args: ExportArgs) -> Result<()> {
     }
 
     Ok(())
+}
+
+fn prompt_export_password() -> Result<Zeroizing<String>> {
+    if io::stdin().is_terminal() {
+        let password = dialoguer::Password::new()
+            .with_prompt("Enter password for key export")
+            .with_confirmation("Confirm password", "Passwords do not match")
+            .interact()
+            .map_err(|e| crate::Error::Io {
+                message: format!("Failed to read password: {}", e),
+                source: None,
+            })?;
+        return Ok(Zeroizing::new(password));
+    }
+
+    let stdin = io::stdin();
+    let mut reader = stdin.lock();
+    let mut password = Zeroizing::new(String::new());
+    let mut confirmation = Zeroizing::new(String::new());
+
+    reader
+        .read_line(&mut password)
+        .map_err(|e| crate::Error::Io {
+            message: format!("Failed to read password: {}", e),
+            source: None,
+        })?;
+    reader
+        .read_line(&mut confirmation)
+        .map_err(|e| crate::Error::Io {
+            message: format!("Failed to read password confirmation: {}", e),
+            source: None,
+        })?;
+
+    trim_line_ending(&mut password);
+    trim_line_ending(&mut confirmation);
+
+    if password.as_str() != confirmation.as_str() {
+        return Err(crate::Error::InvalidArgument {
+            message: "Passwords do not match".to_string(),
+        });
+    }
+
+    Ok(password)
+}
+
+fn trim_line_ending(value: &mut String) {
+    while matches!(value.chars().last(), Some('\n' | '\r')) {
+        value.pop();
+    }
 }

@@ -5,7 +5,10 @@
 
 use crate::cli::common::{cmd, create_temp_ssh_keypair, TEST_MEMBER_ID};
 use crate::cli::key::find_kid_in_member_dir;
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use base64::Engine;
 use secretenv::model::identifiers::format;
+use secretenv::model::private_key::PrivateKey;
 use secretenv::model::public_key::PublicKey;
 use std::fs;
 use tempfile::TempDir;
@@ -119,5 +122,99 @@ fn test_key_export_active() {
     );
 
     // Keep temp directories alive
+    drop(ssh_temp);
+}
+
+#[test]
+fn test_key_export_private_writes_password_protected_key_file() {
+    let temp_dir = TempDir::new().unwrap();
+    let (ssh_temp, ssh_priv, _ssh_pub, _ssh_pub_content) = create_temp_ssh_keypair();
+    let member_id = TEST_MEMBER_ID;
+
+    cmd()
+        .arg("key")
+        .arg("new")
+        .arg("--member-id")
+        .arg(member_id)
+        .arg("-i")
+        .arg(ssh_priv.to_str().unwrap())
+        .env("SECRETENV_HOME", temp_dir.path())
+        .assert()
+        .success();
+
+    let export_file = temp_dir.path().join("portable-private-key.txt");
+
+    cmd()
+        .arg("key")
+        .arg("export")
+        .arg("--private")
+        .arg("--member-id")
+        .arg(member_id)
+        .arg("--out")
+        .arg(export_file.to_str().unwrap())
+        .env("SECRETENV_HOME", temp_dir.path())
+        .env("SECRETENV_SSH_KEY", ssh_priv.to_str().unwrap())
+        .write_stdin("strong-password-42\nstrong-password-42\n")
+        .assert()
+        .success();
+
+    let exported = fs::read_to_string(&export_file).expect("Should read exported private key");
+    let json = URL_SAFE_NO_PAD
+        .decode(exported.trim())
+        .expect("Should decode as base64url");
+    let private_key: PrivateKey =
+        serde_json::from_slice(&json).expect("Should deserialize as PrivateKey");
+
+    assert_eq!(private_key.protected.member_id, member_id);
+    assert_eq!(private_key.protected.format, format::PRIVATE_KEY_V3);
+
+    drop(ssh_temp);
+}
+
+#[test]
+fn test_key_export_private_writes_base64url_to_stdout() {
+    let temp_dir = TempDir::new().unwrap();
+    let (ssh_temp, ssh_priv, _ssh_pub, _ssh_pub_content) = create_temp_ssh_keypair();
+    let member_id = TEST_MEMBER_ID;
+
+    cmd()
+        .arg("key")
+        .arg("new")
+        .arg("--member-id")
+        .arg(member_id)
+        .arg("-i")
+        .arg(ssh_priv.to_str().unwrap())
+        .env("SECRETENV_HOME", temp_dir.path())
+        .assert()
+        .success();
+
+    let output = cmd()
+        .arg("key")
+        .arg("export")
+        .arg("--private")
+        .arg("--member-id")
+        .arg(member_id)
+        .env("SECRETENV_HOME", temp_dir.path())
+        .env("SECRETENV_SSH_KEY", ssh_priv.to_str().unwrap())
+        .write_stdin("strong-password-42\nstrong-password-42\n")
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+
+    let stdout = String::from_utf8(output).expect("stdout should be UTF-8");
+    let exported = stdout.trim();
+    assert!(!exported.is_empty(), "stdout should contain exported key");
+
+    let json = URL_SAFE_NO_PAD
+        .decode(exported)
+        .expect("Should decode stdout as base64url");
+    let private_key: PrivateKey =
+        serde_json::from_slice(&json).expect("Should deserialize stdout as PrivateKey");
+
+    assert_eq!(private_key.protected.member_id, member_id);
+    assert_eq!(private_key.protected.format, format::PRIVATE_KEY_V3);
+
     drop(ssh_temp);
 }

@@ -59,6 +59,17 @@ fn build_exported_key(plaintext: &PrivateKeyPlaintext, password: &str) -> String
     .expect("export should succeed")
 }
 
+fn assert_env_key_vars_cleared() {
+    assert!(
+        std::env::var(ENV_PRIVATE_KEY).is_err(),
+        "SECRETENV_PRIVATE_KEY should be cleared"
+    );
+    assert!(
+        std::env::var(ENV_KEY_PASSWORD).is_err(),
+        "SECRETENV_KEY_PASSWORD should be cleared"
+    );
+}
+
 #[test]
 fn test_is_env_key_mode_when_set() {
     let _guard = EnvGuard::new(&[ENV_PRIVATE_KEY, ENV_KEY_PASSWORD]);
@@ -120,6 +131,7 @@ fn test_env_key_invalid_base64_error() {
 
     let result = load_private_key_from_env(false);
     assert!(result.is_err());
+    assert_env_key_vars_cleared();
 }
 
 #[test]
@@ -234,14 +246,7 @@ fn test_env_vars_cleared_after_successful_load() {
 
     let _result = load_private_key_from_env(false).expect("should succeed");
 
-    assert!(
-        std::env::var(ENV_PRIVATE_KEY).is_err(),
-        "SECRETENV_PRIVATE_KEY should be cleared after successful load"
-    );
-    assert!(
-        std::env::var(ENV_KEY_PASSWORD).is_err(),
-        "SECRETENV_KEY_PASSWORD should be cleared after successful load"
-    );
+    assert_env_key_vars_cleared();
 }
 
 #[test]
@@ -284,6 +289,7 @@ fn test_env_key_rejects_invalid_format() {
         "error should mention unsupported format: {}",
         err
     );
+    assert_env_key_vars_cleared();
 }
 
 #[test]
@@ -324,6 +330,7 @@ fn test_env_key_rejects_sshsig_algorithm() {
         "error should mention password-protected requirement: {}",
         err
     );
+    assert_env_key_vars_cleared();
 }
 
 #[test]

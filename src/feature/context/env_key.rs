@@ -19,6 +19,15 @@ use crate::{Error, Result};
 const ENV_PRIVATE_KEY: &str = "SECRETENV_PRIVATE_KEY";
 const ENV_KEY_PASSWORD: &str = "SECRETENV_KEY_PASSWORD";
 
+struct EnvKeyCleanupGuard;
+
+impl Drop for EnvKeyCleanupGuard {
+    fn drop(&mut self) {
+        std::env::remove_var(ENV_PRIVATE_KEY);
+        std::env::remove_var(ENV_KEY_PASSWORD);
+    }
+}
+
 /// Check if environment variable key mode is active
 pub fn is_env_key_mode() -> bool {
     std::env::var_os(ENV_PRIVATE_KEY).is_some()
@@ -33,6 +42,13 @@ pub fn is_env_key_mode() -> bool {
 pub fn load_private_key_from_env(
     debug: bool,
 ) -> Result<(crate::model::verified::VerifiedPrivateKey, String)> {
+    // Safety: clear sensitive env vars on every exit path.
+    // This is intentional security hygiene to minimize secret exposure.
+    // Note: std::env::remove_var is not thread-safe; this function must
+    // be called from the main thread only. The env vars cannot be
+    // recovered after removal, so retries require re-setting them.
+    let _cleanup = EnvKeyCleanupGuard;
+
     let encoded = Zeroizing::new(std::env::var(ENV_PRIVATE_KEY).map_err(|e| match e {
         std::env::VarError::NotPresent => Error::Config {
             message: format!("{} environment variable is not set", ENV_PRIVATE_KEY),
@@ -105,14 +121,6 @@ pub fn load_private_key_from_env(
 
     let plaintext = decrypt_private_key_with_password(&private_key, &password, debug)?;
     let verified_key = validate_and_wrap_private_key_password(plaintext, &member_id, &kid)?;
-
-    // Safety: clear sensitive env vars after successful validation.
-    // This is intentional security hygiene to minimize secret exposure.
-    // Note: std::env::remove_var is not thread-safe; this function must
-    // be called from the main thread only. The env vars cannot be
-    // recovered after removal, so retries require re-setting them.
-    std::env::remove_var(ENV_PRIVATE_KEY);
-    std::env::remove_var(ENV_KEY_PASSWORD);
 
     Ok((verified_key, member_id))
 }

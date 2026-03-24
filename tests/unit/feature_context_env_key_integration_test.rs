@@ -89,6 +89,14 @@ fn test_env_key_wrong_password_error() {
 
     let result = load_private_key_from_env(false);
     assert!(result.is_err(), "wrong password should fail");
+    assert!(
+        std::env::var(ENV_PRIVATE_KEY).is_err(),
+        "SECRETENV_PRIVATE_KEY should be cleared after failed load"
+    );
+    assert!(
+        std::env::var(ENV_KEY_PASSWORD).is_err(),
+        "SECRETENV_KEY_PASSWORD should be cleared after failed load"
+    );
 }
 
 #[test]
