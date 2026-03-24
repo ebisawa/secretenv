@@ -3,12 +3,12 @@
 
 //! Shared SSH signing context resolution for CLI commands.
 
+use crate::app::context::is_env_key_mode;
 use crate::app::context::{
     build_ssh_signing_context, resolve_ssh_context_by_active_key, resolve_ssh_key_candidates,
     CommonCommandOptions, SshSigningContext,
 };
 use crate::cli::identity_prompt::select_ssh_key;
-use crate::feature::context::env_key::is_env_key_mode;
 use crate::Result;
 use tracing::debug;
 

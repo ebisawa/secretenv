@@ -31,7 +31,7 @@ pub fn is_env_key_mode() -> bool {
 ///
 /// Returns the verified private key and the member_id from the protected header.
 pub fn load_private_key_from_env() -> Result<(crate::model::verified::VerifiedPrivateKey, String)> {
-    let encoded = std::env::var(ENV_PRIVATE_KEY).map_err(|e| match e {
+    let encoded = Zeroizing::new(std::env::var(ENV_PRIVATE_KEY).map_err(|e| match e {
         std::env::VarError::NotPresent => Error::Config {
             message: format!("{} environment variable is not set", ENV_PRIVATE_KEY),
         },
@@ -41,7 +41,9 @@ pub fn load_private_key_from_env() -> Result<(crate::model::verified::VerifiedPr
                 ENV_PRIVATE_KEY
             ),
         },
-    })?;
+    })?);
+    // Clear sensitive environment variable after reading
+    std::env::remove_var(ENV_PRIVATE_KEY);
 
     let password = Zeroizing::new(std::env::var(ENV_KEY_PASSWORD).map_err(|e| match e {
         std::env::VarError::NotPresent => Error::Config {
@@ -57,6 +59,8 @@ pub fn load_private_key_from_env() -> Result<(crate::model::verified::VerifiedPr
             ),
         },
     })?);
+    // Clear sensitive environment variable after reading
+    std::env::remove_var(ENV_KEY_PASSWORD);
 
     let json_bytes =
         Zeroizing::new(URL_SAFE_NO_PAD.decode(&encoded).map_err(|e| Error::Parse {

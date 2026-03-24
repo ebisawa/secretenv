@@ -6,6 +6,7 @@
 use crate::config::resolution::member_id::resolve_member_id;
 use crate::config::types::SshSigner;
 use crate::feature::context::crypto::CryptoContext;
+pub use crate::feature::context::env_key::is_env_key_mode;
 use crate::feature::context::ssh::find_candidate_by_fingerprint;
 pub use crate::feature::context::ssh::SshSigningContext;
 use crate::feature::context::ssh::{
@@ -119,6 +120,12 @@ impl ExecutionContext {
                     tracing::warn!(
                         "Ignoring --member-id in environment variable key mode \
                          (member_id is derived from SECRETENV_PRIVATE_KEY)"
+                    );
+                }
+                if explicit_kid.is_some() {
+                    tracing::warn!(
+                        "Ignoring --kid in environment variable key mode \
+                         (kid is derived from SECRETENV_PRIVATE_KEY)"
                     );
                 }
                 Self::load_from_env(options)
