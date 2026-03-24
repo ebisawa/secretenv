@@ -4,4 +4,6 @@
 //! Context modules for cryptographic and SSH signing operations.
 
 pub mod crypto;
+pub mod env_key;
+pub mod expiry;
 pub mod ssh;

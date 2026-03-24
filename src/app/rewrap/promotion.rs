@@ -1,9 +1,7 @@
 // Copyright 2026 Satoshi Ebisawa
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::app::rewrap::IncomingVerificationItem;
-
-use super::types::IncomingVerificationReport;
+use super::types::{IncomingVerificationItem, IncomingVerificationReport};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PromotionWarning {

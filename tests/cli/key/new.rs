@@ -7,7 +7,7 @@ use crate::cli::common::{cmd, create_temp_ssh_keypair, TEST_MEMBER_ID};
 use crate::cli::key::find_kid_in_member_dir;
 use base64::Engine;
 use secretenv::io::ssh::protocol::constants as ssh_constants;
-use secretenv::model::identifiers::{alg, format, private_key};
+use secretenv::model::identifiers::{alg, format};
 use secretenv::model::{private_key::PrivateKey, public_key::PublicKey};
 use std::fs;
 use tempfile::TempDir;
@@ -113,43 +113,38 @@ fn test_key_new_ssh_protection() {
     let private_json = fs::read_to_string(&private_key_path).unwrap();
     let private_key: PrivateKey = serde_json::from_str(&private_json).unwrap();
 
-    // Verify alg field
-    assert_eq!(
-        private_key.protected.alg.kdf,
-        private_key::PROTECTION_METHOD_SSHSIG_ED25519_HKDF_SHA256,
-        "protected.alg.kdf should be sshsig-ed25519-hkdf-sha256"
-    );
-    assert!(
-        private_key.protected.alg.fpr.starts_with("sha256:")
-            || private_key.protected.alg.fpr.starts_with("SHA256:"),
-        "protected.alg.fpr should start with sha256:/SHA256:"
-    );
-    assert_eq!(
-        private_key.protected.alg.fpr.len(),
-        50,
-        "protected.alg.fpr should be 50 characters (SHA256: + 43 chars)"
-    );
-    assert!(
-        !private_key.protected.alg.salt.is_empty(),
-        "protected.alg.salt should be set"
-    );
+    // Verify alg field via pattern matching
+    match &private_key.protected.alg {
+        secretenv::model::private_key::PrivateKeyAlgorithm::SshSig { fpr, salt, aead } => {
+            assert!(
+                fpr.starts_with("sha256:") || fpr.starts_with("SHA256:"),
+                "protected.alg.fpr should start with sha256:/SHA256:"
+            );
+            assert_eq!(
+                fpr.len(),
+                50,
+                "protected.alg.fpr should be 50 characters (SHA256: + 43 chars)"
+            );
+            assert!(!salt.is_empty(), "protected.alg.salt should be set");
 
-    // Verify salt is base64url encoded (16 bytes = 22 chars without padding)
-    let salt_decoded = base64::engine::general_purpose::URL_SAFE_NO_PAD
-        .decode(&private_key.protected.alg.salt)
-        .expect("salt should be valid base64url");
-    assert_eq!(
-        salt_decoded.len(),
-        16,
-        "salt should be 16 bytes when decoded"
-    );
+            // Verify salt is base64url encoded (16 bytes = 22 chars without padding)
+            let salt_decoded = base64::engine::general_purpose::URL_SAFE_NO_PAD
+                .decode(salt)
+                .expect("salt should be valid base64url");
+            assert_eq!(
+                salt_decoded.len(),
+                16,
+                "salt should be 16 bytes when decoded"
+            );
 
-    // Verify encrypted field
-    assert_eq!(
-        private_key.protected.alg.aead,
-        alg::AEAD_XCHACHA20_POLY1305,
-        "protected.alg.aead should be xchacha20-poly1305"
-    );
+            assert_eq!(
+                aead,
+                alg::AEAD_XCHACHA20_POLY1305,
+                "protected.alg.aead should be xchacha20-poly1305"
+            );
+        }
+        _ => panic!("Expected SshSig algorithm variant"),
+    }
     assert!(
         !private_key.encrypted.nonce.is_empty(),
         "encrypted.nonce should be set"

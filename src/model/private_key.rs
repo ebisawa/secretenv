@@ -42,21 +42,37 @@ pub struct PrivateKeyProtected {
     pub expires_at: String,
 }
 
-/// Algorithm configuration
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+/// Algorithm configuration (tagged by KDF method)
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "kdf")]
 #[serde(deny_unknown_fields)]
-pub struct PrivateKeyAlgorithm {
-    /// Key derivation function: "sshsig-ed25519-hkdf-sha256"
-    pub kdf: String,
+pub enum PrivateKeyAlgorithm {
+    /// SSH-signature-based key derivation
+    #[serde(rename = "sshsig-ed25519-hkdf-sha256")]
+    SshSig {
+        fpr: String,
+        salt: String,
+        aead: String,
+    },
+    /// Argon2id password-based key derivation
+    #[serde(rename = "argon2id-hkdf-sha256")]
+    Argon2id { salt: String, aead: String },
+}
 
-    /// SSH public key fingerprint (sha256:...; prefix is case-insensitive)
-    pub fpr: String,
+impl PrivateKeyAlgorithm {
+    /// Salt value (common to all variants)
+    pub fn salt(&self) -> &str {
+        match self {
+            Self::SshSig { salt, .. } | Self::Argon2id { salt, .. } => salt,
+        }
+    }
 
-    /// Salt for key derivation (base64url, 16 bytes)
-    pub salt: String,
-
-    /// AEAD algorithm: "xchacha20-poly1305"
-    pub aead: String,
+    /// AEAD algorithm identifier (common to all variants)
+    pub fn aead(&self) -> &str {
+        match self {
+            Self::SshSig { aead, .. } | Self::Argon2id { aead, .. } => aead,
+        }
+    }
 }
 
 /// Encrypted key material
@@ -97,7 +113,7 @@ pub struct IdentityKeysPrivate {
 /// - `crv = "Ed25519"` for signatures
 ///
 /// It also includes public component `x` for PublicKey reconstruction.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Zeroize)]
+#[derive(Clone, Serialize, Deserialize, PartialEq, Zeroize)]
 #[zeroize(drop)]
 #[serde(deny_unknown_fields)]
 pub struct JwkOkpPrivateKey {
@@ -105,6 +121,17 @@ pub struct JwkOkpPrivateKey {
     pub crv: String,
     pub x: String,
     pub d: String,
+}
+
+impl std::fmt::Debug for JwkOkpPrivateKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("JwkOkpPrivateKey")
+            .field("kty", &self.kty)
+            .field("crv", &self.crv)
+            .field("x", &self.x)
+            .field("d", &"[REDACTED]")
+            .finish()
+    }
 }
 impl PrivateKey {
     /// Create a new PrivateKey with the given parameters

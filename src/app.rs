@@ -14,3 +14,4 @@ pub mod member;
 pub mod registration;
 pub mod rewrap;
 pub mod run;
+pub mod verification;

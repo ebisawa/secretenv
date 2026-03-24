@@ -4,10 +4,10 @@
 //! Unit tests for SSH signing context resolution.
 
 use crate::test_utils::{setup_test_keystore, stub_ssh_keygen};
-use secretenv::config::types::SshSigner;
-use secretenv::feature::context::ssh::{
-    build_ssh_signing_context, resolve_ssh_key_candidates, SshSigningParams,
+use secretenv::app::context::ssh::{
+    build_ssh_signing_context_with_params, resolve_ssh_key_candidates_with_params, SshSigningParams,
 };
+use secretenv::config::types::SshSigner;
 use secretenv::io::ssh::backend::signature_backend::SignatureBackend;
 use secretenv::io::ssh::backend::ssh_keygen::SshKeygenBackend;
 use secretenv::io::ssh::protocol::key_descriptor::SshKeyDescriptor;
@@ -25,8 +25,8 @@ fn test_resolve_and_build_ssh_signing_context_default() {
         verbose: false,
         check_determinism: true,
     };
-    let candidates = resolve_ssh_key_candidates(&params).unwrap();
-    let ctx = build_ssh_signing_context(&params, &candidates[0].public_key).unwrap();
+    let candidates = resolve_ssh_key_candidates_with_params(&params).unwrap();
+    let ctx = build_ssh_signing_context_with_params(&params, &candidates[0].public_key).unwrap();
 
     assert!(!ctx.public_key.is_empty());
     assert!(!ctx.fingerprint.is_empty());
@@ -44,8 +44,8 @@ fn test_resolve_and_build_ssh_signing_context_verbose() {
         verbose: true,
         check_determinism: true,
     };
-    let candidates = resolve_ssh_key_candidates(&params).unwrap();
-    let ctx = build_ssh_signing_context(&params, &candidates[0].public_key).unwrap();
+    let candidates = resolve_ssh_key_candidates_with_params(&params).unwrap();
+    let ctx = build_ssh_signing_context_with_params(&params, &candidates[0].public_key).unwrap();
 
     assert!(!ctx.public_key.is_empty());
 }
@@ -81,7 +81,7 @@ fn test_resolve_ssh_key_candidates_with_explicit_key() {
         check_determinism: true,
     };
 
-    let candidates = resolve_ssh_key_candidates(&params).unwrap();
+    let candidates = resolve_ssh_key_candidates_with_params(&params).unwrap();
     assert_eq!(candidates.len(), 1);
     assert!(!candidates[0].public_key.is_empty());
     assert!(candidates[0].public_key.starts_with("ssh-ed25519 "));
@@ -104,7 +104,7 @@ fn test_build_ssh_signing_context_from_selected_key() {
         check_determinism: true,
     };
 
-    let ctx = build_ssh_signing_context(&params, ssh_pub).unwrap();
+    let ctx = build_ssh_signing_context_with_params(&params, ssh_pub).unwrap();
     assert_eq!(ctx.public_key, ssh_pub);
     assert!(!ctx.fingerprint.is_empty());
     assert!(ctx.fingerprint.starts_with("SHA256:"));
@@ -125,12 +125,12 @@ fn test_resolve_agent_with_explicit_key_loads_pubkey_from_file() {
         check_determinism: true,
     };
 
-    let candidates = resolve_ssh_key_candidates(&params).unwrap();
+    let candidates = resolve_ssh_key_candidates_with_params(&params).unwrap();
     assert_eq!(candidates.len(), 1);
     assert!(candidates[0].public_key.starts_with("ssh-ed25519 "));
 
     // Building context may fail without a real agent for determinism check.
-    let result = build_ssh_signing_context(&params, &candidates[0].public_key);
+    let result = build_ssh_signing_context_with_params(&params, &candidates[0].public_key);
     match result {
         Ok(ctx) => {
             assert!(!ctx.public_key.is_empty());
@@ -164,7 +164,7 @@ fn test_resolve_agent_with_explicit_nonexistent_key_fails() {
         check_determinism: true,
     };
 
-    let result = resolve_ssh_key_candidates(&params);
+    let result = resolve_ssh_key_candidates_with_params(&params);
     let msg = match result {
         Ok(_) => panic!("Expected error for nonexistent key"),
         Err(e) => e.to_string(),
@@ -192,7 +192,7 @@ fn test_build_ssh_signing_context_skips_determinism_check_when_disabled() {
         check_determinism: false,
     };
 
-    let ctx = build_ssh_signing_context(&params, ssh_pub).unwrap();
+    let ctx = build_ssh_signing_context_with_params(&params, ssh_pub).unwrap();
     assert_eq!(ctx.determinism, SshDeterminismStatus::Skipped);
 }
 
@@ -212,6 +212,6 @@ fn test_build_ssh_signing_context_checks_determinism_when_enabled() {
         check_determinism: true,
     };
 
-    let ctx = build_ssh_signing_context(&params, ssh_pub).unwrap();
+    let ctx = build_ssh_signing_context_with_params(&params, ssh_pub).unwrap();
     assert_eq!(ctx.determinism, SshDeterminismStatus::Verified);
 }

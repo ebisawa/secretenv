@@ -56,6 +56,9 @@ ed25519-dalek = { version = "2", features = ["rand_core"] }
 ssh-agent-client-rs = "1.1"
 ssh-key = { version = "0.6", features = ["ed25519"] }
 
+# Cryptography - Argon2id password hashing
+argon2 = { version = "0.5", features = ["alloc"] }
+
 # Secure memory handling
 zeroize = { version = "1", features = ["zeroize_derive"] }
 

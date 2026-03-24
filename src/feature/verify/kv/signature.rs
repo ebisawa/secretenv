@@ -6,12 +6,12 @@ use crate::feature::verify::key_loader::load_verifying_key_from_signature;
 use crate::feature::verify::report::{build_error_report, build_success_report};
 use crate::feature::verify::SignatureVerificationReport;
 use crate::format::content::KvEncContent;
-use crate::format::kv::parse_kv_document;
-use crate::format::token::TokenCodec;
-use crate::model::kv_enc::{KvEncDocument, VerifiedKvEncDocument};
-use crate::model::signature::Signature;
+use crate::format::kv::document::parse_kv_document;
+use crate::format::schema::document::parse_kv_signature_token;
+use crate::model::kv_enc::document::KvEncDocument;
+use crate::model::kv_enc::verified::VerifiedKvEncDocument;
 use crate::model::verification::SignatureVerificationProof;
-use crate::{Error, Result};
+use crate::Result;
 
 pub fn verify_kv_content(
     content: &KvEncContent,
@@ -36,7 +36,7 @@ pub fn verify_kv_document_report(
 ) -> SignatureVerificationReport {
     match parse_kv_document(content) {
         Ok(doc) => {
-            let signature: Signature = match TokenCodec::decode_auto(&doc.signature_token) {
+            let signature = match parse_kv_signature_token(&doc.signature_token) {
                 Ok(sig) => sig,
                 Err(e) => return build_error_report(format!("E_PARSE: {}", e)),
             };
@@ -64,11 +64,7 @@ pub fn verify_kv_document(
     workspace_path: Option<&std::path::Path>,
     debug: bool,
 ) -> Result<VerifiedKvEncDocument> {
-    let signature: Signature =
-        TokenCodec::decode_auto(&doc.signature_token).map_err(|e| Error::Parse {
-            message: format!("Failed to parse SIG token: {}", e),
-            source: Some(Box::new(e)),
-        })?;
+    let signature = parse_kv_signature_token(&doc.signature_token)?;
 
     let loaded = load_verifying_key_from_signature(&signature, workspace_path, debug)?;
     verify_kv_signature(doc, &loaded.verifying_key, &signature, debug)?;

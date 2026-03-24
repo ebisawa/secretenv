@@ -14,6 +14,12 @@ use crate::{Error, Result};
 use ed25519_dalek::{Verifier, VerifyingKey};
 use tracing::debug;
 
+#[derive(Debug, Clone)]
+pub struct VerifiedPublicKeyForVerification {
+    pub verified_public_key: VerifiedPublicKeyAttested,
+    pub warnings: Vec<String>,
+}
+
 /// Verify PublicKey document self-signature only and return VerifiedPublicKey
 ///
 /// # Arguments
@@ -100,6 +106,18 @@ pub fn verify_public_key_with_attestation(
     ))
 }
 
+pub fn verify_public_key_for_verification(
+    public_key: &PublicKey,
+    debug: bool,
+) -> Result<VerifiedPublicKeyForVerification> {
+    let verified_public_key = verify_public_key_with_attestation(public_key, debug)?;
+    let warnings = collect_public_key_verification_warnings(verified_public_key.document())?;
+    Ok(VerifiedPublicKeyForVerification {
+        verified_public_key,
+        warnings,
+    })
+}
+
 /// Verify multiple recipient public keys and return VerifiedPublicKeyAttested wrappers
 pub fn verify_recipient_public_keys(
     keys: &[PublicKey],
@@ -108,4 +126,36 @@ pub fn verify_recipient_public_keys(
     keys.iter()
         .map(|key| verify_public_key_with_attestation(key, debug))
         .collect()
+}
+
+fn collect_public_key_verification_warnings(doc: &PublicKey) -> Result<Vec<String>> {
+    let mut warnings = Vec::new();
+    if let Some(warning) = public_key_expiry_warning(doc)? {
+        warnings.push(warning);
+    }
+    Ok(warnings)
+}
+
+pub(crate) fn public_key_expiry_warning(doc: &PublicKey) -> Result<Option<String>> {
+    if doc.protected.expires_at.is_empty() {
+        return Ok(None);
+    }
+
+    let expires_at = time::OffsetDateTime::parse(
+        &doc.protected.expires_at,
+        &time::format_description::well_known::Rfc3339,
+    )
+    .map_err(|e| Error::Crypto {
+        message: format!("Invalid expires_at format in PublicKey: {}", e),
+        source: Some(Box::new(e)),
+    })?;
+
+    if expires_at < time::OffsetDateTime::now_utc() {
+        return Ok(Some(format!(
+            "PublicKey has expired (expires_at: {})",
+            doc.protected.expires_at
+        )));
+    }
+
+    Ok(None)
 }

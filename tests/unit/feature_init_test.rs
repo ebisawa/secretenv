@@ -5,17 +5,18 @@
 
 use crate::cli_common::ALICE_MEMBER_ID;
 use crate::test_utils::setup_test_keystore_from_fixtures;
+use secretenv::app::context::ssh::{
+    build_ssh_signing_context_with_params, resolve_ssh_key_candidates_with_params, SshSigningParams,
+};
 use secretenv::config::types::SshSigner;
-use secretenv::feature::context::ssh::{
-    build_ssh_signing_context, resolve_ssh_key_candidates, SshSigningParams,
-};
-use secretenv::feature::init::{
-    ensure_key_exists, load_single_member_id_from_keystore, resolve_keystore_root,
-    save_member_document,
-};
+use secretenv::feature::init::ensure_key_exists;
 use secretenv::io::keystore::active::load_active_kid;
+use secretenv::io::keystore::member::load_single_member_id_from_keystore;
 use secretenv::io::keystore::paths;
+use secretenv::io::keystore::resolver::KeystoreResolver;
+use secretenv::io::keystore::storage::load_public_key;
 use secretenv::io::workspace::detection::resolve_workspace_creation_path;
+use secretenv::io::workspace::setup::save_member_document;
 use tempfile::TempDir;
 
 // ---------------------------------------------------------------------------
@@ -27,7 +28,7 @@ fn test_resolve_keystore_root_with_home() {
     let tmp = TempDir::new().unwrap();
     let home = Some(tmp.path().to_path_buf());
 
-    let root = resolve_keystore_root(&home).unwrap();
+    let root = KeystoreResolver::resolve(home.as_ref()).unwrap();
 
     assert_eq!(root, tmp.path().join("keys"));
 }
@@ -36,7 +37,7 @@ fn test_resolve_keystore_root_with_home() {
 fn test_resolve_keystore_root_default() {
     // Without explicit home, resolve_keystore_root delegates to default config.
     // It should succeed and return a path ending with "keys".
-    let root = resolve_keystore_root(&None).unwrap();
+    let root = KeystoreResolver::resolve(None).unwrap();
 
     assert!(
         root.ends_with("keys"),
@@ -149,7 +150,8 @@ fn test_save_member_document_creates_file() {
     std::fs::create_dir_all(&output_dir).unwrap();
     let member_file = output_dir.join(format!("{}.json", ALICE_MEMBER_ID));
 
-    save_member_document(&member_file, ALICE_MEMBER_ID, &kid, &keystore_root).unwrap();
+    let public_key = load_public_key(&keystore_root, ALICE_MEMBER_ID, &kid).unwrap();
+    save_member_document(&member_file, &public_key).unwrap();
 
     assert!(member_file.exists(), "Member file should be created");
 
@@ -198,15 +200,16 @@ fn test_ensure_key_exists_creates_new_key() {
         verbose: false,
         check_determinism: true,
     };
-    let candidates = resolve_ssh_key_candidates(&params).unwrap();
-    let ssh_context = build_ssh_signing_context(&params, &candidates[0].public_key).unwrap();
+    let candidates = resolve_ssh_key_candidates_with_params(&params).unwrap();
+    let ssh_signer =
+        build_ssh_signing_context_with_params(&params, &candidates[0].public_key).unwrap();
     let result = ensure_key_exists(
         member_id,
         &keystore_root,
         Some(home_dir.path().to_path_buf()),
         false,
         None,
-        ssh_context,
+        ssh_signer.into_ssh_binding(),
     )
     .unwrap();
 
@@ -253,15 +256,16 @@ fn test_ensure_key_exists_reuses_existing_key() {
         verbose: false,
         check_determinism: true,
     };
-    let candidates = resolve_ssh_key_candidates(&params).unwrap();
-    let ssh_context = build_ssh_signing_context(&params, &candidates[0].public_key).unwrap();
+    let candidates = resolve_ssh_key_candidates_with_params(&params).unwrap();
+    let ssh_signer =
+        build_ssh_signing_context_with_params(&params, &candidates[0].public_key).unwrap();
     let first_result = ensure_key_exists(
         member_id,
         &keystore_root,
         Some(home_dir.path().to_path_buf()),
         false,
         None,
-        ssh_context,
+        ssh_signer.into_ssh_binding(),
     )
     .unwrap();
     assert!(first_result.created, "First call should create a new key");
@@ -275,15 +279,16 @@ fn test_ensure_key_exists_reuses_existing_key() {
         verbose: false,
         check_determinism: true,
     };
-    let candidates2 = resolve_ssh_key_candidates(&params2).unwrap();
-    let ssh_context2 = build_ssh_signing_context(&params2, &candidates2[0].public_key).unwrap();
+    let candidates2 = resolve_ssh_key_candidates_with_params(&params2).unwrap();
+    let ssh_signer2 =
+        build_ssh_signing_context_with_params(&params2, &candidates2[0].public_key).unwrap();
     let second_result = ensure_key_exists(
         member_id,
         &keystore_root,
         Some(home_dir.path().to_path_buf()),
         false,
         None,
-        ssh_context2,
+        ssh_signer2.into_ssh_binding(),
     )
     .unwrap();
 

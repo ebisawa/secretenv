@@ -6,11 +6,11 @@
 use clap::Args;
 use std::path::PathBuf;
 
-use crate::app::context::CommonCommandOptions;
-use crate::app::file::{decrypt_file_command, validate_decrypt_input};
+use crate::app::context::options::CommonCommandOptions;
+use crate::app::file::decrypt::{decrypt_file_command, validate_decrypt_input};
 use crate::cli::common::options::CommonOptions;
-use crate::cli::common::ssh::resolve_ssh_context_for_active_key;
-use crate::cli::file_output;
+use crate::cli::common::output::file::write_decrypted_output;
+use crate::cli::common::ssh::resolve_ssh_context_optional;
 use crate::{Error, Result};
 
 #[derive(Args)]
@@ -48,7 +48,7 @@ pub fn run(args: DecryptArgs) -> Result<()> {
     })?;
 
     let options = CommonCommandOptions::from(&args.common);
-    let ssh_ctx = resolve_ssh_context_for_active_key(&options)?;
+    let ssh_ctx = resolve_ssh_context_optional(&options)?;
     let plaintext_bytes = decrypt_file_command(
         &options,
         args.member_id.clone(),
@@ -57,5 +57,6 @@ pub fn run(args: DecryptArgs) -> Result<()> {
         ssh_ctx,
     )?;
 
-    file_output::save_decrypted_file(plaintext_bytes.as_ref(), out_path, args.common.quiet)
+    write_decrypted_output(out_path, plaintext_bytes.as_ref(), args.common.quiet)?;
+    Ok(())
 }

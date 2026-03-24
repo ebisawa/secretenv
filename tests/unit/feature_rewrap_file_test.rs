@@ -6,11 +6,11 @@
 use crate::cli_common::{ALICE_MEMBER_ID, BOB_MEMBER_ID};
 use crate::keygen_helpers::make_verified_members;
 use crate::test_utils::{setup_member_key_context, setup_test_keystore_from_fixtures};
+use secretenv::app::rewrap::execution::rewrap_file_content_with_request;
+use secretenv::app::rewrap::types::SingleRewrapRequest;
 use secretenv::feature::context::crypto::CryptoContext;
 use secretenv::feature::encrypt::file::encrypt_file_document;
-use secretenv::feature::encrypt::SigningContext;
-use secretenv::feature::rewrap::file::rewrap_file_document;
-use secretenv::feature::rewrap::RewrapOptions;
+use secretenv::feature::envelope::signature::SigningContext;
 use secretenv::format::content::FileEncContent;
 use secretenv::io::keystore::storage::{list_kids, load_public_key};
 use std::fs;
@@ -31,12 +31,19 @@ fn setup_workspace_members(temp_dir: &TempDir, member_id: &str, kid: &str) {
     .unwrap();
 }
 
-/// Build default RewrapOptions.
-fn rewrap_options_default(debug: bool) -> RewrapOptions {
-    RewrapOptions {
-        rotate_key: false,
-        clear_disclosure_history: false,
-        token_codec: None,
+fn single_rewrap_request<'a>(
+    key_ctx: &'a CryptoContext,
+    workspace_root: Option<&'a std::path::Path>,
+    rotate_key: bool,
+    clear_disclosure_history: bool,
+    debug: bool,
+) -> SingleRewrapRequest<'a> {
+    SingleRewrapRequest {
+        member_id: ALICE_MEMBER_ID,
+        key_ctx,
+        workspace_root,
+        rotate_key,
+        clear_disclosure_history,
         no_signer_pub: false,
         debug,
     }
@@ -146,14 +153,8 @@ fn test_rewrap_file_add_recipient() {
     setup_workspace_members(&temp_dir, ALICE_MEMBER_ID, &alice_kid);
     setup_workspace_members(&temp_dir, BOB_MEMBER_ID, &bob_kid);
 
-    let options = rewrap_options_default(false);
-    let result = rewrap_file_document(
-        &options,
-        &FileEncContent::new_unchecked(json),
-        ALICE_MEMBER_ID,
-        &key_ctx,
-        Some(temp_dir.path()),
-    );
+    let request = single_rewrap_request(&key_ctx, Some(temp_dir.path()), false, false, false);
+    let result = rewrap_file_content_with_request(&FileEncContent::new_unchecked(json), &request);
 
     assert!(
         result.is_ok(),
@@ -189,14 +190,8 @@ fn test_rewrap_file_remove_recipient() {
     // Setup workspace with only alice (bob removed)
     setup_workspace_members(&temp_dir, ALICE_MEMBER_ID, &alice_kid);
 
-    let options = rewrap_options_default(false);
-    let result = rewrap_file_document(
-        &options,
-        &FileEncContent::new_unchecked(json),
-        ALICE_MEMBER_ID,
-        &key_ctx,
-        Some(temp_dir.path()),
-    );
+    let request = single_rewrap_request(&key_ctx, Some(temp_dir.path()), false, false, false);
+    let result = rewrap_file_content_with_request(&FileEncContent::new_unchecked(json), &request);
 
     assert!(
         result.is_ok(),
@@ -233,20 +228,9 @@ fn test_rewrap_file_rotate_key() {
 
     let json = encrypt_file_for_alice(&temp_dir, kid, &key_ctx);
 
-    let options = RewrapOptions {
-        rotate_key: true,
-        clear_disclosure_history: false,
-        token_codec: None,
-        no_signer_pub: false,
-        debug: false,
-    };
-    let result = rewrap_file_document(
-        &options,
-        &FileEncContent::new_unchecked(json.clone()),
-        ALICE_MEMBER_ID,
-        &key_ctx,
-        Some(temp_dir.path()),
-    );
+    let request = single_rewrap_request(&key_ctx, Some(temp_dir.path()), true, false, false);
+    let result =
+        rewrap_file_content_with_request(&FileEncContent::new_unchecked(json.clone()), &request);
 
     assert!(
         result.is_ok(),
@@ -281,15 +265,11 @@ fn test_rewrap_file_clear_disclosure_history() {
     // Setup workspace with only alice (bob removed) => removal creates disclosure history
     setup_workspace_members(&temp_dir, ALICE_MEMBER_ID, &alice_kid);
 
-    let remove_options = rewrap_options_default(false);
-    let after_remove = rewrap_file_document(
-        &remove_options,
-        &FileEncContent::new_unchecked(json),
-        ALICE_MEMBER_ID,
-        &key_ctx,
-        Some(temp_dir.path()),
-    )
-    .unwrap();
+    let remove_request =
+        single_rewrap_request(&key_ctx, Some(temp_dir.path()), false, false, false);
+    let after_remove =
+        rewrap_file_content_with_request(&FileEncContent::new_unchecked(json), &remove_request)
+            .unwrap();
 
     // Verify disclosure history exists after removal
     let after_remove_doc: secretenv::model::file_enc::FileEncDocument =
@@ -300,19 +280,10 @@ fn test_rewrap_file_clear_disclosure_history() {
     );
 
     // Now rewrap again with clear_disclosure_history
-    let clear_options = RewrapOptions {
-        rotate_key: false,
-        clear_disclosure_history: true,
-        token_codec: None,
-        no_signer_pub: false,
-        debug: false,
-    };
-    let result = rewrap_file_document(
-        &clear_options,
+    let clear_request = single_rewrap_request(&key_ctx, Some(temp_dir.path()), false, true, false);
+    let result = rewrap_file_content_with_request(
         &FileEncContent::new_unchecked(after_remove),
-        ALICE_MEMBER_ID,
-        &key_ctx,
-        Some(temp_dir.path()),
+        &clear_request,
     );
 
     assert!(
@@ -343,14 +314,8 @@ fn test_rewrap_file_preserves_payload() {
 
     let json = encrypt_file_for_alice(&temp_dir, kid, &key_ctx);
 
-    let options = rewrap_options_default(false);
-    let result = rewrap_file_document(
-        &options,
-        &FileEncContent::new_unchecked(json),
-        ALICE_MEMBER_ID,
-        &key_ctx,
-        Some(temp_dir.path()),
-    );
+    let request = single_rewrap_request(&key_ctx, Some(temp_dir.path()), false, false, false);
+    let result = rewrap_file_content_with_request(&FileEncContent::new_unchecked(json), &request);
 
     assert!(result.is_ok(), "rewrap must succeed: {:?}", result.err());
 
@@ -375,14 +340,8 @@ fn test_rewrap_file_requires_workspace() {
 
     let json = encrypt_file_for_alice(&temp_dir, kid, &key_ctx);
 
-    let options = rewrap_options_default(false);
-    let result = rewrap_file_document(
-        &options,
-        &FileEncContent::new_unchecked(json),
-        ALICE_MEMBER_ID,
-        &key_ctx,
-        None,
-    );
+    let request = single_rewrap_request(&key_ctx, None, false, false, false);
+    let result = rewrap_file_content_with_request(&FileEncContent::new_unchecked(json), &request);
 
     assert!(
         result.is_err(),

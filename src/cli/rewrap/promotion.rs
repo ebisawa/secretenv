@@ -3,10 +3,10 @@
 
 //! TOFU confirmation and promotion output for rewrap.
 
-use crate::app::rewrap::{
-    build_promotion_decision, IncomingVerificationItem, IncomingVerificationReport,
-    PromotionBlockError, PromotionDecision, PromotionWarning,
+use crate::app::rewrap::promotion::{
+    build_promotion_decision, PromotionBlockError, PromotionDecision, PromotionWarning,
 };
+use crate::app::rewrap::types::{IncomingVerificationItem, IncomingVerificationReport};
 use crate::{Error, Result};
 use std::io::BufRead;
 

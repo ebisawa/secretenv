@@ -14,12 +14,10 @@ use crate::test_utils::{keygen_test, setup_test_keystore_from_fixtures};
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
 use ed25519_dalek::{SigningKey, VerifyingKey};
-use secretenv::config::types::SshSigner;
-use secretenv::feature::context::ssh::SshSigningContext;
-use secretenv::feature::key::generate::{
-    build_identity_keys, build_public_key, generate_keypairs, KeyGenerationOptions,
-    PublicKeyBuildParams,
-};
+use secretenv::feature::key::generate::KeyGenerationOptions;
+use secretenv::feature::key::material::{build_identity_keys, generate_keypairs};
+use secretenv::feature::key::public_key_document::{build_public_key, PublicKeyBuildParams};
+use secretenv::feature::key::ssh_binding::SshBindingContext;
 use secretenv::io::keystore::active::load_active_kid;
 use secretenv::io::keystore::resolver::KeystoreResolver;
 use secretenv::io::keystore::signer::load_signer_public_key_if_needed;
@@ -486,31 +484,28 @@ fn test_build_public_key() {
 fn test_load_signer_public_key_if_needed_default() {
     let temp_dir = setup_test_keystore_from_fixtures(ALICE_MEMBER_ID);
     let keystore_root = temp_dir.path().join("keys");
-    let kids = list_kids(&keystore_root, ALICE_MEMBER_ID).unwrap();
-    let kid = kids.first().unwrap();
+    let pub_key_source =
+        secretenv::io::keystore::public_key_source::KeystorePublicKeySource::new(keystore_root);
 
     // no_signer_pub=false means DO embed the signer public key
-    let result =
-        load_signer_public_key_if_needed(&keystore_root, ALICE_MEMBER_ID, kid, false).unwrap();
+    let result = load_signer_public_key_if_needed(&pub_key_source, ALICE_MEMBER_ID, false).unwrap();
 
     assert!(result.is_some());
     assert_eq!(
         result.as_ref().unwrap().protected.member_id,
         ALICE_MEMBER_ID
     );
-    assert_eq!(&result.as_ref().unwrap().protected.kid, kid);
 }
 
 #[test]
 fn test_load_signer_public_key_if_needed_no_signer_pub() {
     let temp_dir = setup_test_keystore_from_fixtures(ALICE_MEMBER_ID);
     let keystore_root = temp_dir.path().join("keys");
-    let kids = list_kids(&keystore_root, ALICE_MEMBER_ID).unwrap();
-    let kid = kids.first().unwrap();
+    let pub_key_source =
+        secretenv::io::keystore::public_key_source::KeystorePublicKeySource::new(keystore_root);
 
     // no_signer_pub=true means DON'T embed the signer public key
-    let result =
-        load_signer_public_key_if_needed(&keystore_root, ALICE_MEMBER_ID, kid, true).unwrap();
+    let result = load_signer_public_key_if_needed(&pub_key_source, ALICE_MEMBER_ID, true).unwrap();
 
     assert!(result.is_none());
 }
@@ -535,8 +530,7 @@ fn test_generate_key_rejects_skipped_determinism() {
     let fingerprint =
         secretenv::io::ssh::protocol::build_sha256_fingerprint(ssh_pub_content.trim()).unwrap();
 
-    let ssh_context = SshSigningContext {
-        signing_method: SshSigner::SshKeygen,
+    let ssh_binding = SshBindingContext {
         public_key: ssh_pub_content.trim().to_string(),
         fingerprint,
         backend,
@@ -557,7 +551,7 @@ fn test_generate_key_rejects_skipped_determinism() {
         debug: false,
         github_account: None,
         verbose: false,
-        ssh_context,
+        ssh_binding,
     });
 
     let err_msg = match result {

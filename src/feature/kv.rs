@@ -5,14 +5,11 @@
 
 pub mod builder;
 pub mod decrypt;
+pub(crate) mod document;
 pub mod encrypt;
-mod mutate;
-mod query;
-pub(crate) mod rewrite;
+pub(crate) mod entry_codec;
+pub(crate) mod header;
+pub mod mutate;
+pub mod query;
+pub(crate) mod rewrite_session;
 pub(crate) mod sign;
-
-pub use mutate::{set_kv_entry, unset_kv_entry, KvSetResult, KvWriteContext};
-pub use query::{
-    check_kv_entry_disclosed, decrypt_all_kv_values, decrypt_kv_value, list_kv_keys,
-    list_kv_keys_with_disclosed,
-};

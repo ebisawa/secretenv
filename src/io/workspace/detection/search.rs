@@ -3,6 +3,7 @@
 
 use crate::support::path::display_path_relative_to_cwd;
 use crate::{Error, Result};
+use std::fs;
 use std::path::{Path, PathBuf};
 
 /// Workspace root information
@@ -75,6 +76,13 @@ pub fn detect_workspace_root(start_path: &Path) -> Result<WorkspaceRoot> {
         }
 
         if current == git_root {
+            // In a git worktree, .git is a file. Resolve the main repository
+            // root and search there as well.
+            if let Some(main_root) = resolve_worktree_main_root(&git_root) {
+                if let Some(workspace) = check_workspace(&main_root) {
+                    return Ok(workspace);
+                }
+            }
             return Err(Error::NotFound {
                 message: format!(
                     "No workspace found within git repository (searched from '{}')",
@@ -107,6 +115,60 @@ pub(super) fn find_git_root(start: &Path) -> Option<PathBuf> {
             return None;
         }
     }
+}
+
+/// Resolve the main repository root from a git worktree.
+///
+/// In a worktree, `.git` is a file containing `gitdir: <path>`.
+/// The referenced directory contains a `commondir` file pointing to the
+/// main repository's `.git` directory.
+fn resolve_worktree_main_root(worktree_root: &Path) -> Option<PathBuf> {
+    let dot_git = worktree_root.join(".git");
+    if !dot_git.is_file() {
+        return None;
+    }
+
+    let content = fs::read_to_string(&dot_git)
+        .map_err(|e| tracing::debug!("Failed to read .git file at {}: {}", dot_git.display(), e))
+        .ok()?;
+    let gitdir = content.strip_prefix("gitdir: ")?.trim();
+    let gitdir_path = Path::new(gitdir);
+    let gitdir_abs = if gitdir_path.is_absolute() {
+        gitdir_path.to_path_buf()
+    } else {
+        worktree_root.join(gitdir_path)
+    };
+
+    let commondir_file = gitdir_abs.join("commondir");
+    let commondir_content = fs::read_to_string(&commondir_file)
+        .map_err(|e| {
+            tracing::debug!(
+                "Failed to read commondir at {}: {}",
+                commondir_file.display(),
+                e
+            )
+        })
+        .ok()?;
+    let commondir = commondir_content.trim();
+    let commondir_path = Path::new(commondir);
+    let main_git_dir = if commondir_path.is_absolute() {
+        commondir_path.to_path_buf()
+    } else {
+        gitdir_abs.join(commondir_path)
+    };
+
+    main_git_dir
+        .canonicalize()
+        .map_err(|e| {
+            tracing::debug!(
+                "Failed to canonicalize main git dir {}: {}",
+                main_git_dir.display(),
+                e
+            )
+        })
+        .ok()?
+        .parent()
+        .map(Path::to_path_buf)
 }
 
 fn check_explicit_workspace_dir(path: &Path) -> Option<WorkspaceRoot> {

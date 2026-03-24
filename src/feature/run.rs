@@ -4,7 +4,7 @@
 //! Run feature - build environment variables from kv-enc files.
 
 use crate::feature::context::crypto::CryptoContext;
-use crate::feature::kv::decrypt_all_kv_values;
+use crate::feature::kv::query::decrypt_all_kv_values;
 use crate::format::content::KvEncContent;
 use crate::Result;
 use std::collections::BTreeMap;

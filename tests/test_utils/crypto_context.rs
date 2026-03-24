@@ -6,6 +6,7 @@
 //! Uses Ed25519DirectBackend to avoid spawning ssh-keygen subprocesses.
 
 use super::ed25519_backend::Ed25519DirectBackend;
+use secretenv::app::context::crypto::load_crypto_context;
 use secretenv::feature::context::crypto::CryptoContext;
 use secretenv::io::ssh::backend::SignatureBackend;
 use std::fs;
@@ -29,7 +30,7 @@ pub fn setup_member_key_context(
     let backend: Box<dyn SignatureBackend> =
         Box::new(Ed25519DirectBackend::new(&ssh_priv).unwrap());
 
-    CryptoContext::load(
+    load_crypto_context(
         member_id,
         backend.as_ref(),
         &ssh_pub,

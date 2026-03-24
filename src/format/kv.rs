@@ -7,12 +7,9 @@
 //! - dotenv: Dotenv format parser
 //! - enc: KV-enc format parser/writer
 
-mod document;
-
+pub mod document;
 pub mod dotenv;
 pub mod enc;
-
-pub use document::{parse_kv_document, validate_kv_file_structure};
 
 /// Header line prefix with colon: `:SECRETENV_KV `.
 pub const HEADER_LINE_PREFIX: &str = ":SECRETENV_KV ";
@@ -26,8 +23,9 @@ pub const DEFAULT_KV_ENC_BASENAME: &str = "default";
 /// Default kv-enc file name: `default.kvenc`.
 pub const DEFAULT_KV_ENC_FILE_NAME: &str = "default.kvenc";
 
-use crate::format::kv::enc::parser::{KvEncLine, KvEncParser};
+use crate::format::kv::enc::parser::KvEncParser;
 use crate::format::token::TokenCodec;
+use crate::model::kv_enc::line::KvEncLine;
 
 /// Detect token codec from kv-enc content by parsing WRAP line.
 ///

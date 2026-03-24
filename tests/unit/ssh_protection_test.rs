@@ -5,10 +5,10 @@ use secretenv::crypto::kdf::expand_to_array;
 use secretenv::crypto::types::data::{Ikm, Info};
 use secretenv::crypto::types::keys::XChaChaKey;
 use secretenv::crypto::types::primitives::Salt;
-use secretenv::feature::key::protection::key_derivation::build_sign_message;
-use secretenv::feature::key::protection::{
+use secretenv::feature::key::protection::encryption::{
     decrypt_private_key, encrypt_private_key, PrivateKeyEncryptionParams,
 };
+use secretenv::feature::key::protection::key_derivation::build_sign_message;
 use secretenv::io::ssh::backend::signature_backend::SignatureBackend;
 use secretenv::io::ssh::protocol::types::Ed25519RawSignature;
 use secretenv::model::identifiers::context::{

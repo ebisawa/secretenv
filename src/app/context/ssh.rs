@@ -1,0 +1,192 @@
+// Copyright 2026 Satoshi Ebisawa
+// SPDX-License-Identifier: Apache-2.0
+
+use std::path::PathBuf;
+
+use crate::app::context::member::resolve_active_key_member_context;
+use crate::app::context::options::CommonCommandOptions;
+use crate::feature::context::ssh::backend::build_ssh_signing_context as feature_build_ssh_signing_context;
+use crate::feature::context::ssh::candidate::resolve_ssh_key_candidates as feature_resolve_ssh_key_candidates;
+use crate::feature::context::ssh::params::{
+    SshSigningContext as FeatureSshSigningContext, SshSigningParams as FeatureSshSigningParams,
+};
+use crate::feature::key::ssh_binding::SshBindingContext;
+use crate::io::keystore::active::load_active_kid;
+use crate::io::keystore::storage::load_private_key;
+use crate::io::ssh::backend::SignatureBackend;
+use crate::io::ssh::external::pubkey::SshKeyCandidate;
+use crate::model::private_key::PrivateKey;
+use crate::model::private_key::PrivateKeyAlgorithm;
+use crate::model::ssh::SshDeterminismStatus;
+use crate::{Error, Result};
+
+pub struct ResolvedSshSigner {
+    pub signing_method: crate::config::types::SshSigner,
+    pub public_key: String,
+    pub fingerprint: String,
+    pub backend: Box<dyn SignatureBackend>,
+    pub determinism: SshDeterminismStatus,
+}
+
+impl ResolvedSshSigner {
+    pub fn into_ssh_binding(self) -> SshBindingContext {
+        SshBindingContext {
+            public_key: self.public_key,
+            fingerprint: self.fingerprint,
+            backend: self.backend,
+            determinism: self.determinism,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SshKeyCandidateView {
+    pub public_key: String,
+    pub fingerprint: String,
+    pub comment: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct SshSigningParams {
+    pub ssh_key: Option<PathBuf>,
+    pub signing_method: Option<crate::config::types::SshSigner>,
+    pub base_dir: Option<PathBuf>,
+    pub verbose: bool,
+    pub check_determinism: bool,
+}
+
+fn build_ssh_signing_params(options: &CommonCommandOptions) -> SshSigningParams {
+    SshSigningParams {
+        ssh_key: options.identity.clone(),
+        signing_method: options.ssh_signer,
+        base_dir: options.home.clone(),
+        verbose: options.verbose,
+        check_determinism: false,
+    }
+}
+
+fn build_feature_ssh_signing_params(params: &SshSigningParams) -> FeatureSshSigningParams {
+    FeatureSshSigningParams {
+        ssh_key: params.ssh_key.clone(),
+        signing_method: params.signing_method,
+        base_dir: params.base_dir.clone(),
+        verbose: params.verbose,
+        check_determinism: params.check_determinism,
+    }
+}
+
+fn build_resolved_ssh_signer(ctx: FeatureSshSigningContext) -> ResolvedSshSigner {
+    ResolvedSshSigner {
+        signing_method: ctx.signing_method,
+        public_key: ctx.public_key,
+        fingerprint: ctx.fingerprint,
+        backend: ctx.backend,
+        determinism: ctx.determinism,
+    }
+}
+
+pub fn resolve_ssh_key_candidates(
+    options: &CommonCommandOptions,
+) -> Result<Vec<SshKeyCandidateView>> {
+    let params = build_ssh_signing_params(options);
+    resolve_ssh_key_candidates_with_params(&params)
+}
+
+pub fn resolve_ssh_key_candidates_with_params(
+    params: &SshSigningParams,
+) -> Result<Vec<SshKeyCandidateView>> {
+    let params = build_feature_ssh_signing_params(params);
+    let candidates = feature_resolve_ssh_key_candidates(&params)?;
+    Ok(build_ssh_candidate_views(candidates))
+}
+
+pub fn build_ssh_signing_context(
+    options: &CommonCommandOptions,
+    selected_pubkey: &str,
+    check_determinism: bool,
+) -> Result<ResolvedSshSigner> {
+    let mut params = build_ssh_signing_params(options);
+    params.check_determinism = check_determinism;
+    build_ssh_signing_context_with_params(&params, selected_pubkey)
+}
+
+pub fn build_ssh_signing_context_with_params(
+    params: &SshSigningParams,
+    selected_pubkey: &str,
+) -> Result<ResolvedSshSigner> {
+    let params = build_feature_ssh_signing_params(params);
+    let signer = feature_build_ssh_signing_context(&params, selected_pubkey)?;
+    Ok(build_resolved_ssh_signer(signer))
+}
+
+pub fn resolve_ssh_context_by_active_key(
+    options: &CommonCommandOptions,
+) -> Result<ResolvedSshSigner> {
+    let resolved = resolve_active_key_member_context(options)?;
+    let fingerprint =
+        resolve_active_key_ssh_fingerprint(&resolved.member_id, &resolved.paths.keystore_root)?;
+    resolve_ssh_context_for_fingerprint(options, &fingerprint)
+}
+
+pub fn find_ssh_candidate_by_fingerprint<'a>(
+    candidates: &'a [SshKeyCandidateView],
+    fingerprint: &str,
+) -> Result<&'a SshKeyCandidateView> {
+    candidates
+        .iter()
+        .find(|candidate| candidate.fingerprint == fingerprint)
+        .ok_or_else(|| Error::NotFound {
+            message: format!(
+                "SSH key for active key ({fingerprint}) not found in ssh-agent. \
+                 Load it with ssh-add or specify with -i"
+            ),
+        })
+}
+
+fn build_ssh_candidate_views(candidates: Vec<SshKeyCandidate>) -> Vec<SshKeyCandidateView> {
+    candidates
+        .into_iter()
+        .map(|candidate| SshKeyCandidateView {
+            public_key: candidate.public_key,
+            fingerprint: candidate.fingerprint,
+            comment: candidate.comment,
+        })
+        .collect()
+}
+
+fn resolve_ssh_context_for_fingerprint(
+    options: &CommonCommandOptions,
+    fingerprint: &str,
+) -> Result<ResolvedSshSigner> {
+    let candidates = resolve_ssh_key_candidates(options)?;
+    let matched = find_ssh_candidate_by_fingerprint(&candidates, fingerprint)?;
+    build_ssh_signing_context(options, &matched.public_key, false)
+}
+
+fn resolve_active_key_ssh_fingerprint(
+    member_id: &str,
+    keystore_root: &std::path::Path,
+) -> Result<String> {
+    let kid = load_active_kid_for_ssh_context(member_id, keystore_root)?;
+    let private_key = load_private_key(keystore_root, member_id, &kid)?;
+    Ok(resolve_ssh_fingerprint_from_private_key(&private_key)?.to_string())
+}
+
+fn load_active_kid_for_ssh_context(
+    member_id: &str,
+    keystore_root: &std::path::Path,
+) -> Result<String> {
+    load_active_kid(member_id, keystore_root)?.ok_or_else(|| Error::NotFound {
+        message: format!("No active key for member: {}", member_id),
+    })
+}
+
+fn resolve_ssh_fingerprint_from_private_key(private_key: &PrivateKey) -> Result<&str> {
+    match &private_key.protected.alg {
+        PrivateKeyAlgorithm::SshSig { fpr, .. } => Ok(fpr.as_str()),
+        _ => Err(Error::Crypto {
+            message: "Expected SshSig algorithm for SSH signing context".to_string(),
+            source: None,
+        }),
+    }
+}

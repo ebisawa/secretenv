@@ -8,7 +8,7 @@
 use crate::cli_common::ALICE_MEMBER_ID;
 use crate::keygen_helpers::make_verified_members;
 use crate::test_utils::{setup_member_key_context, setup_test_keystore_from_fixtures};
-use secretenv::feature::encrypt::SigningContext;
+use secretenv::feature::envelope::signature::SigningContext;
 use secretenv::feature::kv::encrypt::encrypt_kv_document;
 use secretenv::feature::run::build_env_from_kv_contents;
 use secretenv::format::token::TokenCodec;

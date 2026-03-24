@@ -3,6 +3,7 @@
 
 //! SSH public key retrieval utilities
 
+use super::keygen::DefaultSshKeygen;
 use crate::io::ssh::external::traits::{SshAdd, SshKeygen};
 use crate::io::ssh::protocol::constants as ssh;
 use crate::io::ssh::protocol::fingerprint::build_sha256_fingerprint;
@@ -12,7 +13,6 @@ use crate::support::fs::load_text;
 use crate::support::path::display_path_relative_to_cwd;
 use crate::{Error, Result};
 use std::path::Path;
-use std::process::Command;
 
 /// Candidate SSH key discovered from the agent or a file.
 #[derive(Debug)]
@@ -35,20 +35,8 @@ pub fn load_ssh_public_key_from_keygen(
     ssh_keygen_path: &str,
     ssh_key_path: &Path,
 ) -> Result<String> {
-    let output = Command::new(ssh_keygen_path)
-        .args(["-y", "-f"])
-        .arg(ssh_key_path)
-        .output()
-        .map_err(|e| ssh_error(format!("Failed to execute ssh-keygen: {e}")))?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(ssh_error(format!("ssh-keygen failed: {stderr}")));
-    }
-
-    String::from_utf8(output.stdout)
-        .map(|s| s.trim().to_string())
-        .map_err(|e| ssh_error(format!("Invalid UTF-8 in ssh-keygen output: {e}")))
+    let ssh_keygen = DefaultSshKeygen::new(ssh_keygen_path);
+    ssh_keygen.derive_public_key(ssh_key_path)
 }
 
 /// Read SSH public key directly from a .pub file
@@ -120,16 +108,8 @@ pub fn load_ssh_public_key_with_descriptor(
     ssh_keygen_path: &str,
     key_descriptor: &SshKeyDescriptor,
 ) -> Result<String> {
-    match key_descriptor {
-        SshKeyDescriptor::PrivateKey(private_key) => {
-            // Derive from private key using ssh-keygen -y
-            load_ssh_public_key_from_keygen(ssh_keygen_path, private_key.as_path())
-        }
-        SshKeyDescriptor::PublicKey(public_key) => {
-            // Read directly from .pub file
-            load_ssh_public_key_file(public_key.as_path())
-        }
-    }
+    let ssh_keygen = DefaultSshKeygen::new(ssh_keygen_path);
+    load_ssh_public_key_with_descriptor_trait(&ssh_keygen, key_descriptor)
 }
 
 /// Load SSH public key using a key descriptor via the `SshKeygen` trait.

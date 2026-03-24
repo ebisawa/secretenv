@@ -3,15 +3,14 @@
 
 //! get command - get and decrypt key-value entries from default kv-enc file
 
-use std::collections::BTreeMap;
-
 use clap::Args;
 
-use crate::app::context::CommonCommandOptions;
-use crate::app::kv::{get_kv_command, list_kv_command};
+use crate::app::context::options::CommonCommandOptions;
+use crate::app::kv::query::get_kv_command;
+use crate::app::kv::types::KvReadResult;
 use crate::cli::common::options::CommonOptions;
 use crate::cli::common::output::json::print_json_output;
-use crate::cli::common::ssh::resolve_ssh_context_for_active_key;
+use crate::cli::common::ssh::resolve_ssh_context_optional;
 use crate::Result;
 
 #[derive(Args)]
@@ -53,7 +52,7 @@ pub fn run(args: GetArgs) -> Result<()> {
     }
 
     let options = CommonCommandOptions::from(&args.common);
-    let ssh_ctx = resolve_ssh_context_for_active_key(&options)?;
+    let ssh_ctx = resolve_ssh_context_optional(&options)?;
     let kv_map = get_kv_command(
         &options,
         args.member_id.clone(),
@@ -62,12 +61,11 @@ pub fn run(args: GetArgs) -> Result<()> {
         args.all,
         ssh_ctx,
     )?;
-    let disclosed = list_kv_command(&options, args.name.as_deref())?;
 
     if args.all {
-        run_all(&kv_map, &disclosed, &args)
+        run_all(&kv_map, &args)
     } else {
-        run_single(&kv_map, &disclosed, &args)
+        run_single(&kv_map, &args)
     }
 }
 
@@ -95,21 +93,18 @@ fn warn_disclosed(keys: &[(String, bool)]) {
     }
 }
 
-fn run_all(
-    kv_map: &BTreeMap<String, String>,
-    disclosed: &[(String, bool)],
-    args: &GetArgs,
-) -> Result<()> {
-    warn_disclosed(disclosed);
+fn run_all(result: &KvReadResult, args: &GetArgs) -> Result<()> {
+    warn_disclosed(&result.disclosed);
 
     if args.common.json {
-        let map: BTreeMap<&str, &str> = kv_map
+        let map: std::collections::BTreeMap<&str, &str> = result
+            .values
             .iter()
             .map(|(k, v)| (k.as_str(), v.as_str()))
             .collect();
         print_json_output(&map)?;
     } else {
-        let mut entries: Vec<_> = kv_map.iter().collect();
+        let mut entries: Vec<_> = result.values.iter().collect();
         entries.sort_by_key(|(k, _)| k.as_str());
         for (key, value) in entries {
             println!("{}", format_value(key, value, args.with_key));
@@ -118,15 +113,12 @@ fn run_all(
     Ok(())
 }
 
-fn run_single(
-    kv_map: &BTreeMap<String, String>,
-    disclosed: &[(String, bool)],
-    args: &GetArgs,
-) -> Result<()> {
+fn run_single(result: &KvReadResult, args: &GetArgs) -> Result<()> {
     let key = args.key.as_deref().unwrap();
-    let value = kv_map.get(key).cloned().unwrap_or_default();
+    let value = result.values.get(key).cloned().unwrap_or_default();
 
-    if disclosed
+    if result
+        .disclosed
         .iter()
         .any(|(name, is_disclosed)| name == key && *is_disclosed)
     {
@@ -138,7 +130,7 @@ fn run_single(
     }
 
     if args.common.json {
-        let mut map = BTreeMap::new();
+        let mut map = std::collections::BTreeMap::new();
         map.insert(key, value.as_str());
         print_json_output(&map)?;
     } else {

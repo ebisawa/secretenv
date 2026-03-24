@@ -4,7 +4,6 @@
 use crate::cli_common::TEST_MEMBER_ID;
 use crate::test_utils::save_public_key;
 use secretenv::io::keystore::storage::*;
-use secretenv::model::identifiers::private_key::PROTECTION_METHOD_SSHSIG_ED25519_HKDF_SHA256;
 use secretenv::model::private_key::{
     EncryptedData, PrivateKey, PrivateKeyAlgorithm, PrivateKeyProtected,
 };
@@ -27,8 +26,7 @@ fn test_save_and_load_private_key() {
             format: secretenv::model::identifiers::format::PRIVATE_KEY_V3.to_string(),
             member_id: member_id.to_string(),
             kid: kid.to_string(),
-            alg: PrivateKeyAlgorithm {
-                kdf: PROTECTION_METHOD_SSHSIG_ED25519_HKDF_SHA256.to_string(),
+            alg: PrivateKeyAlgorithm::SshSig {
                 fpr: "sha256:TEST123".to_string(),
                 salt: "c2FsdA".to_string(),
                 aead: secretenv::model::identifiers::alg::AEAD_XCHACHA20_POLY1305.to_string(),
@@ -86,7 +84,7 @@ fn test_save_and_load_private_key() {
 
     assert_eq!(loaded.protected.member_id, private_key.protected.member_id);
     assert_eq!(loaded.protected.kid, private_key.protected.kid);
-    assert_eq!(loaded.protected.alg.fpr, private_key.protected.alg.fpr);
+    assert_eq!(loaded.protected.alg, private_key.protected.alg);
 }
 
 #[test]

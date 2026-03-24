@@ -7,9 +7,10 @@
 
 use secretenv::io::ssh::external::pubkey::{
     collect_ed25519_keys_in_output, load_ed25519_keys_from_agent, load_ssh_public_key_file,
-    load_ssh_public_key_with_descriptor, SshKeyCandidate,
+    load_ssh_public_key_with_descriptor, load_ssh_public_key_with_descriptor_trait,
+    SshKeyCandidate,
 };
-use secretenv::io::ssh::external::traits::SshAdd;
+use secretenv::io::ssh::external::traits::{SshAdd, SshKeygen};
 use secretenv::io::ssh::protocol::key_descriptor::SshKeyDescriptor;
 use secretenv::Result;
 use std::path::PathBuf;
@@ -58,6 +59,43 @@ impl SshAdd for MockSshAdd {
                 secretenv::io::ssh::SshError::operation_failed(e.to_string()),
             )),
         }
+    }
+}
+
+struct MockSshKeygen {
+    derived_public_key: Result<String>,
+}
+
+impl MockSshKeygen {
+    fn ok(public_key: &str) -> Self {
+        Self {
+            derived_public_key: Ok(public_key.to_string()),
+        }
+    }
+}
+
+impl SshKeygen for MockSshKeygen {
+    fn derive_public_key(&self, _key_path: &std::path::Path) -> Result<String> {
+        match &self.derived_public_key {
+            Ok(value) => Ok(value.clone()),
+            Err(error) => Err(secretenv::Error::from(
+                secretenv::io::ssh::SshError::operation_failed(error.to_string()),
+            )),
+        }
+    }
+
+    fn sign(&self, _key_path: &std::path::Path, _namespace: &str, _data: &[u8]) -> Result<String> {
+        unreachable!("sign is not used in this test");
+    }
+
+    fn verify(
+        &self,
+        _ssh_pubkey: &str,
+        _namespace: &str,
+        _message: &[u8],
+        _signature: &str,
+    ) -> Result<()> {
+        unreachable!("verify is not used in this test");
     }
 }
 
@@ -123,6 +161,16 @@ fn test_load_ssh_public_key_with_descriptor_public_key() {
 
     // ssh-keygen path is not used when .pub file is provided
     let result = load_ssh_public_key_with_descriptor("unused-ssh-keygen", &descriptor).unwrap();
+    assert_eq!(result, VALID_ED25519_KEY);
+}
+
+#[test]
+fn test_load_ssh_public_key_with_descriptor_trait_private_key() {
+    let descriptor = SshKeyDescriptor::from_path(PathBuf::from("/tmp/test_ed25519"));
+    let ssh_keygen = MockSshKeygen::ok(VALID_ED25519_KEY);
+
+    let result = load_ssh_public_key_with_descriptor_trait(&ssh_keygen, &descriptor).unwrap();
+
     assert_eq!(result, VALID_ED25519_KEY);
 }
 

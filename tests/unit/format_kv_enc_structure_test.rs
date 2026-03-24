@@ -5,8 +5,8 @@
 //!
 //! Tests for strict structure validation (line order, counts, KEY format, duplicates)
 
+use secretenv::format::kv::document::validate_kv_file_structure;
 use secretenv::format::kv::enc::parser::KvEncParser;
-use secretenv::format::kv::validate_kv_file_structure;
 
 #[test]
 fn test_validate_valid_structure() {

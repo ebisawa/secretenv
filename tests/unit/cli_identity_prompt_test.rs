@@ -3,12 +3,12 @@
 
 //! Tests for cli::identity_prompt::select_ssh_key
 
-use secretenv::app::context::SshKeyCandidate;
+use secretenv::app::context::ssh::SshKeyCandidateView;
 use secretenv::cli::identity_prompt::select_ssh_key;
 
 #[test]
 fn test_select_ssh_key_empty_candidates_fails() {
-    let candidates: Vec<SshKeyCandidate> = vec![];
+    let candidates: Vec<SshKeyCandidateView> = vec![];
     let result = select_ssh_key(&candidates);
     assert!(result.is_err());
     let err_msg = result.unwrap_err().to_string();
@@ -20,7 +20,7 @@ fn test_select_ssh_key_empty_candidates_fails() {
 
 #[test]
 fn test_select_ssh_key_single_candidate_returns_zero() {
-    let candidates = vec![SshKeyCandidate {
+    let candidates = vec![SshKeyCandidateView {
         public_key: "ssh-ed25519 AAAA test@host".to_string(),
         fingerprint: "SHA256:abc123".to_string(),
         comment: "test@host".to_string(),
@@ -37,12 +37,12 @@ fn test_select_ssh_key_multiple_candidates_non_tty_fails() {
     }
 
     let candidates = vec![
-        SshKeyCandidate {
+        SshKeyCandidateView {
             public_key: "ssh-ed25519 AAAA test@host".to_string(),
             fingerprint: "SHA256:abc123".to_string(),
             comment: "test@host".to_string(),
         },
-        SshKeyCandidate {
+        SshKeyCandidateView {
             public_key: "ssh-ed25519 BBBB work@host".to_string(),
             fingerprint: "SHA256:def456".to_string(),
             comment: "work@host".to_string(),

@@ -7,13 +7,21 @@
 //! and verify report construction via the public verify_*_document_report API.
 
 use crate::cli_common::{ALICE_MEMBER_ID, BOB_MEMBER_ID, CAROL_MEMBER_ID, DAVE_MEMBER_ID};
-use crate::test_utils::setup_test_keystore;
-use secretenv::feature::inspect::inspect_document_with_verification;
+use crate::test_utils::{setup_test_keystore, EnvGuard};
+use secretenv::feature::inspect::{build_inspect_view, InspectOutput};
 use secretenv::feature::verify::file::verify_file_document_report;
-use secretenv::feature::verify::kv::verify_kv_document_report;
+use secretenv::feature::verify::kv::signature::verify_kv_document_report;
 use secretenv::format::content::EncryptedContent;
+use secretenv::format::token::TokenCodec;
+use secretenv::model::signature::Signature;
 use secretenv::model::verification::VerifyingKeySource;
 use std::fs;
+
+fn inspect_contains(output: &InspectOutput, needle: &str) -> bool {
+    output.sections.iter().any(|section| {
+        section.title.contains(needle) || section.lines.iter().any(|line| line.contains(needle))
+    })
+}
 
 /// Create a minimal workspace structure in `workspace_dir` and copy the given
 /// member's public key from `keystore_root` into `members/active/`.
@@ -64,6 +72,7 @@ fn build_common_opts(
 
 /// Helper: create a kv-enc encrypted file and return its content as String.
 fn create_kv_enc_content(member_id: &str) -> (tempfile::TempDir, String) {
+    let _guard = EnvGuard::new(&["SECRETENV_PRIVATE_KEY", "SECRETENV_KEY_PASSWORD"]);
     let temp_dir = setup_test_keystore(member_id);
     let test_dir = temp_dir.path().to_path_buf();
     let keystore_root = test_dir.join("keys");
@@ -92,6 +101,7 @@ fn create_kv_enc_content(member_id: &str) -> (tempfile::TempDir, String) {
 
 /// Helper: create a file-enc encrypted file and return its content as String.
 fn create_file_enc_content(member_id: &str) -> (tempfile::TempDir, String) {
+    let _guard = EnvGuard::new(&["SECRETENV_PRIVATE_KEY", "SECRETENV_KEY_PASSWORD"]);
     let temp_dir = setup_test_keystore(member_id);
     let test_dir = temp_dir.path().to_path_buf();
     let keystore_root = test_dir.join("keys");
@@ -128,14 +138,11 @@ fn test_inspect_file_enc_shows_format() {
     let (_temp_dir, content) = create_file_enc_content(ALICE_MEMBER_ID);
 
     let encrypted = EncryptedContent::detect(content).unwrap();
-    let output = inspect_document_with_verification(&encrypted, "secret.json", None, false)
-        .unwrap()
-        .formatted;
+    let output = build_inspect_view(&encrypted).unwrap();
 
     assert!(
-        output.contains("Format:"),
-        "file-enc inspect output should contain 'Format:' line. Output:\n{}",
-        output
+        inspect_contains(&output, "Format:"),
+        "file-enc inspect output should contain 'Format:' line. Output: {output:?}",
     );
 }
 
@@ -144,14 +151,11 @@ fn test_inspect_file_enc_shows_recipients() {
     let (_temp_dir, content) = create_file_enc_content(BOB_MEMBER_ID);
 
     let encrypted = EncryptedContent::detect(content).unwrap();
-    let output = inspect_document_with_verification(&encrypted, "secret.json", None, false)
-        .unwrap()
-        .formatted;
+    let output = build_inspect_view(&encrypted).unwrap();
 
     assert!(
-        output.contains("Recipients"),
-        "file-enc inspect output should contain 'Recipients' section. Output:\n{}",
-        output
+        inspect_contains(&output, "Recipients"),
+        "file-enc inspect output should contain 'Recipients' section. Output: {output:?}",
     );
 }
 
@@ -160,35 +164,28 @@ fn test_inspect_file_enc_shows_signature() {
     let (_temp_dir, content) = create_file_enc_content(CAROL_MEMBER_ID);
 
     let encrypted = EncryptedContent::detect(content).unwrap();
-    let output = inspect_document_with_verification(&encrypted, "secret.json", None, false)
-        .unwrap()
-        .formatted;
+    let output = build_inspect_view(&encrypted).unwrap();
 
     assert!(
-        output.contains("Signature:"),
-        "file-enc inspect output should contain 'Signature:' section. Output:\n{}",
-        output
+        inspect_contains(&output, "Signature"),
+        "file-enc inspect output should contain 'Signature:' section. Output: {output:?}",
     );
     assert!(
-        output.contains("alg:"),
-        "file-enc inspect output should contain algorithm info. Output:\n{}",
-        output
+        inspect_contains(&output, "alg:"),
+        "file-enc inspect output should contain algorithm info. Output: {output:?}",
     );
     assert!(
-        output.contains("kid:"),
-        "file-enc inspect output should contain kid info. Output:\n{}",
-        output
+        inspect_contains(&output, "kid:"),
+        "file-enc inspect output should contain kid info. Output: {output:?}",
     );
 
     assert!(
-        output.contains("Attestation Method:"),
-        "file-enc inspect output should include attestation method. Output:\n{}",
-        output
+        inspect_contains(&output, "Attestation Method:"),
+        "file-enc inspect output should include attestation method. Output: {output:?}",
     );
     assert!(
-        output.contains("Attestation Pubkey:"),
-        "file-enc inspect output should include attestation pubkey. Output:\n{}",
-        output
+        inspect_contains(&output, "Attestation Pubkey:"),
+        "file-enc inspect output should include attestation pubkey. Output: {output:?}",
     );
 }
 
@@ -201,19 +198,15 @@ fn test_inspect_kv_enc_shows_head() {
     let (_temp_dir, content) = create_kv_enc_content(ALICE_MEMBER_ID);
 
     let encrypted = EncryptedContent::detect(content).unwrap();
-    let output = inspect_document_with_verification(&encrypted, "default.kvenc", None, false)
-        .unwrap()
-        .formatted;
+    let output = build_inspect_view(&encrypted).unwrap();
 
     assert!(
-        output.contains("HEAD Data"),
-        "kv-enc inspect output should contain 'HEAD Data' section. Output:\n{}",
-        output
+        inspect_contains(&output, "HEAD Data"),
+        "kv-enc inspect output should contain 'HEAD Data' section. Output: {output:?}",
     );
     assert!(
-        output.contains("SID:"),
-        "kv-enc inspect output should contain SID in HEAD section. Output:\n{}",
-        output
+        inspect_contains(&output, "SID:"),
+        "kv-enc inspect output should contain SID in HEAD section. Output: {output:?}",
     );
 }
 
@@ -222,19 +215,15 @@ fn test_inspect_kv_enc_shows_entries() {
     let (_temp_dir, content) = create_kv_enc_content(BOB_MEMBER_ID);
 
     let encrypted = EncryptedContent::detect(content).unwrap();
-    let output = inspect_document_with_verification(&encrypted, "default.kvenc", None, false)
-        .unwrap()
-        .formatted;
+    let output = build_inspect_view(&encrypted).unwrap();
 
     assert!(
-        output.contains("Entries"),
-        "kv-enc inspect output should contain 'Entries' section. Output:\n{}",
-        output
+        inspect_contains(&output, "Entries"),
+        "kv-enc inspect output should contain 'Entries' section. Output: {output:?}",
     );
     assert!(
-        output.contains("DATABASE_URL"),
-        "kv-enc inspect output should list the entry key. Output:\n{}",
-        output
+        inspect_contains(&output, "DATABASE_URL"),
+        "kv-enc inspect output should list the entry key. Output: {output:?}",
     );
 }
 
@@ -243,14 +232,11 @@ fn test_inspect_kv_enc_shows_wrap() {
     let (_temp_dir, content) = create_kv_enc_content(CAROL_MEMBER_ID);
 
     let encrypted = EncryptedContent::detect(content).unwrap();
-    let output = inspect_document_with_verification(&encrypted, "default.kvenc", None, false)
-        .unwrap()
-        .formatted;
+    let output = build_inspect_view(&encrypted).unwrap();
 
     assert!(
-        output.contains("WRAP Data"),
-        "kv-enc inspect output should contain 'WRAP Data' section. Output:\n{}",
-        output
+        inspect_contains(&output, "WRAP Data"),
+        "kv-enc inspect output should contain 'WRAP Data' section. Output: {output:?}",
     );
 }
 
@@ -351,38 +337,27 @@ fn test_inspect_kv_enc_with_verification() {
     let encrypted_content = fs::read_to_string(&encrypted_path).unwrap();
 
     // Inspect with verification
-    let encrypted = EncryptedContent::detect(encrypted_content).unwrap();
-    let output = inspect_document_with_verification(
-        &encrypted,
-        "default.kvenc",
-        Some(&workspace_dir),
-        false,
-    )
-    .unwrap()
-    .formatted;
+    let encrypted = EncryptedContent::detect(encrypted_content.clone()).unwrap();
+    let output = build_inspect_view(&encrypted).unwrap();
+    let signature_report =
+        verify_kv_document_report(&encrypted_content, Some(&workspace_dir), false);
 
     // Check that verification result is included
     assert!(
-        output.contains("Signature Verification:"),
-        "Output should contain signature verification section"
+        signature_report.verified,
+        "signature report should indicate verification success"
     );
     assert!(
-        output.contains("  Status:   OK"),
-        "Output should show verification success"
+        signature_report.signer_member_id.as_deref() == Some(ALICE_MEMBER_ID),
+        "signature report should include signer member_id"
     );
     assert!(
-        output.contains(ALICE_MEMBER_ID),
-        "Output should show signer member_id"
+        inspect_contains(&output, "Attestation Method:"),
+        "Output should include embedded signer attestation method. Output: {output:?}",
     );
     assert!(
-        output.contains("Attestation Method:"),
-        "Output should include embedded signer attestation method. Output:\n{}",
-        output
-    );
-    assert!(
-        output.contains("Attestation Pubkey:"),
-        "Output should include embedded signer attestation pubkey. Output:\n{}",
-        output
+        inspect_contains(&output, "Attestation Pubkey:"),
+        "Output should include embedded signer attestation pubkey. Output: {output:?}",
     );
 }
 
@@ -415,13 +390,23 @@ fn test_inspect_kv_enc_with_verification_failure_no_keystore() {
     // Read encrypted content and corrupt the signature
     let mut kv_content = fs::read_to_string(&encrypted_path).unwrap();
     // Replace the SIG line with an invalid signature
+    let invalid_signature = Signature {
+        alg: "eddsa-ed25519".to_string(),
+        kid: "01HY0G8N3P5X7QRSTV0WXYZ123".to_string(),
+        signer_pub: None,
+        sig:
+            "QUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQQ"
+                .to_string(),
+    };
+    let invalid_signature_token =
+        TokenCodec::encode(TokenCodec::JsonJcs, &invalid_signature).unwrap();
     let lines: Vec<&str> = kv_content.lines().collect();
     let mut new_lines = Vec::new();
     for line in &lines {
         if line.starts_with(":SIG ") {
-            new_lines.push(":SIG eyJhbGciOiJlZGRzYS1lZDI1NTE5Iiwia2lkIjoiMDFIWTBHOE4zUDVYN1FSU1RWMFdYWVoxMjMiLCJzaWciOiJJTlZBTElEX1NJR05BVFVSRV8uLi4ifQ");
+            new_lines.push(format!(":SIG {}", invalid_signature_token));
         } else {
-            new_lines.push(line);
+            new_lines.push((*line).to_string());
         }
     }
     kv_content = new_lines.join("\n") + "\n";
@@ -432,18 +417,18 @@ fn test_inspect_kv_enc_with_verification_failure_no_keystore() {
 
     // Inspect with verification (keystore doesn't have the key).
     // With graceful degradation, inspect succeeds and shows FAILED verification status.
-    let encrypted = EncryptedContent::detect(kv_content).unwrap();
-    let result = inspect_document_with_verification(&encrypted, "default.kvenc", None, false);
+    let encrypted = EncryptedContent::detect(kv_content.clone()).unwrap();
+    let result = build_inspect_view(&encrypted);
 
     assert!(
         result.is_ok(),
         "Inspect should succeed even when keystore does not contain the signing key"
     );
-    let output = result.unwrap().formatted;
+    let output = result.unwrap();
+    let signature_report = verify_kv_document_report(&kv_content, None, false);
     assert!(
-        output.contains("Status:   FAILED"),
-        "Output should show FAILED verification status: {}",
-        output
+        !signature_report.verified,
+        "Output should show FAILED verification status: {output:?}",
     );
 }
 
@@ -560,12 +545,22 @@ fn test_verify_kv_document_report_failure_wrong_key() {
     let mut kv_content = fs::read_to_string(&encrypted_path).unwrap();
     let lines: Vec<&str> = kv_content.lines().collect();
     let mut new_lines = Vec::new();
+    let wrong_kid_signature = Signature {
+        alg: "eddsa-ed25519".to_string(),
+        kid: "01HY0G8N3P5X7QRSTV0WXYZ126".to_string(),
+        signer_pub: None,
+        sig:
+            "QUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQQ"
+                .to_string(),
+    };
+    let wrong_kid_signature_token =
+        TokenCodec::encode(TokenCodec::JsonJcs, &wrong_kid_signature).unwrap();
     for line in &lines {
         if line.starts_with(":SIG ") {
             // Replace with signature that references a non-existent kid
-            new_lines.push(":SIG eyJhbGciOiJlZGRzYS1lZDI1NTE5Iiwia2lkIjoiMDFOT05FWElTVEVOVEtFWV9JRCIsInNpZyI6Ii4uLiJ9");
+            new_lines.push(format!(":SIG {}", wrong_kid_signature_token));
         } else {
-            new_lines.push(line);
+            new_lines.push((*line).to_string());
         }
     }
     kv_content = new_lines.join("\n") + "\n";

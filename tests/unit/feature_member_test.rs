@@ -7,7 +7,7 @@
 
 use crate::cli_common::ALICE_MEMBER_ID;
 use crate::test_utils::setup_test_workspace;
-use secretenv::feature::member::verify_member;
+use secretenv::feature::member::verification::verify_member;
 use secretenv::io::workspace::members::{
     delete_member, load_active_member_files, load_member_file,
 };

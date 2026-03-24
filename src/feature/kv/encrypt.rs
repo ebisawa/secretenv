@@ -8,7 +8,8 @@ use crate::feature::envelope::entry::encrypt_entry;
 use crate::feature::envelope::signature::SigningContext;
 use crate::feature::envelope::wrap::{build_wraps_for_recipients, WrapFormat};
 use crate::format::token::TokenCodec;
-use crate::model::kv_enc::{KvEntryValue, KvHeader, KvWrap};
+use crate::model::kv_enc::entry::KvEntryValue;
+use crate::model::kv_enc::header::{KvHeader, KvWrap};
 use crate::model::public_key::VerifiedPublicKeyAttested;
 use crate::Result;
 use rand::rngs::OsRng;
@@ -105,7 +106,7 @@ pub fn encrypt_kv_document_with_disclosed(
     token_codec: TokenCodec,
     disclosed: bool,
 ) -> Result<String> {
-    super::rewrite::encrypt_and_sign_kv_map(
+    super::rewrite_session::encrypt_and_sign_kv_map(
         kv_map,
         members,
         signing,

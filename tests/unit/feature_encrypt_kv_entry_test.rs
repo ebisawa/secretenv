@@ -5,12 +5,14 @@
 
 use ed25519_dalek::SigningKey;
 use rand::rngs::OsRng;
-use secretenv::feature::encrypt::SigningContext;
+use secretenv::feature::envelope::signature::SigningContext;
 use secretenv::feature::kv::builder::KvDocumentBuilder;
 use secretenv::feature::kv::encrypt::encrypt_kv_document;
-use secretenv::format::kv::parse_kv_document;
+use secretenv::format::kv::document::parse_kv_document;
+use secretenv::format::schema::document::parse_kv_head_token;
 use secretenv::format::token::TokenCodec;
-use secretenv::model::kv_enc::{KvEncDocument, KvHeader};
+use secretenv::model::kv_enc::document::KvEncDocument;
+use secretenv::model::kv_enc::header::KvHeader;
 use secretenv::model::public_key::VerifiedPublicKeyAttested;
 use std::collections::HashMap;
 
@@ -133,7 +135,7 @@ fn decode_head_from(content: &str) -> KvHeader {
         .unwrap()
         .strip_prefix(":HEAD ")
         .unwrap();
-    TokenCodec::decode_auto(head_token).unwrap()
+    parse_kv_head_token(head_token).unwrap()
 }
 
 /// Helper: build a signed document with set_entries via KvDocumentBuilder

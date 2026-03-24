@@ -10,8 +10,8 @@ use crate::test_utils::{keygen_test, setup_test_workspace};
 use secretenv::cli::encrypt;
 use secretenv::cli::set;
 use secretenv::format::kv;
-use secretenv::format::token::TokenCodec;
-use secretenv::model::kv_enc::KvWrap;
+use secretenv::format::schema::document::parse_kv_wrap_token;
+use secretenv::model::kv_enc::header::KvWrap;
 use std::fs;
 
 #[test]
@@ -119,7 +119,7 @@ fn test_set_creates_default_file() {
     let wrap_token = wrap_line.trim_start_matches(":WRAP ");
 
     // Decode wrap token
-    let wrap_data: KvWrap = TokenCodec::decode_auto(wrap_token).unwrap();
+    let wrap_data: KvWrap = parse_kv_wrap_token(wrap_token).unwrap();
 
     // Check that both alice and bob are recipients
     let recipient_ids: Vec<String> = wrap_data.wrap.iter().map(|w| w.rid.clone()).collect();

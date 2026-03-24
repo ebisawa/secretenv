@@ -6,47 +6,52 @@
 
 | Item | Value |
 |------|-------|
-| Version | 1.3 |
-| Date | 2026-03-19 |
+| Version | 1.6 |
+| Date | 2026-03-25 |
 
 ### Purpose of This Document
 
-This document describes the security design of SecretEnv v3. It summarizes the **background behind major design decisions** and the **main security considerations** in the system.
+This document explains the security design of SecretEnv v3. Its primary purpose is to make it easy to determine what security claims SecretEnv makes, what assumptions those claims depend on, how those claims are ensured, and what is explicitly out of scope.
+
+This document is not an implementation manual. It prioritizes design intent, verification points, and residual risk over step-by-step restatement of every algorithm and data structure detail.
 
 ---
 
-## 1. Executive Summary
+## 1. Security Overview
 
 SecretEnv is an offline-first encrypted file sharing CLI tool for safely sharing secrets such as `.env` files and certificates within a team. It can use a Git repository as a distribution medium, but does not depend on Git's existence.
 
-### Main Design Ideas
+### 1.1 Key Design Points
 
-1. **HPKE (RFC 9180) multi-recipient key wrapping** — Wraps the Content Key individually with each recipient's public key, allowing recipients to be added or removed without re-encrypting the payload
-2. **Cryptographic context binding for ciphertext uniqueness** — Binds `sid` (file identifier), `kid` (key generation), and `k` (entry key) in AAD and HPKE info, reducing the risk of mixing up what a ciphertext belongs to
-3. **Defence-in-Depth (layered security)** — Uses the same context in multiple places so that a single implementation mistake is less likely to become a serious security issue
-4. **Ed25519 signatures and PublicKey attestation** — Tamper detection for encrypted files, SSH-key binding, and optional GitHub online verification
-5. **Passwordless PrivateKey protection via SSH key reuse** — Derives an encryption key with HKDF using Ed25519's deterministic signature as IKM, eliminating the need for additional password management
+1. **security claims**: what is cryptographically protected and what is delegated to operational assumptions
+2. **trust boundary**: local private keys and the local keystore are trusted; workspace public keys and encrypted files are not
+3. **limits of key identity**: self-signature and attestation show key consistency and key binding, but identity ultimately depends on TOFU and operator judgment
+4. **context binding**: `sid` / `kid` / `k` / `p` are used to prevent reuse and mix-ups
+5. **critical implementation invariants**: signature-before-decrypt, preserving bindings, and respecting env-mode constraints
 
-### Chosen Cryptographic Primitives and Design Intent
+### 1.2 Security Claims and Verification
 
-SecretEnv uses widely adopted standardized cryptographic primitives such as HPKE, Ed25519, HKDF-SHA256, and XChaCha20-Poly1305. These were selected based on their established security properties, but the security of the overall system still depends not only on the primitives themselves, but also on implementation quality, key management, and operational practice.
+| security claim | Main mechanism | How this is ensured | Assumption | Residual risk |
+|---------------|----------------|------------------------------|------------|---------------|
+| **Confidentiality** | HPKE wrap + XChaCha20-Poly1305 | Only current recipients' public keys are used for wrapping | Recipient private keys are not compromised | Legitimate recipients can still exfiltrate plaintext |
+| **Tamper detection** | Ed25519 signatures | Signature verification always happens before decryption | Verification is never bypassed | A malicious legitimate signer is not prevented |
+| **Context binding** | `sid` / `kid` / `k` / `p` in info / AAD | Bindings are not omitted | The implementation preserves the intended binding points | Security weakens if a future change removes a binding |
+| **Key consistency** | PublicKey self-signature | Tampering with an existing PublicKey is rejected | The original private key is not compromised | It does not prevent creation of a brand new malicious key |
+| **Stronger key identity evidence** | SSH attestation + TOFU + online verify | The layers are not misrepresented as equivalent proofs | TOFU is executed correctly | Weakens with `--force`, misapproval, or account compromise |
+| **Portable private key use** | Password export or SSH-based protection | CI use meets the stated trust conditions | Used only in a trusted CI context | Storing both secrets in the same backend is not independent defense |
 
-| Goal | Main mechanism | Design intent |
-|------|----------------|---------------|
-| **Confidentiality** | HPKE wrap + XChaCha20-Poly1305 AEAD | Ensure that only currently authorized members can decrypt |
-| **Tamper detection** | Ed25519 signatures | Make modification of encrypted files and metadata detectable |
-| **Context binding** | `sid` / `k` in AAD | Prevent reuse or substitution across different secrets or entries |
-| **Key rotation consistency** | `kid` in HPKE info | Prevent mix-ups between key generations |
-| **Key consistency** | PublicKey self-signature | Allow verification that the same private key holder created the PublicKey |
-| **Stronger key identity checks** | SSH attestation + TOFU confirmation + online verification | Reduce the risk of public key substitution |
+### 1.3 Terminology Used Here
 
-**Notes:**
-- **Key consistency** means that the same private key holder created the PublicKey, but it does not by itself establish real-world identity.
-- **Stronger key identity checks** are an operational mechanism that combines multiple trust layers to improve confidence in a public key. Correct TOFU execution is a precondition, and the effect is reduced when `--force` is used. See §2.5 for details.
+| Term | Meaning in this document |
+|------|--------------------------|
+| **Key consistency** | Evidence that the same private key holder created the PublicKey; not identity by itself |
+| **Identity assurance** | Operational evidence that helps a human decide which person or account a key belongs to |
+| **trust boundary** | The boundary between inputs trusted as-is and inputs assumed tamperable until validated |
+| **residual risk** | Risk that remains even with a correct implementation, or when an operational assumption is not met |
 
 ---
 
-## 2. Threat Model and Security Goals
+## 2. Threat Model and Trust Boundary
 
 ### 2.1 Attacker Model
 
@@ -57,11 +62,13 @@ SecretEnv uses widely adopted standardized cryptographic primitives such as HPKE
 | **Key rotation attacker** | Retains old-generation wraps and attempts decryption with new keys | Exploiting weaknesses in the key update process |
 | **Context confusion attacker** | Swaps ciphertext components between different secrets | Copy-and-paste across encrypted files |
 
-**Assumption: Repository write access control**
+### 2.2 Operational Assumptions
 
-The above attacker model assumes that write access to the repository is properly managed. In the main target environment of Git + GitHub operation, changes to `members/active/` are verified through PR review. Attackers with unrestricted write access to the repository (e.g., compromised repository administrator privileges) are outside the scope of this model. In environments where this assumption is not met, access control at the repository layer must be implemented separately, in addition to the incoming → active promotion process.
+The attacker model above assumes repository write access is properly controlled. In the main target environment of Git + GitHub operation, changes to `members/active/` are checked through PR review. Attackers with unrestricted write access to the repository, such as compromise of repository administrator privileges, are outside the scope of this model.
 
-### 2.2 Trust Boundary
+If this assumption does not hold, repository-layer access control must be evaluated separately from SecretEnv's cryptographic design. It is important to distinguish between the security of the crypto design and the security of the distribution medium.
+
+### 2.3 Trust Boundary
 
 ```mermaid
 graph TB
@@ -100,34 +107,14 @@ graph TB
 - Workspace `members/` directory — verified by signatures and attestation
 - Workspace `secrets/` directory — verified by signatures
 
-### 2.3 Security Goals
+### 2.4 Design Scope Summary
 
-**Goals:**
-- Confidentiality of encrypted files (only current recipients can decrypt)
-- Authenticity of encrypted files (tamper detection)
-- Binding of ciphertext to context (swap prevention)
-- Cryptographic binding of key generations (wrap reuse prevention)
-- Proof of signer and public key identity
-
-**Non-goals:**
-- Full Forward Secrecy as a system-wide property (discussed in §12)
-- Recovery of previously disclosed content (cryptographically impossible) — For file-enc, the DEK is maintained when content is not changed upon recipient removal. The same DEK = same content, and this was legitimately disclosed to former recipients. Use `--rotate-key` to regenerate the DEK when true revocation is needed. For kv-enc, the DEK is automatically regenerated upon recipient removal.
-- Prevention of insider misuse of legitimately decrypted content
-- Access control via central policy (policy-less design)
-
-### 2.4 Defense Matrix
-
-| Security Goal | Defense Mechanism | Relevant Section |
-|--------------|------------------|-----------------|
-| Confidentiality | HPKE wrap + AEAD (XChaCha20-Poly1305) | §5, §6 |
-| Authenticity | Ed25519 signature (PureEdDSA) | §8 |
-| Context binding (inter-file) | `sid` in AAD | §9 |
-| Context binding (inter-entry) | `k` in AAD | §9 |
-| Key generation binding | `kid` in HPKE info | §9 |
-| Public key authenticity | SSH attestation + TOFU confirmation + online verification | §2.5, §8 |
-| Wrap integrity | Ed25519 signature protects `protected` (including wrap) | §8 |
-| PrivateKey protection | SSH signature-based key derivation + AEAD | §7 |
-| DoS resistance | Input size limits | §11 |
+| Item | Implication |
+|------|----------------------|
+| **Guaranteed by design** | Confidentiality, tamper detection, context binding, key-generation binding, key consistency |
+| **Depends on operational assumptions** | Identity decisions, safe CI execution conditions, repository-layer access control |
+| **Not guaranteed** | Insider misuse prevention, recovery of prior disclosure, strong forward secrecy, centralized authorization policy |
+| **Most important implementation checks** | Signature verification order, preserving bindings, env-mode restrictions, no skipped PublicKey verification |
 
 ### 2.5 Trust Model
 
@@ -284,9 +271,9 @@ The security properties that SecretEnv relies on for each primitive are summariz
 **Security dependency:**
 
 ```
-Confidentiality ── HPKE IND-CCA2 ─┐
-                                    ├─ Overall confidentiality
-payload AEAD IND-CCA2 ─────────────┘
+Confidentiality ── HPKE confidentiality ─┐
+                                          ├─ Overall confidentiality
+payload AEAD confidentiality ────────────┘
 
 Signatures ── Ed25519 ── Tamper detection
 
@@ -386,17 +373,7 @@ generated → active → expired
 
 ### 4.4 Key Rotation
 
-Key rotation has two levels:
-
-**1. rewrap (Content Key maintained)**
-- DEK/MK is not changed
-- Only wraps are updated for recipient changes (member additions, key updates)
-- Payload re-encryption is not needed
-
-**2. rewrap --rotate-key (Content Key regenerated)**
-- New DEK/MK is generated
-- Payload is re-encrypted
-- For use after key compromise or for periodic rotation
+Key rotation is performed by the `rewrap` command. The behavior differs between file-enc and kv-enc and between recipient changes and explicit `--rotate-key`. See §6.7 for the full comparison after both protocols have been introduced.
 
 ### 4.5 Key Relationship Diagrams
 
@@ -595,14 +572,6 @@ payload.encrypted = { "nonce": b64url(nonce), "ct": b64url(ct) }
 
 **Important: Signature verification precedes decryption.** Decrypting a ciphertext with an invalid signature exposes the cryptographic primitive to malicious input and increases the attack surface for side-channel attacks.
 
-### 5.6 Difference Between rewrap and rotate-key
-
-| Operation | DEK | wrap | payload | Purpose |
-|-----------|-----|------|---------|---------|
-| `rewrap` (file-enc) | Maintained | Updated | Maintained | Recipient addition/removal/key update |
-| `rewrap` (kv-enc, on recipient removal) | Regenerated | Updated | Re-encrypted | Content Key is automatically regenerated when a recipient is removed |
-| `rewrap --rotate-key` | Regenerated | Updated | Re-encrypted | Content Key rotation |
-
 ---
 
 ## 6. kv-enc Protocol
@@ -739,6 +708,25 @@ When a recipient is removed from kv-enc:
 5. Update the WRAP line
 
 The `disclosed` flag makes visible the entries that may have been disclosed to the removed recipient, supporting the decision to update secrets.
+
+### 6.7 Key Rotation Behavior Across Both Formats
+
+`rewrap` updates wrap entries (recipient addition/removal). `rewrap --rotate-key` regenerates the content key and re-encrypts the entire payload.
+
+| Operation | Format | Content Key | Wrap | Payload |
+|-----------|--------|-------------|------|---------|
+| Add recipients | file-enc | DEK maintained | Added | Maintained |
+| Add recipients | kv-enc | MK maintained | Added | Maintained |
+| Remove recipients | file-enc | DEK maintained | Removed | Maintained |
+| Remove recipients | kv-enc | **MK regenerated** | Rebuilt | **Re-encrypted** |
+| `--rotate-key` | file-enc | DEK regenerated | Rebuilt | Re-encrypted |
+| `--rotate-key` | kv-enc | MK regenerated | Rebuilt | Re-encrypted |
+
+For recipient addition, both formats maintain the content key and add new wrap entries.
+
+For recipient removal, the behavior differs by format. In file-enc, the removed recipient's wrap entry is deleted and a removal history is recorded, but the DEK is unchanged; the removed recipient no longer possesses a wrap entry to recover the DEK. In kv-enc, the MK is always regenerated and all entries are re-encrypted. This is because the MK is a long-lived key from which per-entry CEKs are derived (§6.2) — if a removed member retains knowledge of the old MK (e.g., from a prior decryption session), they could derive CEKs for entries added after their removal. Regenerating the MK eliminates this risk.
+
+`--rotate-key` forces full re-encryption in both formats regardless of recipient changes, and is intended as a post-compromise damage-limitation measure.
 
 ---
 
@@ -885,6 +873,70 @@ Since PrivateKey protection derives IKM from SSH signatures, **any entity that c
 
 Operationally, local keystore file permissions and SSH key handling must not be treated as separate concerns. Even if `private.json` has safe filesystem permissions, any actor on the same host that can freely use the SSH key or agent socket can ultimately decrypt the SecretEnv private key as well.
 
+### 7.9 Password-Based Key Protection (`argon2id-hkdf-sha256`)
+
+As an alternative to SSH-based protection, SecretEnv supports password-based private key protection using `argon2id-hkdf-sha256`. This scheme is designed for CI/CD environments where SSH keys and `ssh-agent` are unavailable.
+
+#### 7.9.1 Use Case
+
+CI platforms provide "secret variables" that are stored securely and exposed as environment variables at runtime. This protection scheme enables exporting a SecretEnv private key in a portable, password-protected format that can be registered as a CI secret variable and used without any SSH infrastructure.
+
+#### 7.9.2 Key Derivation Pipeline
+
+```
+Password + salt (16 bytes, random) → Argon2id (m=47104, t=1, p=1) → 32-byte IKM
+IKM + salt → HKDF-SHA256 (info: "secretenv:password-private-key-enc@3:{kid}") → 32-byte encryption key
+```
+
+The salt is intentionally reused for both Argon2id and HKDF steps. This is safe because the two algorithms have different internal structures and the salt serves different roles in each (Argon2id uses it as a salt parameter, HKDF uses it as the salt input to HKDF-Extract).
+
+The HKDF info string (`secretenv:password-private-key-enc@3:{kid}`) differs from the SSH-based scheme (`secretenv:private-key-enc@3:{kid}`) to ensure domain separation between the two key derivation paths.
+
+#### 7.9.3 Argon2id Parameters and Password Requirements
+
+- Default parameters at export time: m=47104 (46 MiB), t=1, p=1 (OWASP recommended)
+- Parameters are fixed by the implementation and are not serialized in the private key document
+- Minimum password length: 8 characters
+
+#### 7.9.4 Security Trade-offs in CI Environments
+
+Environment variables (`SECRETENV_KEY_PASSWORD`) persist in process memory and may be visible via `/proc/*/environ` on Linux. This is an accepted trade-off consistent with how CI platforms handle secret variables. What is accepted here is runtime exposure caused by environment-variable delivery, not the idea that storing `SECRETENV_KEY_PASSWORD` in the same secret backend as `SECRETENV_PRIVATE_KEY` creates an independent barrier against backend compromise. The password and decrypted key material are zeroized after use where the Rust type system permits (using the `zeroize` crate).
+
+The main security value of this password protection is defense when the exported blob leaks by itself. For example, if only the `SECRETENV_PRIVATE_KEY`-equivalent blob escapes through an exported file, copied text, artifact, or clipboard content, the key still cannot be decrypted immediately unless the password is also disclosed.
+
+By contrast, when `SECRETENV_PRIVATE_KEY` and `SECRETENV_KEY_PASSWORD` are stored in the same CI secret backend, the password provides little independent protection against compromise of that backend itself, because both values are typically obtained together. This configuration is therefore useful for portable SSH-free operation, but it must not be interpreted as "placing both in one secret backend still gives meaningful defense-in-depth against backend compromise."
+
+If operations can place `SECRETENV_PRIVATE_KEY` and `SECRETENV_KEY_PASSWORD` in separate trust domains, the password protection becomes more meaningful. In the common case where both are stored in the same CI secret backend, the practical protection is primarily limited to blob-only leakage scenarios.
+
+#### 7.9.5 Public Key Verification in Environment Variable Mode
+
+Environment variable mode permits only `run`, `decrypt`, `get`, and `list`. At key-load time, the implementation only decrypts the exported PrivateKey from `SECRETENV_PRIVATE_KEY` with `SECRETENV_KEY_PASSWORD` and validates the PrivateKey document itself. `list` is metadata-only and does not require key loading.
+
+The key-load path performs the following checks:
+
+1. Base64url-decode `SECRETENV_PRIVATE_KEY`
+2. Decrypt it with `SECRETENV_KEY_PASSWORD`
+3. Validate the PrivateKey document structure and protection method
+4. Validate keypair consistency for `sig.d` / `sig.x` and `kem.d` / `kem.x`
+
+The implementation must not resolve the caller's own PublicKey from `members/active/` during env-key loading. Therefore the absence of `members/active/<member_id>.json`, or mismatches in that file, are not load-time failures for env mode.
+
+However, `run`, `decrypt`, and `get` still use the normal signature-verification and member-resolution rules, which may read from the workspace checkout. The checkout remains outside the trust boundary in env mode as well. Therefore env mode may be used only in a trusted CI context that satisfies all of the following:
+
+- **trusted workflow**: the workflow / job definition that consumes secrets is maintainer-controlled and cannot be modified or triggered from attacker-controlled PR content
+- **trusted ref**: the checkout consumed by secretenv is a protected branch, protected tag, post-merge ref, or equivalent trusted ref
+- **trusted runner**: the runner handling secrets is trusted and is not shared with untrusted workloads
+
+Env mode must not be used in:
+
+- fork PRs
+- untrusted PRs
+- `pull_request_target`
+- jobs that perform an attacker-controlled checkout
+- jobs running on untrusted runners
+
+Typical allowed cases are post-merge workflows on protected branches and deploy jobs on protected tags. PR validation workflows that expose secrets are out of scope.
+
 ---
 
 ## 8. Signature and Verification Architecture
@@ -972,9 +1024,9 @@ When `binding_claims.github_account` exists, the fingerprint of `attestation.pub
 
 ---
 
-## 9. Context Binding Design (Defence-in-Depth)
+## 9. Context Binding and Defence-in-Depth
 
-This chapter explains the binding model used in SecretEnv's security design.
+This chapter describes the binding design that prevents implementation drift. SecretEnv intentionally places `sid` / `kid` / `k` / `p` in multiple locations so that the system cryptographically fixes what a ciphertext belongs to and which key generation it was created for.
 
 ### 9.1 System of Binding Elements
 
@@ -1017,7 +1069,7 @@ Recipients (the list of rids in the wrap array) are **not** included in payload 
 
 Recipient integrity is protected by **Ed25519 signatures** (wraps are contained within `protected`, which is the signed data).
 
-### 9.5 Binding Matrix (Most Important Table)
+### 9.5 Binding Matrix
 
 | Binding element | Protocol | HPKE info | HPKE AAD | CEK info | payload AAD | Signature | Attack defended against |
 |----------------|----------|-----------|----------|----------|-------------|-----------|------------------------|
@@ -1031,11 +1083,11 @@ Recipient integrity is protected by **Ed25519 signatures** (wraps are contained 
 | `k` | kv-enc payload | — | — | — | **included** | **included** | Swapping entries within the same file |
 | `p` | all protocols | **included** | **included** | **included** | **included** | — | Reusing data across different protocols |
 
-**Note on the HPKE AAD column** — For both file-enc and kv-enc, HPKE AAD = HPKE info (same bytes). This applies the same binding at both the KDF stage and the AEAD stage (see §9.3).
+**Implementation note** — Each binding point in the table must remain present, must not be replaced with another input, and must be compared as canonicalized bytes rather than as ad hoc string values.
 
 ---
 
-## 10. Attack Scenario Analysis
+## 10. Major Attack Scenarios
 
 ### 10.1 Repository Tampering
 
@@ -1043,8 +1095,9 @@ Recipient integrity is protected by **Ed25519 signatures** (wraps are contained 
 |------|---------|
 | **Attack** | Attacker tampers with encrypted files in `.secretenv/secrets/` |
 | **Capability** | Write access to the repository |
-| **Defense** | Ed25519 signature verification detects tampering with `protected` (file-enc) or the entire file (kv-enc) |
-| **Result** | Decryption refused with `E_SIGNATURE_INVALID` |
+| **Primary defense** | Ed25519 signature verification detects tampering with `protected` (file-enc) or the entire file (kv-enc) |
+| **When it weakens** | An implementation decrypts before signature verification |
+| **Expected failure point** | Decryption refused with `E_SIGNATURE_INVALID` |
 
 ### 10.2 Public Key Substitution
 
@@ -1054,8 +1107,9 @@ Recipient integrity is protected by **Ed25519 signatures** (wraps are contained 
 |------|---------|
 | **Attack** | Attacker tampers with fields in `members/active/<id>.json` |
 | **Capability** | Write access to the repository |
-| **Defense** | (1) Self-signature verification — a forged key cannot generate a valid signature over the original `protected`. (2) SSH attestation verification — attestation with the original SSH key cannot be forged. |
-| **Result** | Refused with `E_SELF_SIG_INVALID` or `E_ATTESTATION_INVALID` |
+| **Primary defense** | (1) Self-signature verification (2) SSH attestation verification |
+| **When it weakens** | The original SSH private key is compromised |
+| **Expected failure point** | Refused with `E_SELF_SIG_INVALID` or `E_ATTESTATION_INVALID` |
 
 **10.2.2 Attacker inserting a new key**
 
@@ -1063,9 +1117,10 @@ Recipient integrity is protected by **Ed25519 signatures** (wraps are contained 
 |------|---------|
 | **Attack** | Attacker creates their own SecretEnv key + SSH key and places it in `members/incoming/` |
 | **Capability** | Write access to the repository + their own SSH Ed25519 key |
-| **Self-signature / attestation** | The attacker can generate valid self-signature and attestation with their own keys. These verifications will succeed. |
-| **Defense** | (1) TOFU confirmation — the user running `rewrap` visually verifies the SSH fingerprint and GitHub account, and rejects suspicious keys. (2) Online verification — the SSH key linked to the attacker's GitHub account is displayed, enabling detection of impersonation. |
-| **Result** | Rejected by TOFU confirmation (if the user makes the correct judgment). When `--force` is used, this defense is disabled, creating a risk that ciphertext with untrusted keys is accepted. |
+| **Self-signature / attestation** | The attacker can generate valid self-signature and attestation with their own keys |
+| **Primary defense** | (1) TOFU confirmation (2) supplementary evidence from online verify |
+| **When it weakens** | TOFU misapproval, skipping TOFU via `--force`, or GitHub account compromise |
+| **Expected failure point** | Human rejection or promotion refusal after verification failure |
 
 **Important**: Self-signature prevents tampering with existing PublicKeys, but cannot prevent an attacker from creating a new PublicKey following legitimate procedures with their own key. The final defense against new key insertion is TOFU confirmation (§2.5, Layer 3). Skipping TOFU with `--force` intentionally disables this defense, and its use requires careful consideration.
 
@@ -1075,8 +1130,9 @@ Recipient integrity is protected by **Ed25519 signatures** (wraps are contained 
 |------|---------|
 | **Attack** | Attacker copies the payload of file-enc A into file-enc B |
 | **Capability** | Write access to the repository |
-| **Defense** | (1) `sid` is included in payload AAD, so `sid` mismatch causes AEAD decryption failure. (2) Signature verification detects tampering with `protected` (including `sid` modification). |
-| **Result** | AEAD decryption failure or signature verification failure |
+| **Primary defense** | (1) `sid` in payload AAD (2) signature verification |
+| **When it weakens** | A future implementation change removes `sid` binding |
+| **Expected failure point** | AEAD decryption failure or signature verification failure |
 
 ### 10.4 Entry Swapping (Within the Same kv-enc)
 
@@ -1084,8 +1140,9 @@ Recipient integrity is protected by **Ed25519 signatures** (wraps are contained 
 |------|---------|
 | **Attack** | Attacker copies the ciphertext of entry A in a kv-enc to entry B in the same file |
 | **Capability** | Write access to the repository |
-| **Defense** | (1) AAD contains `k` (KEY), so `k` mismatch causes AEAD decryption failure. (2) Signature verification detects line swapping. |
-| **Result** | AEAD decryption failure or signature verification failure |
+| **Primary defense** | (1) `k` in AAD (2) signature verification |
+| **When it weakens** | A future implementation change removes `k` binding |
+| **Expected failure point** | AEAD decryption failure or signature verification failure |
 
 ### 10.5 Reusing Old Wraps
 
@@ -1093,8 +1150,9 @@ Recipient integrity is protected by **Ed25519 signatures** (wraps are contained 
 |------|---------|
 | **Attack** | Attacker copies an old-generation wrap_item into a new encrypted file |
 | **Capability** | Access to old encrypted files |
-| **Defense** | HPKE info contains `kid`, so key generation mismatch causes unwrap failure |
-| **Result** | HPKE unwrap failure |
+| **Primary defense** | `kid` in HPKE info |
+| **When it weakens** | A future implementation change removes `kid` binding |
+| **Expected failure point** | HPKE unwrap failure |
 
 ### 10.6 PrivateKey Metadata Tampering
 
@@ -1102,8 +1160,9 @@ Recipient integrity is protected by **Ed25519 signatures** (wraps are contained 
 |------|---------|
 | **Attack** | Attacker tampers with a field in PrivateKey's `protected` (e.g., `expires_at`) |
 | **Capability** | Access to the local filesystem |
-| **Defense** | AAD is constructed from `jcs(protected)`, so any field change in `protected` causes AEAD decryption failure |
-| **Result** | XChaCha20-Poly1305 decryption failure |
+| **Primary defense** | AAD = `jcs(protected)` |
+| **When it weakens** | AAD generation no longer covers the full `protected` object |
+| **Expected failure point** | XChaCha20-Poly1305 decryption failure |
 
 ### 10.7 Entry Copying Between kv-enc Files
 
@@ -1111,74 +1170,46 @@ Recipient integrity is protected by **Ed25519 signatures** (wraps are contained 
 |------|---------|
 | **Attack** | Attacker copies an entry from kv-enc file A into kv-enc file B |
 | **Capability** | Write access to the repository |
-| **Defense** | (1) MK differs between files, so CEK derivation differs due to MK mismatch, causing decryption failure. (2) CEK derivation info contains `sid`, so even with the same MK, a different CEK is derived. (3) AAD also contains `sid`, causing AEAD decryption failure as well (defence-in-depth). |
-| **Result** | AEAD decryption failure due to CEK mismatch |
+| **Primary defense** | (1) MK separation (2) `sid` in CEK derivation info (3) `sid` in payload AAD |
+| **When it weakens** | `sid` is removed from CEK info or AAD |
+| **Expected failure point** | AEAD decryption failure due to CEK mismatch |
+
+These scenarios share a common structure: context bindings (`sid`, `kid`, `k`, `p`) and Ed25519 signatures form two independent layers of defense. Bypassing both simultaneously requires either compromise of the signer's private key or an implementation defect that removes a binding or reorders processing steps. The verification points in §11 are designed to detect such defects.
 
 ---
 
-## 11. Implementation Security Requirements
+## 11. Implementation Verification Points
 
-### 11.1 Memory Safety (Zeroizing)
+### 11.1 Highest-Priority Verification Points
 
-| Target | Requirement | Implementation |
-|--------|------------|---------------|
-| KEM private key | Zeroize after use (MUST) | `Zeroizing<[u8; 32]>` |
-| Signing private key | Zeroize after use (MUST) | `Zeroizing` wrapper |
-| DEK / MK / CEK | Zeroize after use (MUST) | `Zeroizing` wrapper / `Cek::new` |
-| Decrypted plaintext | Zeroize after use (SHOULD) | `Zeroizing<Plaintext>` |
+| Review target | Expected implementation behavior | Risk if violated |
+|---------------|----------------------------------|------------------|
+| **Processing order** | Structural validation → signature verification → reference consistency checks → decryption | Tampered data may be decrypted first |
+| **Bindings** | `sid` / `kid` / `k` / `p` are included in info / AAD as designed | Reuse, substitution, or wrong-context errors become possible |
+| **HPKE info = AAD** | The wrap path uses the same bytes in both places | Defence-in-depth is lost |
+| **PublicKey verification** | Self-signature and attestation are both verified | A tampered PublicKey may be accepted |
+| **Signature key source** | The keystore is not used as a public-key source for signature verification | Verification may accidentally depend on local state |
+| **env mode** | Only used in trusted CI contexts, without self PublicKey workspace lookup during key loading | Private keys may be used in attacker-controlled checkouts |
 
-As a representative implementation technique, secret keys and decrypted plaintext are erased on scope exit by zeroizing wrappers.
+### 11.2 Input Validation and DoS Resistance
 
-### 11.2 DoS Limits
+The implementation enforces conservative limits and strict parsing as shown below.
 
-| Target | Limit | Purpose |
-|--------|-------|---------|
-| Elements in wrap array | 1,000 entries | Prevent memory exhaustion |
+| Item | Expected limit / requirement | Purpose |
+|------|------------------------------|---------|
+| wrap array length | 1,000 entries | Prevent memory exhaustion |
 | kv-enc file size | 16 MiB | Prevent memory exhaustion |
-| kv-enc KEY lines | 10,000 lines | Prevent computational explosion |
+| kv-enc KEY line count | 10,000 lines | Prevent computational blow-up |
 | base64url token length | 1 MiB | Limit parse time |
-| base64url ciphertext length | 16 MiB | Prevent memory exhaustion |
-| JSON parse depth | 32 levels | Prevent computational explosion |
-| JSON element count | 10,000 elements | Prevent computational explosion |
+| JSON depth / element count | 32 levels / 10,000 elements | Prevent computational blow-up |
 
-### 11.3 Strict base64url Validation
+For base64url inputs, the implementation should reject invalid characters, padding (`=`), and whitespace or newlines, and should validate fixed-length fields.
 
-- Reject invalid characters (anything other than `A-Za-z0-9_-`)
-- Reject padding (`=`)
-- Reject whitespace and newlines
-- Validate fixed-length fields:
+### 11.3 Memory Handling of Secrets
 
-| Field | base64url string length | Decoded byte length |
-|-------|------------------------|---------------------|
-| `attestation.sig` | 86 characters | 64 bytes |
-| `signature_v3.sig` | 86 characters | 64 bytes |
-| XChaCha20-Poly1305 `nonce` | 32 characters | 24 bytes |
-| kv-enc entry `salt` | 22 characters | 16 bytes |
+KEM private keys, signing private keys, DEK / MK / CEK values, and decrypted plaintext should be zeroized after use as far as the type system allows. The design ensures that secret material is not retained in long-lived buffers or exposed through logs.
 
-### 11.4 Processing Order
-
-Decryption processing must strictly follow this order:
-
-```
-1. Format validation (schema conformance)
-2. Signature verification (tamper detection)
-3. Referential integrity check (warning only)
-4. Decryption processing (only after successful signature verification)
-```
-
-Executing decryption while bypassing signature verification is prohibited (MUST NOT).
-
-### 11.5 Libraries Used (Rust crates)
-
-| Purpose | Crate | Notes |
-|---------|-------|-------|
-| HPKE | `hpke` | X25519-HKDF-SHA256 + ChaCha20-Poly1305 |
-| XChaCha20-Poly1305 | `chacha20poly1305` | AEAD |
-| Ed25519 | `ed25519-dalek` | Signing and verification |
-| HKDF | `hkdf` + `sha2` | Key derivation |
-| Zeroizing | `zeroize` | Memory zeroization |
-| CSPRNG | `rand` (`OsRng`) | Cryptographic random numbers |
-| base64url | `base64` (`URL_SAFE_NO_PAD`) | Encoding and decoding |
+However, complete erasure of secret material from process memory is not guaranteed. When key bytes are copied into cryptographic library types (e.g., `SigningKey::from_bytes`), the `Zeroize` wrapper clears the source buffer but cannot control copies held internally by the library. Additionally, the runtime allocator may leave residual data in freed pages, and compiler optimizations may create intermediate copies that are not zeroized. SecretEnv therefore treats memory zeroization as a best-effort defense-in-depth measure, not an absolute guarantee.
 
 ---
 
@@ -1190,19 +1221,19 @@ HPKE Base mode provides ephemeral key isolation per wrap via ephemeral keys. How
 - If a recipient's long-term private key is compromised, **all existing wraps** for that recipient can be unwrapped
 - Running `rewrap --rotate-key` to regenerate the Content Key after compromise can prevent damage from spreading to newly encrypted data going forward
 
-**Note:** This is different from conventional Forward Secrecy (the property that past sessions cannot be decrypted after a session ends). SecretEnv's `--rotate-key` is a **damage limitation measure** after key compromise and does not retroactively strengthen the protection of data encrypted before the compromise.
+**Design rationale:** SecretEnv does not claim strong system-wide forward secrecy. `--rotate-key` is a post-compromise damage-limitation measure, not a mechanism that restores protection for data encrypted before the compromise.
 
 ### 12.2 Irrecoverability of Past Disclosures
 
-Even if a recipient is removed, content that was previously decryptable is cryptographically irrecoverable. The `removed_recipients` and `disclosed` flags track disclosure history to support operational decisions about updating secrets.
+Even if a recipient is removed, content that was previously decryptable is cryptographically irrecoverable. `removed_recipients` and the `disclosed` flag are operational aids for deciding whether secrets must be reissued; they are not a recovery mechanism.
 
 ### 12.3 Insider Misuse
 
-It is not possible to prevent a workspace member who has legitimately decrypted content from misusing it. Access control is outside the scope of SecretEnv and must be implemented in a separate system.
+It is not possible to prevent a workspace member who has legitimately decrypted content from misusing it. SecretEnv provides confidential distribution and tamper detection, but control over post-decryption use must come from another control layer.
 
 ### 12.4 Policy-Less Design
 
-SecretEnv does not provide a central policy defining "who should have which secrets." Recipients are derived from the encrypted file itself (the wrap array), and it is assumed that each member manages them appropriately.
+SecretEnv does not provide a centralized policy defining "who should hold which secret." The cryptographic design should be evaluated separately from the organization's approval and distribution process.
 
 ### 12.5 No Compression
 
@@ -1230,149 +1261,7 @@ Compression before encryption is not performed. This is an intentional design de
 
 ## Appendix
 
-### Appendix A: Complete Cryptographic Parameter Table
-
-| Parameter | Value | Purpose |
-|-----------|-------|---------|
-| HPKE suite | `hpke-32-1-3` | wrap algorithm identifier |
-| kem_id | 32 (0x0020) DHKEM(X25519, HKDF-SHA256) | KEM |
-| kdf_id | 1 (0x0001) HKDF-SHA256 | HPKE internal KDF |
-| aead_id | 3 (0x0003) ChaCha20-Poly1305 | HPKE internal AEAD |
-| payload AEAD | `xchacha20-poly1305` | payload / entry encryption |
-| payload nonce | 24 bytes | XChaCha20-Poly1305 nonce |
-| payload key | 32 bytes | DEK / CEK |
-| signature alg | `eddsa-ed25519` | signature algorithm |
-| signature size | 64 bytes | Ed25519 raw signature |
-| HKDF output | 32 bytes | CEK / enc_key |
-| salt (kv-enc entry) | 16 bytes | CEK derivation |
-| salt (PrivateKey) | 16 bytes | enc_key derivation |
-| AEAD tag | 16 bytes | Poly1305 authentication tag |
-| X25519 public key | 32 bytes | KEM public key |
-| X25519 secret key | 32 bytes | KEM private key |
-| Ed25519 public key | 32 bytes | signing public key |
-| Ed25519 secret key | 32 bytes | signing private key |
-| PrivateKey KDF | `sshsig-ed25519-hkdf-sha256` | key derivation method identifier |
-
-### Appendix B: info/AAD Byte Construction Procedure and Examples
-
-#### B.1 file-enc HPKE info
-
-```
-Input:
-  sid = "550e8400-e29b-41d4-a716-446655440000"
-  kid = "01HY0G8N3P5X7QRSTV0WXYZ123"
-
-Construction:
-  json = {"kid":"01HY0G8N3P5X7QRSTV0WXYZ123","p":"secretenv:file:hpke-wrap@3","sid":"550e8400-e29b-41d4-a716-446655440000"}
-  info_bytes = jcs(json)
-  aad_bytes = info_bytes
-
-Constant: context::HPKE_WRAP_FILE_V3 = "secretenv:file:hpke-wrap@3"
-```
-
-#### B.2 kv-enc HPKE info
-
-```
-Input:
-  sid = "550e8400-e29b-41d4-a716-446655440000"
-  kid = "01HY0G8N3P5X7QRSTV0WXYZ123"
-
-Construction:
-  json = {"kid":"01HY0G8N3P5X7QRSTV0WXYZ123","p":"secretenv:kv:hpke-wrap@3","sid":"550e8400-e29b-41d4-a716-446655440000"}
-  info_bytes = jcs(json)
-
-Constant: context::HPKE_WRAP_KV_FILE_V3 = "secretenv:kv:hpke-wrap@3"
-```
-
-#### B.3 kv-enc CEK derivation info
-
-```
-Input:
-  sid = "550e8400-e29b-41d4-a716-446655440000"
-
-Construction:
-  json = {"p":"secretenv:kv:cek@3","sid":"550e8400-e29b-41d4-a716-446655440000"}
-  info_bytes = jcs(json)
-
-Constant: context::KV_CEK_INFO_PREFIX_V3 = "secretenv:kv:cek@3"
-```
-
-#### B.4 kv-enc payload AAD
-
-```
-Input:
-  sid = "550e8400-e29b-41d4-a716-446655440000"
-  k   = "DATABASE_URL"
-
-Construction:
-  json = {"k":"DATABASE_URL","p":"secretenv:kv:payload@3","sid":"550e8400-e29b-41d4-a716-446655440000"}
-  aad_bytes = jcs(json)
-
-Constant: context::PAYLOAD_KV_V3 = "secretenv:kv:payload@3"
-```
-
-#### B.5 file-enc payload AAD
-
-```
-Input:
-  payload.protected = {
-    "format": "secretenv.file.payload@3",
-    "sid": "550e8400-e29b-41d4-a716-446655440000",
-    "alg": { "aead": "xchacha20-poly1305" }
-  }
-
-Construction:
-  aad_bytes = jcs(payload.protected)
-```
-
-#### B.6 PrivateKey AAD
-
-```
-Input:
-  protected = {
-    "format": "secretenv.private.key@3",
-    "member_id": "alice@example.com",
-    "kid": "01HY0G8N3P5X7QRSTV0WXYZ123",
-    "alg": {
-      "kdf": "sshsig-ed25519-hkdf-sha256",
-      "fpr": "sha256:...",
-      "salt": "...",
-      "aead": "xchacha20-poly1305"
-    },
-    "created_at": "2026-01-14T00:00:00Z",
-    "expires_at": "2027-01-14T00:00:00Z"
-  }
-
-Construction:
-  aad_bytes = jcs(protected)
-```
-
-#### B.7 PrivateKey protection enc_key derivation
-
-```
-Input:
-  kid  = "01HY0G8N3P5X7QRSTV0WXYZ123"
-  salt = a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6 (hex, 16 bytes)
-
-Sign message:
-  "secretenv:key-protection@3\n01HY0G8N3P5X7QRSTV0WXYZ123\na1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6"
-
-IKM:
-  ed25519_raw_signature_bytes (64 bytes)
-
-enc_key:
-  HKDF-SHA256(
-    ikm  = IKM,
-    salt = salt,
-    info = "secretenv:private-key-enc@3:01HY0G8N3P5X7QRSTV0WXYZ123",
-    length = 32
-  )
-
-Constant: context::SSH_KEY_PROTECTION_SIGN_MESSAGE_PREFIX_V3 = "secretenv:key-protection@3"
-Constant: context::SSH_PRIVATE_KEY_ENC_INFO_PREFIX_V3 = "secretenv:private-key-enc@3"
-```
-
-### Appendix C: Overall Key Relationship Diagram
+### Appendix A: High-Level Key Relationship Diagram
 
 ```mermaid
 graph TB
@@ -1433,3 +1322,5 @@ graph TB
     style MK fill:#FFE4B5
     style CEK fill:#90EE90
 ```
+
+This diagram provides a quick overview of which secret protects which object and where signatures or wraps are applied. For concrete binding points and verification order, prefer the main text in §9 and §11.

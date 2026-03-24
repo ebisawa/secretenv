@@ -3,51 +3,43 @@
 
 //! Inspect feature - format metadata display.
 
-pub mod file;
-pub mod kv;
+pub(crate) mod file;
+pub(crate) mod kv;
 
 mod formatter;
 pub mod verification;
 
-use crate::feature::verify::file::verify_file_document_report;
-use crate::feature::verify::kv::verify_kv_document_report;
-use crate::feature::verify::SignatureVerificationReport;
 use crate::format::content::EncryptedContent;
 use crate::Result;
-use std::path::Path;
 
-/// Output of inspect with verification
-pub struct InspectOutput {
-    pub formatted: String,
-    pub signature_report: SignatureVerificationReport,
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct InspectSection {
+    pub title: String,
+    pub lines: Vec<String>,
 }
 
-/// Inspect and return formatted output with signature verification.
-pub fn inspect_document_with_verification(
-    content: &EncryptedContent,
-    _source_label: &str,
-    workspace_path: Option<&Path>,
-    debug: bool,
-) -> Result<InspectOutput> {
-    let mut output = String::new();
-    let report = match content {
+#[derive(Debug, Clone)]
+pub struct InspectOutput {
+    pub title: String,
+    pub sections: Vec<InspectSection>,
+}
+
+pub(crate) fn build_section(title: impl Into<String>, lines: Vec<String>) -> InspectSection {
+    InspectSection {
+        title: title.into(),
+        lines,
+    }
+}
+
+pub fn build_inspect_view(content: &EncryptedContent) -> Result<InspectOutput> {
+    match content {
         EncryptedContent::FileEnc(file_content) => {
             let doc = file_content.parse()?;
-            file::inspect_file_enc(&doc, &mut output);
-            let report = verify_file_document_report(&doc, workspace_path, debug);
-            verification::build_signature_verification_report_display(&report, &mut output);
-            report
+            Ok(file::build_file_inspect_output(&doc))
         }
         EncryptedContent::KvEnc(kv_content) => {
             let doc = kv_content.parse()?;
-            kv::inspect_kv_enc(&doc, &mut output)?;
-            let report = verify_kv_document_report(kv_content.as_str(), workspace_path, debug);
-            verification::build_signature_verification_report_display(&report, &mut output);
-            report
+            kv::build_kv_inspect_output(&doc)
         }
-    };
-    Ok(InspectOutput {
-        formatted: output,
-        signature_report: report,
-    })
+    }
 }

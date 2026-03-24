@@ -4,7 +4,7 @@
 //! Public key document builders used during key generation.
 
 use crate::crypto::sign::sign_bytes;
-use crate::feature::context::ssh::SshSigningContext;
+use crate::feature::key::ssh_binding::SshBindingContext;
 use crate::format::jcs;
 use crate::io::ssh::protocol::constants as ssh;
 use crate::io::ssh::SshError;
@@ -66,14 +66,14 @@ pub fn build_public_key(params: &PublicKeyBuildParams<'_>) -> Result<PublicKey> 
 
 /// Build attestation for identity keys.
 pub fn build_attestation(
-    ssh_context: &SshSigningContext,
+    ssh_binding: &SshBindingContext,
     identity_keys: &IdentityKeys,
 ) -> Result<Attestation> {
     let identity_keys_jcs = jcs::normalize(identity_keys)?;
 
-    let raw_sig = ssh_context
+    let raw_sig = ssh_binding
         .backend
-        .sign_for_ikm(&ssh_context.public_key, &identity_keys_jcs)
+        .sign_for_ikm(&ssh_binding.public_key, &identity_keys_jcs)
         .map_err(|e| {
             crate::Error::from(SshError::operation_failed_with_source(
                 format!("Failed to sign attestation: {}", e),
@@ -85,7 +85,7 @@ pub fn build_attestation(
 
     Ok(Attestation {
         method: ssh::ATTESTATION_METHOD_SSH_SIGN.to_string(),
-        pub_: ssh_context.public_key.clone(),
+        pub_: ssh_binding.public_key.clone(),
         sig: sig_b64url,
     })
 }

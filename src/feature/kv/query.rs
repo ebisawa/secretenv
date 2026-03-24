@@ -5,11 +5,11 @@
 
 use super::decrypt::{decrypt_kv_document, decrypt_kv_single_entry};
 use crate::feature::context::crypto::CryptoContext;
-use crate::feature::verify::kv::verify_kv_content;
+use crate::feature::verify::kv::signature::verify_kv_content;
 use crate::format::content::KvEncContent;
-use crate::format::kv::enc::{KvEncLine, KvEncParser};
-use crate::format::token::TokenCodec;
-use crate::model::kv_enc::KvEntryValue;
+use crate::format::kv::enc::parser::KvEncParser;
+use crate::format::schema::document::parse_kv_entry_token;
+use crate::model::kv_enc::line::KvEncLine;
 use crate::{Error, Result};
 use std::collections::HashMap;
 
@@ -19,7 +19,7 @@ pub fn check_kv_entry_disclosed(content: &KvEncContent, key: &str) -> Result<boo
     for line in doc.lines() {
         if let KvEncLine::KV { key: k, token } = line {
             if k == key {
-                let entry: KvEntryValue = TokenCodec::decode_auto(token)?;
+                let entry = parse_kv_entry_token(token)?;
                 return Ok(entry.disclosed);
             }
         }
@@ -33,7 +33,7 @@ pub fn list_kv_keys_with_disclosed(content: &KvEncContent) -> Result<Vec<(String
     let mut keys = Vec::new();
     for line in doc.lines() {
         if let KvEncLine::KV { key, token } = line {
-            let entry: KvEntryValue = TokenCodec::decode_auto(token)?;
+            let entry = parse_kv_entry_token(token)?;
             keys.push((key.clone(), entry.disclosed));
         }
     }

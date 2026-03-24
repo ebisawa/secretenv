@@ -6,18 +6,20 @@
 use crate::cli_common::{ALICE_MEMBER_ID, BOB_MEMBER_ID};
 use crate::keygen_helpers::make_verified_members;
 use crate::test_utils::{setup_member_key_context, setup_test_keystore_from_fixtures};
+use secretenv::app::rewrap::execution::rewrap_kv_content_with_request;
+use secretenv::app::rewrap::types::SingleRewrapRequest;
 use secretenv::feature::context::crypto::CryptoContext;
-use secretenv::feature::encrypt::SigningContext;
+use secretenv::feature::envelope::signature::SigningContext;
 use secretenv::feature::kv::encrypt::encrypt_kv_document;
-use secretenv::feature::rewrap::kv::rewrap_kv_document;
-use secretenv::feature::rewrap::RewrapOptions;
 use secretenv::format::content::KvEncContent;
+use secretenv::format::kv::document::parse_kv_document;
 use secretenv::format::kv::dotenv::parse_dotenv;
-use secretenv::format::kv::enc::parser::KvEncLine;
-use secretenv::format::kv::parse_kv_document;
+use secretenv::format::schema::document::{parse_kv_entry_token, parse_kv_wrap_token};
 use secretenv::format::token::TokenCodec;
 use secretenv::io::keystore::storage::{list_kids, load_public_key};
-use secretenv::model::kv_enc::{KvEntryValue, KvWrap};
+use secretenv::model::kv_enc::entry::KvEntryValue;
+use secretenv::model::kv_enc::header::KvWrap;
+use secretenv::model::kv_enc::line::KvEncLine;
 use std::fs;
 use tempfile::TempDir;
 
@@ -36,12 +38,19 @@ fn setup_workspace_members(temp_dir: &TempDir, member_id: &str, kid: &str) {
     .unwrap();
 }
 
-/// Build default RewrapOptions.
-fn rewrap_options_default(debug: bool) -> RewrapOptions {
-    RewrapOptions {
-        rotate_key: false,
-        clear_disclosure_history: false,
-        token_codec: None,
+fn single_rewrap_request<'a>(
+    key_ctx: &'a CryptoContext,
+    workspace_root: Option<&'a std::path::Path>,
+    rotate_key: bool,
+    clear_disclosure_history: bool,
+    debug: bool,
+) -> SingleRewrapRequest<'a> {
+    SingleRewrapRequest {
+        member_id: ALICE_MEMBER_ID,
+        key_ctx,
+        workspace_root,
+        rotate_key,
+        clear_disclosure_history,
         no_signer_pub: false,
         debug,
     }
@@ -151,15 +160,9 @@ fn test_rewrap_kv_document_succeeds() {
 
     let encrypted = encrypt_kv_for_alice(&temp_dir, kid, &key_ctx);
 
-    let options = rewrap_options_default(false);
+    let request = single_rewrap_request(&key_ctx, Some(temp_dir.path()), false, false, false);
     let encrypted = KvEncContent::new_unchecked(encrypted);
-    let result = rewrap_kv_document(
-        &options,
-        &encrypted,
-        ALICE_MEMBER_ID,
-        &key_ctx,
-        Some(temp_dir.path()),
-    );
+    let result = rewrap_kv_content_with_request(&encrypted, &request);
 
     assert!(
         result.is_ok(),
@@ -189,21 +192,9 @@ fn test_rewrap_kv_document_rotate_key() {
 
     let encrypted = encrypt_kv_for_alice(&temp_dir, kid, &key_ctx);
 
-    let options = RewrapOptions {
-        rotate_key: true,
-        clear_disclosure_history: false,
-        token_codec: None,
-        no_signer_pub: false,
-        debug: false,
-    };
+    let request = single_rewrap_request(&key_ctx, Some(temp_dir.path()), true, false, false);
     let encrypted = KvEncContent::new_unchecked(encrypted);
-    let result = rewrap_kv_document(
-        &options,
-        &encrypted,
-        ALICE_MEMBER_ID,
-        &key_ctx,
-        Some(temp_dir.path()),
-    );
+    let result = rewrap_kv_content_with_request(&encrypted, &request);
 
     assert!(
         result.is_ok(),
@@ -250,15 +241,9 @@ fn test_rewrap_kv_add_recipient() {
     setup_workspace_members(&temp_dir, ALICE_MEMBER_ID, &alice_kid);
     setup_workspace_members(&temp_dir, BOB_MEMBER_ID, &bob_kid);
 
-    let options = rewrap_options_default(false);
+    let request = single_rewrap_request(&key_ctx, Some(temp_dir.path()), false, false, false);
     let encrypted = KvEncContent::new_unchecked(encrypted);
-    let result = rewrap_kv_document(
-        &options,
-        &encrypted,
-        ALICE_MEMBER_ID,
-        &key_ctx,
-        Some(temp_dir.path()),
-    );
+    let result = rewrap_kv_content_with_request(&encrypted, &request);
 
     assert!(
         result.is_ok(),
@@ -274,7 +259,8 @@ fn test_rewrap_kv_add_recipient() {
         .unwrap()
         .strip_prefix(":WRAP ")
         .unwrap();
-    let wrap_data: secretenv::model::kv_enc::KvWrap = TokenCodec::decode_auto(wrap_token).unwrap();
+    let wrap_data: secretenv::model::kv_enc::header::KvWrap =
+        parse_kv_wrap_token(wrap_token).unwrap();
     let recipient_ids: Vec<&str> = wrap_data.wrap.iter().map(|w| w.rid.as_str()).collect();
     assert!(
         recipient_ids.contains(&BOB_MEMBER_ID),
@@ -300,15 +286,9 @@ fn test_rewrap_kv_remove_recipient() {
     setup_workspace_members(&temp_dir, ALICE_MEMBER_ID, &alice_kid);
     // Do NOT add bob to workspace members => he will be removed during rewrap
 
-    let options = rewrap_options_default(false);
+    let request = single_rewrap_request(&key_ctx, Some(temp_dir.path()), false, false, false);
     let encrypted = KvEncContent::new_unchecked(encrypted);
-    let result = rewrap_kv_document(
-        &options,
-        &encrypted,
-        ALICE_MEMBER_ID,
-        &key_ctx,
-        Some(temp_dir.path()),
-    );
+    let result = rewrap_kv_content_with_request(&encrypted, &request);
 
     assert!(
         result.is_ok(),
@@ -338,33 +318,15 @@ fn test_rewrap_kv_clear_disclosure_history() {
     // Setup workspace with only alice (bob removed) => removal creates disclosure history
     setup_workspace_members(&temp_dir, ALICE_MEMBER_ID, &alice_kid);
 
-    let remove_options = rewrap_options_default(false);
+    let remove_request =
+        single_rewrap_request(&key_ctx, Some(temp_dir.path()), false, false, false);
     let encrypted = KvEncContent::new_unchecked(encrypted);
-    let after_remove = rewrap_kv_document(
-        &remove_options,
-        &encrypted,
-        ALICE_MEMBER_ID,
-        &key_ctx,
-        Some(temp_dir.path()),
-    )
-    .unwrap();
+    let after_remove = rewrap_kv_content_with_request(&encrypted, &remove_request).unwrap();
 
     // Now rewrap again with clear_disclosure_history
-    let clear_options = RewrapOptions {
-        rotate_key: false,
-        clear_disclosure_history: true,
-        token_codec: None,
-        no_signer_pub: false,
-        debug: false,
-    };
+    let clear_request = single_rewrap_request(&key_ctx, Some(temp_dir.path()), false, true, false);
     let after_remove = KvEncContent::new_unchecked(after_remove);
-    let result = rewrap_kv_document(
-        &clear_options,
-        &after_remove,
-        ALICE_MEMBER_ID,
-        &key_ctx,
-        Some(temp_dir.path()),
-    );
+    let result = rewrap_kv_content_with_request(&after_remove, &clear_request);
 
     assert!(
         result.is_ok(),
@@ -406,15 +368,9 @@ fn test_rewrap_kv_invalid_signature_error() {
         .join("\n")
         + "\n";
 
-    let options = rewrap_options_default(false);
+    let request = single_rewrap_request(&key_ctx, Some(temp_dir.path()), false, false, false);
     let tampered = KvEncContent::new_unchecked(tampered);
-    let result = rewrap_kv_document(
-        &options,
-        &tampered,
-        ALICE_MEMBER_ID,
-        &key_ctx,
-        Some(temp_dir.path()),
-    );
+    let result = rewrap_kv_content_with_request(&tampered, &request);
 
     assert!(
         result.is_err(),
@@ -429,7 +385,7 @@ fn extract_disclosed_flags(content: &str) -> Vec<(String, bool)> {
         .iter()
         .filter_map(|line| {
             if let KvEncLine::KV { key, token } = line {
-                let entry: KvEntryValue = TokenCodec::decode_auto(token).unwrap();
+                let entry: KvEntryValue = parse_kv_entry_token(token).unwrap();
                 Some((key.clone(), entry.disclosed))
             } else {
                 None
@@ -456,16 +412,9 @@ fn test_rewrap_kv_remove_recipient_sets_disclosed_true() {
     // Setup workspace with only alice (bob removed)
     setup_workspace_members(&temp_dir, ALICE_MEMBER_ID, &alice_kid);
 
-    let options = rewrap_options_default(false);
+    let request = single_rewrap_request(&key_ctx, Some(temp_dir.path()), false, false, false);
     let encrypted = KvEncContent::new_unchecked(encrypted);
-    let rewrapped = rewrap_kv_document(
-        &options,
-        &encrypted,
-        ALICE_MEMBER_ID,
-        &key_ctx,
-        Some(temp_dir.path()),
-    )
-    .unwrap();
+    let rewrapped = rewrap_kv_content_with_request(&encrypted, &request).unwrap();
 
     // After removing bob, all entries must have disclosed: true
     let flags = extract_disclosed_flags(&rewrapped);
@@ -501,16 +450,9 @@ fn test_rewrap_kv_add_recipient_preserves_disclosed() {
     setup_workspace_members(&temp_dir, ALICE_MEMBER_ID, &alice_kid);
     setup_workspace_members(&temp_dir, BOB_MEMBER_ID, &bob_kid);
 
-    let options = rewrap_options_default(false);
+    let request = single_rewrap_request(&key_ctx, Some(temp_dir.path()), false, false, false);
     let encrypted = KvEncContent::new_unchecked(encrypted);
-    let rewrapped = rewrap_kv_document(
-        &options,
-        &encrypted,
-        ALICE_MEMBER_ID,
-        &key_ctx,
-        Some(temp_dir.path()),
-    )
-    .unwrap();
+    let rewrapped = rewrap_kv_content_with_request(&encrypted, &request).unwrap();
 
     // After adding bob (no removal), entries must preserve disclosed: false
     let flags = extract_disclosed_flags(&rewrapped);
@@ -546,22 +488,9 @@ fn test_rewrap_kv_rotate_key_preserves_disclosed() {
         "original entries must have disclosed: false"
     );
 
-    let options = RewrapOptions {
-        rotate_key: true,
-        clear_disclosure_history: false,
-        token_codec: None,
-        no_signer_pub: false,
-        debug: false,
-    };
+    let request = single_rewrap_request(&key_ctx, Some(temp_dir.path()), true, false, false);
     let encrypted = KvEncContent::new_unchecked(encrypted);
-    let rewrapped = rewrap_kv_document(
-        &options,
-        &encrypted,
-        ALICE_MEMBER_ID,
-        &key_ctx,
-        Some(temp_dir.path()),
-    )
-    .unwrap();
+    let rewrapped = rewrap_kv_content_with_request(&encrypted, &request).unwrap();
 
     // After rotate-key without removal, entries must preserve disclosed: false
     let flags = extract_disclosed_flags(&rewrapped);
@@ -605,22 +534,9 @@ fn test_rewrap_kv_remove_then_rotate_preserves_disclosed_true() {
     setup_workspace_members(&temp_dir, ALICE_MEMBER_ID, &alice_kid);
 
     // Step 1: Remove bob (sets disclosed: true on all entries) + rotate key
-    let options = RewrapOptions {
-        rotate_key: true,
-        clear_disclosure_history: false,
-        token_codec: None,
-        no_signer_pub: false,
-        debug: false,
-    };
+    let request = single_rewrap_request(&key_ctx, Some(temp_dir.path()), true, false, false);
     let encrypted = KvEncContent::new_unchecked(encrypted);
-    let rewrapped = rewrap_kv_document(
-        &options,
-        &encrypted,
-        ALICE_MEMBER_ID,
-        &key_ctx,
-        Some(temp_dir.path()),
-    )
-    .unwrap();
+    let rewrapped = rewrap_kv_content_with_request(&encrypted, &request).unwrap();
 
     // After remove + rotate, all entries must still have disclosed: true
     let flags = extract_disclosed_flags(&rewrapped);
@@ -668,16 +584,10 @@ fn test_rewrap_kv_clear_disclosure_history_resets_disclosed_flags() {
     setup_workspace_members(&temp_dir, ALICE_MEMBER_ID, &alice_kid);
 
     // Step 1: Remove bob => disclosed: true on all entries, removed_recipients populated
-    let remove_options = rewrap_options_default(false);
+    let remove_request =
+        single_rewrap_request(&key_ctx, Some(temp_dir.path()), false, false, false);
     let encrypted = KvEncContent::new_unchecked(encrypted);
-    let after_remove = rewrap_kv_document(
-        &remove_options,
-        &encrypted,
-        ALICE_MEMBER_ID,
-        &key_ctx,
-        Some(temp_dir.path()),
-    )
-    .unwrap();
+    let after_remove = rewrap_kv_content_with_request(&encrypted, &remove_request).unwrap();
 
     // Verify disclosed: true after removal
     let flags_after_remove = extract_disclosed_flags(&after_remove);
@@ -699,29 +609,16 @@ fn test_rewrap_kv_clear_disclosure_history_resets_disclosed_flags() {
         .unwrap()
         .strip_prefix(":WRAP ")
         .unwrap();
-    let wrap_after_remove: KvWrap = TokenCodec::decode_auto(wrap_token_after_remove).unwrap();
+    let wrap_after_remove: KvWrap = parse_kv_wrap_token(wrap_token_after_remove).unwrap();
     assert!(
         wrap_after_remove.removed_recipients.is_some(),
         "removed_recipients must be present after removal"
     );
 
     // Step 2: Clear disclosure history => disclosed: false, removed_recipients gone
-    let clear_options = RewrapOptions {
-        rotate_key: false,
-        clear_disclosure_history: true,
-        token_codec: None,
-        no_signer_pub: false,
-        debug: false,
-    };
+    let clear_request = single_rewrap_request(&key_ctx, Some(temp_dir.path()), false, true, false);
     let after_remove = KvEncContent::new_unchecked(after_remove);
-    let after_clear = rewrap_kv_document(
-        &clear_options,
-        &after_remove,
-        ALICE_MEMBER_ID,
-        &key_ctx,
-        Some(temp_dir.path()),
-    )
-    .unwrap();
+    let after_clear = rewrap_kv_content_with_request(&after_remove, &clear_request).unwrap();
 
     // Verify all entries have disclosed: false (field omitted)
     let flags_after_clear = extract_disclosed_flags(&after_clear);
@@ -744,7 +641,7 @@ fn test_rewrap_kv_clear_disclosure_history_resets_disclosed_flags() {
         .unwrap()
         .strip_prefix(":WRAP ")
         .unwrap();
-    let wrap_after_clear: KvWrap = TokenCodec::decode_auto(wrap_token_after_clear).unwrap();
+    let wrap_after_clear: KvWrap = parse_kv_wrap_token(wrap_token_after_clear).unwrap();
     assert!(
         wrap_after_clear.removed_recipients.is_none(),
         "removed_recipients must be None after clear_disclosure_history"

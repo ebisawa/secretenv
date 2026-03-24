@@ -51,8 +51,11 @@ pub fn rotate_file_key(
     )?;
 
     let current_recipients = protected.recipients();
-    let attested_pubkeys =
-        load_and_verify_recipient_public_keys(&key_ctx.keystore_root, &current_recipients, debug)?;
+    let attested_pubkeys = load_and_verify_recipient_public_keys(
+        key_ctx.pub_key_source.as_ref(),
+        &current_recipients,
+        debug,
+    )?;
     protected.wrap = build_wraps_for_recipients(
         &attested_pubkeys,
         &protected.sid,

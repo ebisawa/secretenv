@@ -6,18 +6,19 @@
 use crate::cli_common::{ALICE_MEMBER_ID, BOB_MEMBER_ID};
 use crate::keygen_helpers::make_verified_members;
 use crate::test_utils::{setup_member_key_context, setup_test_keystore_from_fixtures};
+use secretenv::app::rewrap::execution::rewrap_kv_content_with_request;
+use secretenv::app::rewrap::types::SingleRewrapRequest;
 use secretenv::feature::context::crypto::CryptoContext;
-use secretenv::feature::encrypt::SigningContext;
+use secretenv::feature::envelope::signature::SigningContext;
 use secretenv::feature::kv::encrypt::encrypt_kv_document;
-use secretenv::feature::kv::{set_kv_entry, KvWriteContext};
-use secretenv::feature::rewrap::kv::rewrap_kv_document;
-use secretenv::feature::rewrap::RewrapOptions;
+use secretenv::feature::kv::mutate::{set_kv_entry, KvWriteContext};
 use secretenv::format::content::KvEncContent;
-use secretenv::format::kv::enc::parser::KvEncLine;
-use secretenv::format::kv::parse_kv_document;
+use secretenv::format::kv::document::parse_kv_document;
+use secretenv::format::schema::document::parse_kv_entry_token;
 use secretenv::format::token::TokenCodec;
 use secretenv::io::keystore::storage::{list_kids, load_public_key};
-use secretenv::model::kv_enc::KvEntryValue;
+use secretenv::model::kv_enc::entry::KvEntryValue;
+use secretenv::model::kv_enc::line::KvEncLine;
 use std::fs;
 use tempfile::TempDir;
 
@@ -79,7 +80,7 @@ fn extract_disclosed_flags(content: &str) -> Vec<(String, bool)> {
         .iter()
         .filter_map(|line| match line {
             KvEncLine::KV { key, token } => {
-                let entry: KvEntryValue = TokenCodec::decode_auto(token).unwrap();
+                let entry: KvEntryValue = parse_kv_entry_token(token).unwrap();
                 Some((key.clone(), entry.disclosed))
             }
             _ => None,
@@ -118,6 +119,21 @@ fn encrypt_two_member_document(
     .unwrap()
 }
 
+fn single_rewrap_request<'a>(
+    key_ctx: &'a CryptoContext,
+    workspace_root: Option<&'a std::path::Path>,
+) -> SingleRewrapRequest<'a> {
+    SingleRewrapRequest {
+        member_id: ALICE_MEMBER_ID,
+        key_ctx,
+        workspace_root,
+        rotate_key: false,
+        clear_disclosure_history: false,
+        no_signer_pub: false,
+        debug: false,
+    }
+}
+
 fn remove_bob_recipient(
     temp_dir: &TempDir,
     encrypted: String,
@@ -125,24 +141,10 @@ fn remove_bob_recipient(
     kid: &str,
 ) -> String {
     setup_workspace_members(temp_dir, ALICE_MEMBER_ID, kid);
-
-    let options = RewrapOptions {
-        rotate_key: false,
-        clear_disclosure_history: false,
-        token_codec: None,
-        no_signer_pub: false,
-        debug: false,
-    };
+    let request = single_rewrap_request(key_ctx, Some(temp_dir.path()));
     let encrypted = KvEncContent::new_unchecked(encrypted);
 
-    rewrap_kv_document(
-        &options,
-        &encrypted,
-        ALICE_MEMBER_ID,
-        key_ctx,
-        Some(temp_dir.path()),
-    )
-    .unwrap()
+    rewrap_kv_content_with_request(&encrypted, &request).unwrap()
 }
 
 #[test]
@@ -160,7 +162,7 @@ fn test_set_kv_entry_resets_disclosed_after_recipient_removal() {
 
     let ctx = KvWriteContext {
         member_id: ALICE_MEMBER_ID.to_string(),
-        key_ctx: key_ctx.clone(),
+        key_ctx,
         token_codec: None,
         no_signer_pub: false,
         verbose: false,
@@ -194,7 +196,7 @@ fn test_set_kv_entry_new_entry_has_disclosed_false() {
 
     let ctx = KvWriteContext {
         member_id: ALICE_MEMBER_ID.to_string(),
-        key_ctx: key_ctx.clone(),
+        key_ctx,
         token_codec: None,
         no_signer_pub: false,
         verbose: false,

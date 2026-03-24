@@ -1,8 +1,9 @@
 // Copyright 2026 Satoshi Ebisawa
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::feature::key as feature_key;
-use crate::io::verify_online::VerificationStatus;
+use crate::app::verification::OnlineVerificationStatus;
+use crate::feature::key::portable_export::PortableExportOutput;
+use crate::feature::key::types as feature_key_types;
 use crate::model::ssh::SshDeterminismStatus;
 
 #[derive(Debug, Clone)]
@@ -17,11 +18,11 @@ pub struct KeyNewResult {
     pub ssh_fingerprint: String,
     pub ssh_public_key: String,
     pub ssh_determinism: SshDeterminismStatus,
-    pub github_verification: VerificationStatus,
+    pub github_verification: OnlineVerificationStatus,
 }
 
-impl From<feature_key::KeyNewResult> for KeyNewResult {
-    fn from(r: feature_key::KeyNewResult) -> Self {
+impl From<feature_key_types::KeyNewResult> for KeyNewResult {
+    fn from(r: feature_key_types::KeyNewResult) -> Self {
         Self {
             member_id: r.member_id,
             kid: r.kid,
@@ -33,7 +34,7 @@ impl From<feature_key::KeyNewResult> for KeyNewResult {
             ssh_fingerprint: r.ssh_fingerprint,
             ssh_public_key: r.ssh_public_key,
             ssh_determinism: r.ssh_determinism,
-            github_verification: VerificationStatus::NotConfigured,
+            github_verification: OnlineVerificationStatus::NotConfigured,
         }
     }
 }
@@ -48,8 +49,8 @@ pub struct KeyInfo {
     pub format: String,
 }
 
-impl From<feature_key::KeyInfo> for KeyInfo {
-    fn from(i: feature_key::KeyInfo) -> Self {
+impl From<feature_key_types::KeyInfo> for KeyInfo {
+    fn from(i: feature_key_types::KeyInfo) -> Self {
         Self {
             kid: i.kid,
             member_id: i.member_id,
@@ -66,8 +67,8 @@ pub struct KeyListResult {
     pub total_keys: usize,
 }
 
-impl From<feature_key::KeyListResult> for KeyListResult {
-    fn from(r: feature_key::KeyListResult) -> Self {
+impl From<feature_key_types::KeyListResult> for KeyListResult {
+    fn from(r: feature_key_types::KeyListResult) -> Self {
         Self {
             entries: r
                 .entries
@@ -84,8 +85,8 @@ pub struct KeyActivateResult {
     pub kid: String,
 }
 
-impl From<feature_key::KeyActivateResult> for KeyActivateResult {
-    fn from(r: feature_key::KeyActivateResult) -> Self {
+impl From<feature_key_types::KeyActivateResult> for KeyActivateResult {
+    fn from(r: feature_key_types::KeyActivateResult) -> Self {
         Self {
             member_id: r.member_id,
             kid: r.kid,
@@ -99,8 +100,8 @@ pub struct KeyRemoveResult {
     pub was_active: bool,
 }
 
-impl From<feature_key::KeyRemoveResult> for KeyRemoveResult {
-    fn from(r: feature_key::KeyRemoveResult) -> Self {
+impl From<feature_key_types::KeyRemoveResult> for KeyRemoveResult {
+    fn from(r: feature_key_types::KeyRemoveResult) -> Self {
         Self {
             member_id: r.member_id,
             kid: r.kid,
@@ -114,11 +115,27 @@ pub struct KeyExportResult {
     pub kid: String,
 }
 
-impl From<feature_key::KeyExportResult> for KeyExportResult {
-    fn from(r: feature_key::KeyExportResult) -> Self {
+impl From<feature_key_types::KeyExportResult> for KeyExportResult {
+    fn from(r: feature_key_types::KeyExportResult) -> Self {
         Self {
             member_id: r.member_id,
             kid: r.kid,
+        }
+    }
+}
+
+pub struct KeyExportPrivateResult {
+    pub member_id: String,
+    pub kid: String,
+    pub encoded_key: String,
+}
+
+impl From<PortableExportOutput> for KeyExportPrivateResult {
+    fn from(output: PortableExportOutput) -> Self {
+        Self {
+            member_id: output.member_id,
+            kid: output.kid,
+            encoded_key: output.encoded_key,
         }
     }
 }

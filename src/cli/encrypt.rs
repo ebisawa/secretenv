@@ -9,11 +9,11 @@
 use clap::Args;
 use std::path::PathBuf;
 
-use crate::app::context::CommonCommandOptions;
-use crate::app::file::{encrypt_file_command, resolve_encrypted_output_path};
+use crate::app::context::options::CommonCommandOptions;
+use crate::app::file::encrypt::encrypt_file_command;
 use crate::cli::common::options::CommonOptions;
-use crate::cli::common::ssh::resolve_ssh_context_for_active_key;
-use crate::cli::file_output;
+use crate::cli::common::output::file::{resolve_encrypted_output_path, write_encrypted_output};
+use crate::cli::common::ssh::resolve_ssh_context_optional;
 use crate::Result;
 
 #[derive(Args)]
@@ -40,7 +40,7 @@ pub struct EncryptArgs {
 
 pub fn run(args: EncryptArgs) -> Result<()> {
     let options = CommonCommandOptions::from(&args.common);
-    let ssh_ctx = resolve_ssh_context_for_active_key(&options)?;
+    let ssh_ctx = resolve_ssh_context_optional(&options)?;
     let encrypted = encrypt_file_command(
         &options,
         args.member_id.clone(),
@@ -50,7 +50,6 @@ pub fn run(args: EncryptArgs) -> Result<()> {
     )?;
     let output_path = resolve_encrypted_output_path(args.out.as_ref(), &args.input)?;
 
-    file_output::save_encrypted_output(output_path.as_ref(), &encrypted, args.common.quiet)?;
-
+    write_encrypted_output(output_path.as_ref(), &encrypted, args.common.quiet)?;
     Ok(())
 }

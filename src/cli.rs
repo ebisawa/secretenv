@@ -6,7 +6,6 @@
 // Common utilities (enabled for v3)
 pub mod common;
 pub mod error;
-pub mod file_output;
 pub mod identity_prompt;
 
 // Active v3 commands
@@ -34,6 +33,7 @@ pub mod config;
 
 use clap::{Parser, Subcommand};
 
+use crate::cli::common::env_mode::ensure_env_mode_command_allowed;
 use crate::Error;
 
 /// Serverless CLI for secure secret sharing
@@ -97,6 +97,8 @@ pub enum Commands {
 
 pub fn run() -> Result<(), Error> {
     let cli = Cli::parse();
+    ensure_env_mode_command_allowed(command_label(&cli.command))?;
+
     match cli.command {
         Commands::Config(args) => config::run(args),
         Commands::Decrypt(args) => decrypt::run(args),
@@ -113,5 +115,25 @@ pub fn run() -> Result<(), Error> {
         Commands::Run(args) => run::run(args),
         Commands::Set(args) => set::run(args),
         Commands::Unset(args) => unset::run(args),
+    }
+}
+
+fn command_label(command: &Commands) -> &'static str {
+    match command {
+        Commands::Config(_) => "config",
+        Commands::Decrypt(_) => "decrypt",
+        Commands::Encrypt(_) => "encrypt",
+        Commands::Get(_) => "get",
+        Commands::Import(_) => "import",
+        Commands::Init(_) => "init",
+        Commands::Inspect(_) => "inspect",
+        Commands::Join(_) => "join",
+        Commands::Key(_) => "key",
+        Commands::List(_) => "list",
+        Commands::Member(_) => "member",
+        Commands::Rewrap(_) => "rewrap",
+        Commands::Run(_) => "run",
+        Commands::Set(_) => "set",
+        Commands::Unset(_) => "unset",
     }
 }

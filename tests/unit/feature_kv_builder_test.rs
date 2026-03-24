@@ -1,7 +1,11 @@
-use super::{KvDocumentBuilder, KvDocumentEntry, WrapSource};
-use crate::format::kv::enc::parser::{KvEncLine, KvEncVersion};
+use super::KvDocumentBuilder;
+use crate::feature::kv::document::{KvDocumentEntry, WrapSource};
+use crate::format::schema::document::parse_kv_entry_token;
 use crate::format::token::TokenCodec;
-use crate::model::kv_enc::{KvEntryValue, KvHeader, KvWrap};
+use crate::model::common::WrapItem;
+use crate::model::kv_enc::entry::KvEntryValue;
+use crate::model::kv_enc::header::{KvHeader, KvWrap};
+use crate::model::kv_enc::line::{KvEncLine, KvEncVersion};
 use std::collections::HashMap;
 use uuid::Uuid;
 
@@ -15,7 +19,13 @@ fn sample_head() -> KvHeader {
 
 fn sample_wrap() -> KvWrap {
     KvWrap {
-        wrap: vec![],
+        wrap: vec![WrapItem {
+            rid: "alice@example.com".to_string(),
+            kid: "01HY0G8N3P5X7QRSTV0WXYZ123".to_string(),
+            alg: "hpke-32-1-3".to_string(),
+            enc: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".to_string(),
+            ct: "AAAAAAAAAAAAAAAA".to_string(),
+        }],
         removed_recipients: None,
     }
 }
@@ -26,11 +36,11 @@ fn encode_wrap_token(wrap: &KvWrap) -> String {
 
 fn sample_entry_value(key: &str, disclosed: bool) -> KvEntryValue {
     KvEntryValue {
-        salt: "dGVzdHNhbHQ".to_string(),
+        salt: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
         k: key.to_string(),
         aead: "xchacha20-poly1305".to_string(),
-        nonce: "dGVzdG5vbmNl".to_string(),
-        ct: "dGVzdGN0".to_string(),
+        nonce: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".to_string(),
+        ct: "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB".to_string(),
         disclosed,
     }
 }
@@ -62,7 +72,7 @@ fn test_kv_document_entry_encoded_accessors() {
 #[test]
 fn test_wrap_source_decoded_data() {
     let w = WrapSource::Decoded(sample_wrap());
-    assert!(w.data().wrap.is_empty());
+    assert_eq!(w.data().wrap.len(), 1);
 }
 
 #[test]
@@ -71,7 +81,7 @@ fn test_wrap_source_raw_data() {
         data: sample_wrap(),
         token: "raw_tok".to_string(),
     };
-    assert!(w.data().wrap.is_empty());
+    assert_eq!(w.data().wrap.len(), 1);
 }
 
 #[test]
@@ -331,7 +341,7 @@ fn test_clear_disclosed_flags_clears_disclosed_true() {
     doc.clear_disclosed_flags().unwrap();
 
     assert!(matches!(&doc.entries[0], KvDocumentEntry::Encoded { .. }));
-    let decoded_a: KvEntryValue = TokenCodec::decode_auto(doc.entries[0].token()).unwrap();
+    let decoded_a: KvEntryValue = parse_kv_entry_token(doc.entries[0].token()).unwrap();
     assert!(!decoded_a.disclosed);
 
     assert!(matches!(&doc.entries[1], KvDocumentEntry::Preserved { .. }));

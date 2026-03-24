@@ -3,20 +3,19 @@
 
 //! Mutating operations for kv-enc documents.
 
-use crate::crypto::types::keys::MasterKey;
 use crate::feature::context::crypto::CryptoContext;
-use crate::feature::envelope::entry::encrypt_entry;
 use crate::feature::verify::recipients::load_and_verify_recipient_public_keys;
 use crate::format::content::KvEncContent;
-use crate::format::kv::enc::{extract_recipients_from_wrap, KvEncLine};
+use crate::format::kv::enc::canonical::extract_recipients_from_wrap;
 use crate::format::token::TokenCodec;
 use crate::io::workspace::members::list_active_member_ids;
-use crate::model::kv_enc::KvHeader;
-use crate::support::time::current_timestamp;
+use crate::model::kv_enc::line::KvEncLine;
 use crate::{Error, Result};
 use std::collections::HashMap;
 use std::path::Path;
-use uuid::Uuid;
+
+use super::entry_codec::build_entry_tokens;
+use super::header::build_updated_header;
 
 /// Result of kv set operation.
 pub struct KvSetResult {
@@ -66,7 +65,7 @@ pub fn set_kv_entry(
 
 /// Remove a key from kv-enc content without decrypting any entries.
 pub fn unset_kv_entry(content: &KvEncContent, key: &str, ctx: &KvWriteContext) -> Result<String> {
-    let session = super::rewrite::VerifiedKvRewriteSession::load(
+    let session = super::rewrite_session::VerifiedKvRewriteSession::load(
         content,
         &ctx.member_id,
         &ctx.key_ctx,
@@ -81,7 +80,7 @@ pub fn unset_kv_entry(content: &KvEncContent, key: &str, ctx: &KvWriteContext) -
         });
     }
 
-    let mut unsigned = session.build_unsigned(build_updated_head(doc)?)?;
+    let mut unsigned = session.build_unsigned(build_updated_header(doc)?)?;
     unsigned.unset_entry(key);
     session.sign(unsigned)
 }
@@ -93,7 +92,7 @@ fn set_kv_new_file(
 ) -> Result<KvSetResult> {
     let recipients = list_active_member_ids(workspace_root)?;
     let verified_members = load_and_verify_recipient_public_keys(
-        &ctx.key_ctx.keystore_root,
+        ctx.key_ctx.pub_key_source.as_ref(),
         &recipients,
         ctx.verbose,
     )?;
@@ -122,7 +121,7 @@ fn set_kv_existing_file(
     entries: &[(String, String)],
     ctx: &KvWriteContext,
 ) -> Result<KvSetResult> {
-    let session = super::rewrite::VerifiedKvRewriteSession::load(
+    let session = super::rewrite_session::VerifiedKvRewriteSession::load(
         content,
         &ctx.member_id,
         &ctx.key_ctx,
@@ -134,12 +133,19 @@ fn set_kv_existing_file(
     let recipients = extract_recipients_from_wrap(&doc.wrap);
     let codec = session.token_codec();
     let master_key = session.unwrap_master_key()?;
-    let new_entry_tokens = build_entry_tokens(entries, &master_key, &doc.head.sid, codec, ctx)?;
+    let new_entry_tokens = build_entry_tokens(
+        entries,
+        &master_key,
+        &doc.head.sid,
+        codec,
+        ctx.verbose,
+        "set_kv_entry",
+    )?;
     let new_entries: HashMap<&str, &str> = new_entry_tokens
         .iter()
         .map(|(key, value)| (*key, value.as_str()))
         .collect();
-    let mut unsigned = session.build_unsigned(build_updated_head(doc)?)?;
+    let mut unsigned = session.build_unsigned(build_updated_header(doc)?)?;
     unsigned.set_entries(&new_entries);
     let encrypted = session.sign(unsigned)?;
     Ok(KvSetResult {
@@ -152,54 +158,4 @@ fn contains_key(lines: &[KvEncLine], key: &str) -> bool {
     lines
         .iter()
         .any(|line| matches!(line, KvEncLine::KV { key: existing, .. } if existing == key))
-}
-
-fn build_entry_tokens<'a>(
-    entries: &'a [(String, String)],
-    master_key: &MasterKey,
-    sid: &Uuid,
-    codec: TokenCodec,
-    ctx: &KvWriteContext,
-) -> Result<HashMap<&'a str, String>> {
-    entries
-        .iter()
-        .map(|(key, value)| {
-            let token = encrypt_and_encode_entry(key, value, master_key, sid, codec, ctx)?;
-            Ok((key.as_str(), token))
-        })
-        .collect()
-}
-
-fn encrypt_and_encode_entry(
-    key: &str,
-    value: &str,
-    master_key: &MasterKey,
-    sid: &Uuid,
-    codec: TokenCodec,
-    ctx: &KvWriteContext,
-) -> Result<String> {
-    let new_entry = encrypt_entry(
-        key,
-        value,
-        master_key,
-        sid,
-        ctx.verbose,
-        "set_kv_entry",
-        false,
-    )?;
-    crate::format::token::TokenCodec::encode_debug(
-        codec,
-        &new_entry,
-        ctx.verbose,
-        Some(key),
-        Some("set_kv_entry"),
-    )
-}
-
-fn build_updated_head(doc: &crate::model::kv_enc::KvEncDocument) -> Result<KvHeader> {
-    Ok(KvHeader {
-        sid: doc.head.sid,
-        created_at: doc.head.created_at.clone(),
-        updated_at: current_timestamp()?,
-    })
 }

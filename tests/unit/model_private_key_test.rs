@@ -36,14 +36,16 @@ fn test_private_key_deserialization() {
     );
     assert_eq!(pk.protected.member_id, ALICE_MEMBER_ID);
     assert_eq!(pk.protected.kid, "01HN8Z3Q4R5S6T7V8W9X0Y1Z2A");
-    assert_eq!(
-        pk.protected.alg.kdf,
-        PROTECTION_METHOD_SSHSIG_ED25519_HKDF_SHA256
-    );
-    assert_eq!(
-        pk.protected.alg.aead,
-        secretenv::model::identifiers::alg::AEAD_XCHACHA20_POLY1305
-    );
+    match &pk.protected.alg {
+        PrivateKeyAlgorithm::SshSig { fpr, aead, .. } => {
+            assert_eq!(fpr, "sha256:ABCDEFGH123456789");
+            assert_eq!(
+                aead,
+                secretenv::model::identifiers::alg::AEAD_XCHACHA20_POLY1305
+            );
+        }
+        _ => panic!("Expected SshSig variant"),
+    }
 }
 
 #[test]
@@ -53,8 +55,7 @@ fn test_private_key_serialization() {
             format: secretenv::model::identifiers::format::PRIVATE_KEY_V3.to_string(),
             member_id: BOB_MEMBER_ID.to_string(),
             kid: "01HN8Z3Q4R5S6T7V8W9X0Y1Z2B".to_string(),
-            alg: PrivateKeyAlgorithm {
-                kdf: PROTECTION_METHOD_SSHSIG_ED25519_HKDF_SHA256.to_string(),
+            alg: PrivateKeyAlgorithm::SshSig {
                 fpr: "sha256:TESTFPR123".to_string(),
                 salt: "c2FsdA".to_string(),
                 aead: secretenv::model::identifiers::alg::AEAD_XCHACHA20_POLY1305.to_string(),
@@ -121,8 +122,7 @@ fn test_private_key_roundtrip() {
             format: secretenv::model::identifiers::format::PRIVATE_KEY_V3.to_string(),
             member_id: TEST_MEMBER_ID.to_string(),
             kid: "01HN8Z3Q4R5S6T7V8W9X0Y1Z2C".to_string(),
-            alg: PrivateKeyAlgorithm {
-                kdf: PROTECTION_METHOD_SSHSIG_ED25519_HKDF_SHA256.to_string(),
+            alg: PrivateKeyAlgorithm::SshSig {
                 fpr: "sha256:FPR123456".to_string(),
                 salt: "c2FsdHNhbHQ".to_string(),
                 aead: secretenv::model::identifiers::alg::AEAD_XCHACHA20_POLY1305.to_string(),
@@ -149,5 +149,5 @@ fn test_private_key_roundtrip() {
         deserialized.protected.member_id
     );
     assert_eq!(original.protected.kid, deserialized.protected.kid);
-    assert_eq!(original.protected.alg.fpr, deserialized.protected.alg.fpr);
+    assert_eq!(original.protected.alg, deserialized.protected.alg);
 }

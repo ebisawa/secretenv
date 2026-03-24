@@ -1,0 +1,79 @@
+// Copyright 2026 Satoshi Ebisawa
+// SPDX-License-Identifier: Apache-2.0
+
+use std::collections::HashMap;
+
+use uuid::Uuid;
+
+use crate::crypto::types::keys::MasterKey;
+use crate::feature::envelope::entry::encrypt_entry;
+use crate::format::kv::detect_token_codec_from_kv_content;
+use crate::format::token::TokenCodec;
+use crate::model::kv_enc::entry::KvEntryValue;
+use crate::model::kv_enc::line::KvEncLine;
+use crate::Result;
+
+/// Encode encrypted KV entries to token strings.
+pub(crate) fn encode_kv_entries_to_tokens(
+    entries: &[(String, KvEntryValue)],
+    token_codec: TokenCodec,
+    debug: bool,
+    caller: &'static str,
+) -> Result<Vec<(String, String)>> {
+    entries
+        .iter()
+        .map(|(key, entry)| {
+            let token =
+                TokenCodec::encode_debug(token_codec, entry, debug, Some(&entry.k), Some(caller))?;
+            Ok((key.clone(), token))
+        })
+        .collect()
+}
+
+/// Detect the token codec for a verified or parsed KV document.
+pub(crate) fn detect_token_codec(
+    content: &str,
+    lines: &[KvEncLine],
+    override_codec: Option<TokenCodec>,
+) -> TokenCodec {
+    override_codec.unwrap_or_else(|| {
+        lines
+            .iter()
+            .find_map(|line| match line {
+                KvEncLine::Wrap { token } => Some(TokenCodec::detect(token)),
+                _ => None,
+            })
+            .unwrap_or_else(|| detect_token_codec_from_kv_content(content))
+    })
+}
+
+pub(crate) fn build_entry_tokens<'a>(
+    entries: &'a [(String, String)],
+    master_key: &MasterKey,
+    sid: &Uuid,
+    codec: TokenCodec,
+    verbose: bool,
+    caller: &'static str,
+) -> Result<HashMap<&'a str, String>> {
+    entries
+        .iter()
+        .map(|(key, value)| {
+            let token =
+                encrypt_and_encode_entry(key, value, master_key, sid, codec, verbose, caller)?;
+            Ok((key.as_str(), token))
+        })
+        .collect()
+}
+
+fn encrypt_and_encode_entry(
+    key: &str,
+    value: &str,
+    master_key: &MasterKey,
+    sid: &Uuid,
+    codec: TokenCodec,
+    verbose: bool,
+    caller: &'static str,
+) -> Result<String> {
+    let new_entry = encrypt_entry(key, value, master_key, sid, verbose, caller, false)?;
+    TokenCodec::encode_debug(codec, &new_entry, verbose, Some(key), Some(caller))
+}

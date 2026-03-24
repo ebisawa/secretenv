@@ -312,6 +312,87 @@ fn test_check_workspace_requires_active_subdir() {
 }
 
 #[test]
+fn test_detect_workspace_in_git_worktree() {
+    let temp = TempDir::new().unwrap();
+    let main_repo = temp.path().canonicalize().unwrap();
+
+    // Main repository with .git directory and .secretenv workspace
+    fs::create_dir_all(main_repo.join(".git/worktrees/my-worktree")).unwrap();
+    fs::create_dir_all(main_repo.join(".secretenv/members/active")).unwrap();
+    fs::create_dir_all(main_repo.join(".secretenv/secrets")).unwrap();
+
+    // Worktree directory (outside or inside main repo, with .git file)
+    let worktree_parent = TempDir::new().unwrap();
+    let worktree_dir = worktree_parent.path().join("my-worktree");
+    fs::create_dir_all(&worktree_dir).unwrap();
+
+    // .git file pointing back to main repo's worktree directory
+    let gitdir_path = main_repo.join(".git/worktrees/my-worktree");
+    fs::write(
+        worktree_dir.join(".git"),
+        format!("gitdir: {}", gitdir_path.display()),
+    )
+    .unwrap();
+
+    // commondir file in the worktree git directory, pointing to main .git
+    fs::write(
+        gitdir_path.join("commondir"),
+        main_repo.join(".git").to_str().unwrap(),
+    )
+    .unwrap();
+
+    let result = detect_workspace_root(&worktree_dir);
+    assert!(
+        result.is_ok(),
+        "Should detect workspace through git worktree, but got: {:?}",
+        result.err()
+    );
+    let workspace = result.unwrap();
+    let expected = main_repo.join(".secretenv").canonicalize().unwrap();
+    assert_eq!(workspace.root_path, expected);
+}
+
+#[test]
+fn test_detect_workspace_in_git_worktree_from_subdirectory() {
+    let temp = TempDir::new().unwrap();
+    let main_repo = temp.path().canonicalize().unwrap();
+
+    // Main repository with workspace
+    fs::create_dir_all(main_repo.join(".git/worktrees/my-worktree")).unwrap();
+    fs::create_dir_all(main_repo.join(".secretenv/members/active")).unwrap();
+    fs::create_dir_all(main_repo.join(".secretenv/secrets")).unwrap();
+
+    // Worktree directory with subdirectory
+    let worktree_parent = TempDir::new().unwrap();
+    let worktree_dir = worktree_parent.path().join("my-worktree");
+    let sub_dir = worktree_dir.join("src/deep/nested");
+    fs::create_dir_all(&sub_dir).unwrap();
+
+    let gitdir_path = main_repo.join(".git/worktrees/my-worktree");
+    fs::write(
+        worktree_dir.join(".git"),
+        format!("gitdir: {}", gitdir_path.display()),
+    )
+    .unwrap();
+    fs::write(
+        gitdir_path.join("commondir"),
+        main_repo.join(".git").to_str().unwrap(),
+    )
+    .unwrap();
+
+    // Search from a deeply nested subdirectory within the worktree
+    let result = detect_workspace_root(&sub_dir);
+    assert!(
+        result.is_ok(),
+        "Should detect workspace from worktree subdirectory, but got: {:?}",
+        result.err()
+    );
+    let workspace = result.unwrap();
+    let expected = main_repo.join(".secretenv").canonicalize().unwrap();
+    assert_eq!(workspace.root_path, expected);
+}
+
+#[test]
 fn test_check_workspace_secretenv_subdir_requires_active() {
     let tmp = TempDir::new().unwrap();
     fs::create_dir_all(tmp.path().join(".git")).unwrap();

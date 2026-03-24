@@ -5,19 +5,19 @@
 
 use super::promotion::{confirm_incoming_promotions, print_promotion_summary};
 use super::RewrapArgs;
-use crate::app::context::CommonCommandOptions;
-use crate::app::rewrap::{
-    build_rewrap_batch_plan, execute_rewrap_batch, RewrapBatchOutcome, RewrapBatchRequest,
-};
+use crate::app::context::options::CommonCommandOptions;
+use crate::app::rewrap::execution::execute_rewrap_batch;
+use crate::app::rewrap::plan::build_rewrap_batch_plan;
+use crate::app::rewrap::types::{RewrapBatchOutcome, RewrapBatchRequest};
 use crate::cli::common::output::json;
-use crate::cli::common::ssh::resolve_ssh_context_for_active_key;
+use crate::cli::common::ssh::resolve_ssh_context_optional;
 use crate::support::path::display_path_relative_to_cwd;
 use crate::{Error, Result};
 use std::io::IsTerminal;
 
 pub(crate) fn execute_batch_rewrap(args: &RewrapArgs) -> Result<()> {
     let options = CommonCommandOptions::from(&args.common);
-    let ssh_ctx = resolve_ssh_context_for_active_key(&options)?;
+    let ssh_ctx = resolve_ssh_context_optional(&options)?;
     let plan = build_rewrap_batch_plan(&options)?;
 
     let accepted_ids = if let Some(report) = plan.incoming_report.as_ref() {

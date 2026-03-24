@@ -1,0 +1,213 @@
+// Copyright 2026 Satoshi Ebisawa
+// SPDX-License-Identifier: Apache-2.0
+
+use crate::format::kv::dotenv::is_valid_key_name;
+use crate::format::schema::document::{
+    parse_kv_entry_token, parse_kv_signature_token as parse_kv_signature_document,
+    parse_kv_wrap_token,
+};
+use crate::model::kv_enc::line::KvEncLine;
+use crate::{Error, Result};
+
+pub(super) fn validate_kv_tokens(lines: &[KvEncLine]) -> Result<()> {
+    for line in lines {
+        match line {
+            KvEncLine::Wrap { token } => validate_wrap_token(token)?,
+            KvEncLine::KV { key, token } => validate_entry_token(key, token)?,
+            KvEncLine::Sig { token } => validate_signature_token(token)?,
+            _ => {}
+        }
+    }
+    Ok(())
+}
+
+pub(super) fn validate_kv_file_structure(lines: &[KvEncLine]) -> Result<()> {
+    let logical_lines: Vec<(usize, &KvEncLine)> = lines
+        .iter()
+        .enumerate()
+        .filter(|(_, line)| !matches!(line, KvEncLine::Empty))
+        .collect();
+
+    if logical_lines.is_empty() {
+        return Err(Error::Parse {
+            message: "kv-enc file is empty or contains only empty lines and comments".to_string(),
+            source: None,
+        });
+    }
+
+    validate_kv_header_lines(&logical_lines)?;
+    validate_no_data_after_sig(lines)?;
+    validate_kv_keys(lines)
+}
+
+pub(super) fn parse_kv_signature_token(lines: &[KvEncLine]) -> Result<String> {
+    lines
+        .iter()
+        .find_map(|line| match line {
+            KvEncLine::Sig { token } => Some(token.clone()),
+            _ => None,
+        })
+        .ok_or_else(|| Error::Crypto {
+            message: "kv-enc v3 has no SIG line (v3 requires signatures)".to_string(),
+            source: None,
+        })
+}
+
+fn validate_wrap_token(token: &str) -> Result<()> {
+    parse_kv_wrap_token(token)?;
+    Ok(())
+}
+
+fn validate_entry_token(key: &str, token: &str) -> Result<()> {
+    let entry = parse_kv_entry_token(token).map_err(|e| Error::Parse {
+        message: format!("Invalid KV entry token structure for key '{}': {}", key, e),
+        source: None,
+    })?;
+
+    if key == entry.k {
+        return Ok(());
+    }
+
+    Err(Error::Verify {
+        rule: "E_KEY_MISMATCH".to_string(),
+        message: format!(
+            "kv-enc v3: KEY mismatch for '{}': line KEY '{}' does not match token.k '{}'",
+            key, key, entry.k
+        ),
+    })
+}
+
+fn validate_signature_token(token: &str) -> Result<()> {
+    parse_kv_signature_document(token)?;
+    Ok(())
+}
+
+fn validate_unique_line(
+    logical_lines: &[(usize, &KvEncLine)],
+    matcher: fn(&KvEncLine) -> bool,
+    label: &str,
+    missing_rule: &str,
+    expected_position: Option<usize>,
+    position_rule: &str,
+    position_message: &str,
+) -> Result<()> {
+    let count = logical_lines
+        .iter()
+        .filter(|(_, line)| matcher(line))
+        .count();
+    if count == 0 {
+        return Err(Error::Verify {
+            rule: missing_rule.to_string(),
+            message: format!("kv-enc v3: missing {} line", label),
+        });
+    }
+    if count > 1 {
+        return Err(Error::Verify {
+            rule: "E_SCHEMA_INVALID".to_string(),
+            message: format!(
+                "kv-enc v3: {} line appears {} times (must be exactly once)",
+                label, count
+            ),
+        });
+    }
+    if let Some(pos) = expected_position {
+        if logical_lines.len() <= pos || !matcher(logical_lines[pos].1) {
+            return Err(Error::Verify {
+                rule: position_rule.to_string(),
+                message: position_message.to_string(),
+            });
+        }
+    }
+    Ok(())
+}
+
+fn validate_no_data_after_sig(lines: &[KvEncLine]) -> Result<()> {
+    let mut found_sig = false;
+    for line in lines {
+        match line {
+            KvEncLine::Sig { .. } => found_sig = true,
+            KvEncLine::KV { .. }
+            | KvEncLine::Head { .. }
+            | KvEncLine::Wrap { .. }
+            | KvEncLine::Header { .. } => {
+                if found_sig {
+                    return Err(Error::Verify {
+                        rule: "E_SCHEMA_INVALID".to_string(),
+                        message:
+                            "kv-enc v3: data lines (HEAD/WRAP/KV) must not appear after :SIG line"
+                                .to_string(),
+                    });
+                }
+            }
+            KvEncLine::Empty => {}
+        }
+    }
+    Ok(())
+}
+
+fn validate_kv_keys(lines: &[KvEncLine]) -> Result<()> {
+    let mut seen_keys = std::collections::HashSet::new();
+    for line in lines {
+        if let KvEncLine::KV { key, .. } = line {
+            if !is_valid_key_name(key) {
+                return Err(Error::Verify {
+                    rule: "E_SCHEMA_INVALID".to_string(),
+                    message: format!(
+                        "kv-enc v3: invalid KEY format '{}' (must match ^[A-Za-z_][A-Za-z0-9_]*$)",
+                        key
+                    ),
+                });
+            }
+            if !seen_keys.insert(key.clone()) {
+                return Err(Error::Verify {
+                    rule: "E_DUPLICATE_KEY".to_string(),
+                    message: format!(
+                        "kv-enc v3: duplicate KEY '{}' (each KEY must appear only once)",
+                        key
+                    ),
+                });
+            }
+        }
+    }
+    Ok(())
+}
+
+fn validate_kv_header_lines(logical_lines: &[(usize, &KvEncLine)]) -> Result<()> {
+    validate_unique_line(
+        logical_lines,
+        |line| matches!(line, KvEncLine::Header { .. }),
+        ":SECRETENV_KV",
+        "E_SCHEMA_INVALID",
+        Some(0),
+        "E_SCHEMA_INVALID",
+        "kv-enc v3: :SECRETENV_KV 3 must be the first line",
+    )?;
+    validate_unique_line(
+        logical_lines,
+        |line| matches!(line, KvEncLine::Head { .. }),
+        ":HEAD",
+        "E_SCHEMA_INVALID",
+        Some(1),
+        "E_SCHEMA_INVALID",
+        "kv-enc v3: :HEAD must be the second line (after :SECRETENV_KV 3)",
+    )?;
+    validate_unique_line(
+        logical_lines,
+        |line| matches!(line, KvEncLine::Wrap { .. }),
+        ":WRAP",
+        "E_WRAP_LINE_MISSING",
+        Some(2),
+        "E_WRAP_LINE_POSITION",
+        "kv-enc v3: :WRAP must be the third line (after :HEAD)",
+    )?;
+    validate_unique_line(
+        logical_lines,
+        |line| matches!(line, KvEncLine::Sig { .. }),
+        ":SIG",
+        "E_SIG_LINE_MISSING",
+        Some(logical_lines.len() - 1),
+        "E_SCHEMA_INVALID",
+        "kv-enc v3: :SIG must be the last logical line (after all KV entries)",
+    )?;
+    Ok(())
+}

@@ -3,6 +3,7 @@
 
 //! Common utilities for CLI commands
 
+pub mod env_mode;
 pub mod options;
 
 pub mod output;

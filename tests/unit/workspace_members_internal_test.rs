@@ -147,16 +147,16 @@ fn test_find_active_member_by_kid_returns_matching_member() {
     fs::create_dir_all(&active_dir).unwrap();
     fs::write(
         active_dir.join("alice.json"),
-        build_public_key_json("alice", "kid-alice"),
+        build_public_key_json("alice", "01HY0G8N3P5X7QRSTV0WXYZ123"),
     )
     .unwrap();
     fs::write(
         active_dir.join("bob.json"),
-        build_public_key_json("bob", "kid-bob"),
+        build_public_key_json("bob", "01HY0G8N3P5X7QRSTV0WXYZ124"),
     )
     .unwrap();
 
-    let found = find_active_member_by_kid(tmp.path(), "kid-bob")
+    let found = find_active_member_by_kid(tmp.path(), "01HY0G8N3P5X7QRSTV0WXYZ124")
         .unwrap()
         .unwrap();
 
@@ -172,18 +172,19 @@ fn build_public_key_json(member_id: &str, kid: &str) -> String {
     "kid": "{kid}",
     "identity": {{
       "keys": {{
-        "kem": {{"kty":"OKP","crv":"X25519","x":"AQ"}},
-        "sig": {{"kty":"OKP","crv":"Ed25519","x":"AQ"}}
+        "kem": {{"kty":"OKP","crv":"X25519","x":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}},
+        "sig": {{"kty":"OKP","crv":"Ed25519","x":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}}
       }},
       "attestation": {{
-        "method": "ssh",
-        "pub": "ssh-ed25519 AAAA test@example.com",
-        "sig": "AQ"
+        "method": "ssh-sign",
+        "pub": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "sig": "QUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQQ"
       }}
     }},
+    "created_at": "2026-01-01T00:00:00Z",
     "expires_at": "2099-01-01T00:00:00Z"
   }},
-  "signature": "AQ"
+  "signature": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
 }}"#
     )
 }

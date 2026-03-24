@@ -3,11 +3,11 @@
 
 //! Key generation logic.
 
-use super::KeyNewResult;
-use crate::feature::context::ssh::SshSigningContext;
-pub use crate::feature::key::material::{build_identity_keys, generate_keypairs};
-use crate::feature::key::protection::{self, PrivateKeyEncryptionParams};
-pub use crate::feature::key::public_key_document::{build_public_key, PublicKeyBuildParams};
+use crate::feature::key::protection::encryption::{
+    encrypt_private_key, PrivateKeyEncryptionParams,
+};
+use crate::feature::key::ssh_binding::SshBindingContext;
+use crate::feature::key::types::KeyNewResult;
 use crate::feature::key::{material, public_key_document};
 use crate::io::keystore::active::set_active_kid;
 use crate::io::keystore::resolver::KeystoreResolver;
@@ -31,7 +31,23 @@ pub struct KeyGenerationOptions {
     pub github_account: Option<GithubAccount>,
     pub verbose: bool,
     /// Pre-resolved SSH signing context.
-    pub ssh_context: SshSigningContext,
+    pub ssh_binding: SshBindingContext,
+}
+
+struct GeneratedKeyMaterial {
+    kid: String,
+    kem_sk: X25519SecretKey,
+    kem_pk: X25519PublicKey,
+    sig_sk: SigningKey,
+    sig_pk: VerifyingKey,
+}
+
+struct KeyDocumentBuildRequest<'a> {
+    member_id: &'a str,
+    created_at: &'a str,
+    expires_at: &'a str,
+    github_account: Option<GithubAccount>,
+    debug: bool,
 }
 
 /// Generate a new key pair and save to keystore.
@@ -45,61 +61,53 @@ pub fn generate_key(opts: KeyGenerationOptions) -> Result<KeyNewResult> {
         debug,
         github_account,
         verbose: _,
-        ssh_context,
+        ssh_binding,
     } = opts;
 
     let keystore_root = ensure_keystore_dir(&home)?;
-    ensure_determinism(&ssh_context.determinism)?;
-    let (kid, kem_sk, kem_pk, sig_sk, sig_pk) = material::generate_keypairs()?;
-
-    let identity_keys = material::build_identity_keys(&kem_pk, &sig_pk)?;
-    let attestation = public_key_document::build_attestation(&ssh_context, &identity_keys)?;
-    let public_key = build_public_key_document(
-        &member_id,
-        &kid,
-        identity_keys,
-        attestation,
-        &created_at,
-        &expires_at,
-        &sig_sk,
-        debug,
+    ensure_determinism(&ssh_binding.determinism)?;
+    let key_material = generate_key_material()?;
+    let request = KeyDocumentBuildRequest {
+        member_id: &member_id,
+        created_at: &created_at,
+        expires_at: &expires_at,
         github_account,
-    )?;
-
-    let private_key = encrypt_private_key_document(
-        &kem_sk,
-        &kem_pk,
-        &sig_sk,
-        &sig_pk,
-        &member_id,
-        &kid,
-        &ssh_context,
-        &created_at,
-        &expires_at,
         debug,
-    )?;
-
-    save_and_activate(
+    };
+    let public_key = build_public_key_document(&request, &key_material, &ssh_binding)?;
+    let private_key = encrypt_private_key_document(&request, &key_material, &ssh_binding)?;
+    save_generated_key(
         &keystore_root,
         &member_id,
-        &kid,
+        &key_material.kid,
         &private_key,
         &public_key,
         no_activate,
     )?;
 
-    let key_dir = keystore_root.join(&member_id).join(&kid);
+    let key_dir = keystore_root.join(&member_id).join(&key_material.kid);
     Ok(KeyNewResult {
         member_id,
-        kid,
+        kid: key_material.kid,
         created_at,
         expires_at,
         keystore_root,
         key_dir,
         activated: !no_activate,
-        ssh_fingerprint: ssh_context.fingerprint,
-        ssh_public_key: ssh_context.public_key,
-        ssh_determinism: ssh_context.determinism,
+        ssh_fingerprint: ssh_binding.fingerprint,
+        ssh_public_key: ssh_binding.public_key,
+        ssh_determinism: ssh_binding.determinism,
+    })
+}
+
+fn generate_key_material() -> Result<GeneratedKeyMaterial> {
+    let (kid, kem_sk, kem_pk, sig_sk, sig_pk) = material::generate_keypairs()?;
+    Ok(GeneratedKeyMaterial {
+        kid,
+        kem_sk,
+        kem_pk,
+        sig_sk,
+        sig_pk,
     })
 }
 
@@ -117,58 +125,50 @@ fn ensure_determinism(status: &SshDeterminismStatus) -> Result<()> {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 fn build_public_key_document(
-    member_id: &str,
-    kid: &str,
-    identity_keys: crate::model::public_key::IdentityKeys,
-    attestation: crate::model::public_key::Attestation,
-    created_at: &str,
-    expires_at: &str,
-    sig_sk: &SigningKey,
-    debug: bool,
-    github_account: Option<GithubAccount>,
+    request: &KeyDocumentBuildRequest<'_>,
+    key_material: &GeneratedKeyMaterial,
+    ssh_binding: &SshBindingContext,
 ) -> Result<PublicKey> {
+    let identity_keys = material::build_identity_keys(&key_material.kem_pk, &key_material.sig_pk)?;
+    let attestation = public_key_document::build_attestation(ssh_binding, &identity_keys)?;
     let identity = Identity {
         keys: identity_keys,
         attestation,
     };
     public_key_document::build_public_key(&public_key_document::PublicKeyBuildParams {
-        member_id,
-        kid,
+        member_id: request.member_id,
+        kid: &key_material.kid,
         identity,
-        created_at,
-        expires_at,
-        sig_sk,
-        debug,
-        github_account,
+        created_at: request.created_at,
+        expires_at: request.expires_at,
+        sig_sk: &key_material.sig_sk,
+        debug: request.debug,
+        github_account: request.github_account.clone(),
     })
 }
 
-#[allow(clippy::too_many_arguments)]
 fn encrypt_private_key_document(
-    kem_sk: &X25519SecretKey,
-    kem_pk: &X25519PublicKey,
-    sig_sk: &SigningKey,
-    sig_pk: &VerifyingKey,
-    member_id: &str,
-    kid: &str,
-    ssh_context: &SshSigningContext,
-    created_at: &str,
-    expires_at: &str,
-    debug: bool,
+    request: &KeyDocumentBuildRequest<'_>,
+    key_material: &GeneratedKeyMaterial,
+    ssh_binding: &SshBindingContext,
 ) -> Result<PrivateKey> {
-    let plaintext = material::build_private_key_plaintext(kem_sk, kem_pk, sig_sk, sig_pk);
-    protection::encrypt_private_key(&PrivateKeyEncryptionParams {
+    let plaintext = material::build_private_key_plaintext(
+        &key_material.kem_sk,
+        &key_material.kem_pk,
+        &key_material.sig_sk,
+        &key_material.sig_pk,
+    );
+    encrypt_private_key(&PrivateKeyEncryptionParams {
         plaintext: &plaintext,
-        member_id: member_id.to_string(),
-        kid: kid.to_string(),
-        backend: ssh_context.backend.as_ref(),
-        ssh_pubkey: &ssh_context.public_key,
-        ssh_fpr: ssh_context.fingerprint.clone(),
-        created_at: created_at.to_string(),
-        expires_at: expires_at.to_string(),
-        debug,
+        member_id: request.member_id.to_string(),
+        kid: key_material.kid.clone(),
+        backend: ssh_binding.backend.as_ref(),
+        ssh_pubkey: &ssh_binding.public_key,
+        ssh_fpr: ssh_binding.fingerprint.clone(),
+        created_at: request.created_at.to_string(),
+        expires_at: request.expires_at.to_string(),
+        debug: request.debug,
     })
 }
 
@@ -177,8 +177,7 @@ pub(crate) fn ensure_keystore_dir(home: &Option<PathBuf>) -> Result<PathBuf> {
     KeystoreResolver::resolve_and_ensure(home.as_ref())
 }
 
-/// Save and activate key.
-pub(crate) fn save_and_activate(
+fn save_generated_key(
     keystore_root: &Path,
     member_id: &str,
     kid: &str,

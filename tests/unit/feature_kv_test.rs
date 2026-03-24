@@ -10,11 +10,10 @@ use crate::keygen_helpers::make_verified_members;
 use crate::test_utils::{
     setup_member_key_context, setup_test_keystore_from_fixtures, setup_test_workspace_from_fixtures,
 };
-use secretenv::feature::encrypt::SigningContext;
+use secretenv::feature::envelope::signature::SigningContext;
 use secretenv::feature::kv::encrypt::encrypt_kv_document;
-use secretenv::feature::kv::{
-    decrypt_kv_value, list_kv_keys, set_kv_entry, unset_kv_entry, KvWriteContext,
-};
+use secretenv::feature::kv::mutate::{set_kv_entry, unset_kv_entry, KvWriteContext};
+use secretenv::feature::kv::query::{decrypt_kv_value, list_kv_keys};
 use secretenv::format::content::KvEncContent;
 use secretenv::format::token::TokenCodec;
 use secretenv::io::keystore::storage::{list_kids, load_public_key};
@@ -146,7 +145,7 @@ fn test_set_kv_entry_new_file() {
     // Set context
     let ctx = KvWriteContext {
         member_id: ALICE_MEMBER_ID.to_string(),
-        key_ctx: key_ctx.clone(),
+        key_ctx,
         token_codec: Some(TokenCodec::JsonJcs),
         no_signer_pub: false,
         verbose: false,
@@ -187,7 +186,7 @@ fn test_set_kv_entry_existing_file() {
     // Set context
     let ctx = KvWriteContext {
         member_id: ALICE_MEMBER_ID.to_string(),
-        key_ctx: key_ctx.clone(),
+        key_ctx,
         token_codec: None, // Preserve existing codec
         no_signer_pub: false,
         verbose: false,
@@ -227,7 +226,7 @@ fn test_unset_kv_entry() {
     // Unset context
     let ctx = KvWriteContext {
         member_id: ALICE_MEMBER_ID.to_string(),
-        key_ctx: key_ctx.clone(),
+        key_ctx,
         token_codec: None,
         no_signer_pub: false,
         verbose: false,
@@ -262,7 +261,7 @@ fn test_unset_kv_entry_not_found() {
     // Unset context
     let ctx = KvWriteContext {
         member_id: ALICE_MEMBER_ID.to_string(),
-        key_ctx: key_ctx.clone(),
+        key_ctx,
         token_codec: None,
         no_signer_pub: false,
         verbose: false,
@@ -286,7 +285,7 @@ fn test_set_kv_entry_multiple_entries_new_file() {
 
     let ctx = KvWriteContext {
         member_id: ALICE_MEMBER_ID.to_string(),
-        key_ctx: key_ctx.clone(),
+        key_ctx,
         token_codec: Some(TokenCodec::JsonJcs),
         no_signer_pub: false,
         verbose: false,
@@ -324,7 +323,7 @@ fn test_set_kv_entry_multiple_entries_existing_file() {
 
     let ctx = KvWriteContext {
         member_id: ALICE_MEMBER_ID.to_string(),
-        key_ctx: key_ctx.clone(),
+        key_ctx,
         token_codec: None,
         no_signer_pub: false,
         verbose: false,

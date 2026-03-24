@@ -1,10 +1,9 @@
 use super::*;
-use crate::config::types::SshSigner;
-use crate::feature::context::ssh::SshSigningContext;
-use crate::feature::key::generate::{build_identity_keys, generate_keypairs};
+use crate::feature::key::material::{build_identity_keys, generate_keypairs};
 use crate::feature::key::public_key_document::{
     build_attestation, build_public_key, PublicKeyBuildParams,
 };
+use crate::feature::key::ssh_binding::SshBindingContext;
 use crate::io::ssh::backend::ssh_keygen::SshKeygenBackend;
 use crate::io::ssh::backend::SignatureBackend;
 use crate::io::ssh::external::keygen::DefaultSshKeygen;
@@ -14,15 +13,14 @@ use crate::model::ssh::SshDeterminismStatus;
 use crate::model::verification::VerifyingKeySource;
 use std::path::Path;
 
-/// Build SSH signing context from test SSH keypair
-fn build_test_ssh_context(ssh_key_path: &Path, ssh_pubkey: &str) -> SshSigningContext {
+/// Build SSH binding context from test SSH keypair
+fn build_test_ssh_context(ssh_key_path: &Path, ssh_pubkey: &str) -> SshBindingContext {
     let fingerprint = build_sha256_fingerprint(ssh_pubkey).unwrap();
     let backend: Box<dyn SignatureBackend> = Box::new(SshKeygenBackend::new(
         Box::new(DefaultSshKeygen::new("ssh-keygen")),
         SshKeyDescriptor::from_path(ssh_key_path.to_path_buf()),
     ));
-    SshSigningContext {
-        signing_method: SshSigner::SshKeygen,
+    SshBindingContext {
         public_key: ssh_pubkey.to_string(),
         fingerprint,
         backend,

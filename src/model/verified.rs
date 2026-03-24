@@ -16,8 +16,8 @@ pub struct DecryptionProof {
     pub member_id: String,
     /// Key ID (ULID) from the encrypted document
     pub kid: String,
-    /// SSH fingerprint used for decryption (from PrivateKeyProtected.alg.fpr)
-    pub ssh_fpr: String,
+    /// SSH fingerprint used for decryption (None for non-SSH key protection)
+    pub ssh_fpr: Option<String>,
 }
 
 /// A PrivateKeyPlaintext that has been successfully decrypted and validated
@@ -32,18 +32,27 @@ pub struct DecryptionProof {
 /// # Example
 ///
 /// ```rust,no_run
+/// use secretenv::app::context::crypto::load_crypto_context;
 /// use secretenv::model::verified::VerifiedPrivateKey;
 /// use secretenv::model::private_key::PrivateKeyPlaintext;
-/// use secretenv::feature::context::crypto::CryptoContext;
+/// use secretenv::io::ssh::backend::SignatureBackend;
 ///
 /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
 /// // Load member key context (returns CryptoContext with VerifiedPrivateKey)
 /// # let member_id = "alice@example.com";
-/// # let backend = todo!();
+/// # let backend: &dyn SignatureBackend = todo!();
 /// # let ssh_pubkey = "";
 /// # let keystore_root = std::path::PathBuf::from("/tmp");
 /// # let debug = false;
-/// let key_ctx = CryptoContext::load(member_id, backend, ssh_pubkey, None, Some(&keystore_root), None, debug)?;
+/// let key_ctx = load_crypto_context(
+///     member_id,
+///     backend,
+///     ssh_pubkey,
+///     None,
+///     Some(&keystore_root),
+///     None,
+///     debug,
+/// )?;
 ///
 /// // Access decrypted document and proof information
 /// let plaintext = key_ctx.private_key.document();

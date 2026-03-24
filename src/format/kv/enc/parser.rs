@@ -5,7 +5,7 @@
 
 use crate::format::kv::HEADER_LINE_PREFIX;
 use crate::format::FormatError;
-pub use crate::model::kv_enc::{KvEncLine, KvEncVersion};
+use crate::model::kv_enc::line::{KvEncLine, KvEncVersion};
 use crate::{Error, Result};
 
 /// KV-enc format parser

@@ -10,13 +10,13 @@ use crate::keygen_helpers::make_verified_members;
 use crate::test_utils::{setup_member_key_context, setup_test_keystore_from_fixtures};
 use secretenv::feature::decrypt::file::decrypt_file_document;
 use secretenv::feature::encrypt::file::encrypt_file_document;
-use secretenv::feature::encrypt::SigningContext;
+use secretenv::feature::envelope::signature::SigningContext;
 use secretenv::feature::kv::decrypt::decrypt_kv_document;
 use secretenv::feature::kv::encrypt::encrypt_kv_document;
 use secretenv::feature::verify::file::verify_file_document;
-use secretenv::feature::verify::kv::verify_kv_document;
+use secretenv::feature::verify::kv::signature::verify_kv_document;
+use secretenv::format::kv::document::parse_kv_document;
 use secretenv::format::kv::dotenv::parse_dotenv;
-use secretenv::format::kv::parse_kv_document;
 use secretenv::format::token::TokenCodec;
 use secretenv::io::keystore::storage::{list_kids, load_public_key};
 
@@ -147,14 +147,15 @@ fn test_crypto_context_load() {
     // Verify context
     assert_eq!(key_ctx.member_id, ALICE_MEMBER_ID);
     assert_eq!(key_ctx.kid, *kid);
-    assert_eq!(key_ctx.keystore_root, keystore_root);
+    // Verify pub_key_source works by loading the signer's public key
+    let loaded = key_ctx.pub_key_source.load_public_key(ALICE_MEMBER_ID);
+    assert!(loaded.is_ok());
 }
 
 #[test]
 fn test_crypto_context_load_without_explicit_kid() {
     // Setup test keystore
     let temp_dir = setup_test_keystore_from_fixtures(ALICE_MEMBER_ID);
-    let keystore_root = temp_dir.path().join("keys");
 
     // Load CryptoContext without explicit kid (should use active key)
     let key_ctx = setup_member_key_context(&temp_dir, ALICE_MEMBER_ID, None);
@@ -162,5 +163,7 @@ fn test_crypto_context_load_without_explicit_kid() {
     // Verify context
     assert_eq!(key_ctx.member_id, ALICE_MEMBER_ID);
     assert!(!key_ctx.kid.is_empty());
-    assert_eq!(key_ctx.keystore_root, keystore_root);
+    // Verify pub_key_source works by loading the signer's public key
+    let loaded = key_ctx.pub_key_source.load_public_key(ALICE_MEMBER_ID);
+    assert!(loaded.is_ok());
 }

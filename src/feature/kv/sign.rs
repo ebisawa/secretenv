@@ -6,7 +6,7 @@
 use crate::feature::envelope::signature::{sign_kv_document, SigningContext};
 use crate::Result;
 
-use super::builder::UnsignedKvDocument;
+use super::document::UnsignedKvDocument;
 
 /// Serialize and sign an unsigned KV document.
 pub(crate) fn sign_unsigned_kv_document(

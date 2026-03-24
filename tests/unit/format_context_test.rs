@@ -4,7 +4,7 @@
 use crate::cli_common::ALICE_MEMBER_ID;
 use secretenv::feature::envelope::binding;
 use secretenv::feature::key::protection::binding as private_key_binding;
-use secretenv::model::identifiers::{alg, context as wire_context, format, private_key};
+use secretenv::model::identifiers::{alg, context as wire_context, format};
 use uuid::Uuid;
 
 /// Test HPKE info for kv-file (WRAP line) - v3 format
@@ -116,8 +116,7 @@ fn test_aad_private_key() {
         format: format::PRIVATE_KEY_V3.to_string(),
         member_id: ALICE_MEMBER_ID.to_string(),
         kid: "01HN8Z3Q4R5S6T7V8W9X0Y1Z2A".to_string(),
-        alg: PrivateKeyAlgorithm {
-            kdf: private_key::PROTECTION_METHOD_SSHSIG_ED25519_HKDF_SHA256.to_string(),
+        alg: PrivateKeyAlgorithm::SshSig {
             fpr: "sha256:ABCDEFGH123456789".to_string(),
             salt: "AAAAAAAAAAAAAAAA".to_string(),
             aead: alg::AEAD_XCHACHA20_POLY1305.to_string(),

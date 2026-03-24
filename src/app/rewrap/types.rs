@@ -1,7 +1,9 @@
 // Copyright 2026 Satoshi Ebisawa
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::app::context::CommonCommandOptions;
+use crate::app::context::options::CommonCommandOptions;
+use crate::feature::context::crypto::CryptoContext;
+use std::path::Path;
 use std::path::PathBuf;
 
 /// Resolved inputs for a batch rewrap command before CLI confirmation.
@@ -59,6 +61,18 @@ pub struct RewrapBatchRequest {
     pub clear_disclosure_history: bool,
     pub no_signer_pub: bool,
     pub accepted_promotions: Vec<String>,
+}
+
+/// Application-layer request for rewrapping a single encrypted document.
+#[derive(Clone, Copy)]
+pub struct SingleRewrapRequest<'a> {
+    pub member_id: &'a str,
+    pub key_ctx: &'a CryptoContext,
+    pub workspace_root: Option<&'a Path>,
+    pub rotate_key: bool,
+    pub clear_disclosure_history: bool,
+    pub no_signer_pub: bool,
+    pub debug: bool,
 }
 
 /// A successfully rewritten file.

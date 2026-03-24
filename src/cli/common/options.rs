@@ -4,7 +4,7 @@
 use clap::Args;
 use std::path::PathBuf;
 
-use crate::app::context::CommonCommandOptions;
+use crate::app::context::options::CommonCommandOptions;
 use crate::config::types::SshSigner;
 
 /// Common options shared across all commands

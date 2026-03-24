@@ -5,7 +5,7 @@ use super::paths::{
     active_member_file_path, ensure_members_dir, find_member_path, incoming_member_file_path,
     members_dir, MemberStatus,
 };
-use crate::io::json::load_json_file;
+use crate::format::schema::document::parse_public_key_file;
 use crate::model::public_key::PublicKey;
 use crate::support::fs::list_dir;
 use crate::support::path::display_path_relative_to_cwd;
@@ -222,5 +222,5 @@ pub fn delete_member(workspace_path: &Path, member_id: &str) -> Result<()> {
 }
 
 pub fn load_member_file_from_path(path: &Path) -> Result<PublicKey> {
-    load_json_file(path, "PublicKey")
+    parse_public_key_file(path)
 }

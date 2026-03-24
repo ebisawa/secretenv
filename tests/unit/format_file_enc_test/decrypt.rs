@@ -9,7 +9,7 @@ use crate::cli_common::{ALICE_MEMBER_ID, BOB_MEMBER_ID};
 use crate::keygen_helpers::make_decrypted_private_key_plaintext;
 use secretenv::feature::decrypt::file::decrypt_file_document;
 use secretenv::feature::encrypt::file as file_enc;
-use secretenv::feature::encrypt::SigningContext;
+use secretenv::feature::envelope::signature::SigningContext;
 use secretenv::model::file_enc::VerifiedFileEncDocument;
 use secretenv::model::verification::{SignatureVerificationProof, VerifyingKeySource};
 

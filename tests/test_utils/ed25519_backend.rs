@@ -38,15 +38,7 @@ impl Ed25519DirectBackend {
             source: None,
         })?;
 
-        let secret_bytes: [u8; 32] =
-            ed25519_keypair
-                .private
-                .to_bytes()
-                .try_into()
-                .map_err(|_| secretenv::Error::Ssh {
-                    message: "Invalid Ed25519 private key length".to_string(),
-                    source: None,
-                })?;
+        let secret_bytes: [u8; 32] = ed25519_keypair.private.to_bytes();
 
         let signing_key = SigningKey::from_bytes(&secret_bytes);
         Ok(Self { signing_key })

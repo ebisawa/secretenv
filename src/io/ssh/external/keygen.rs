@@ -3,8 +3,10 @@
 
 //! Default implementation of the `SshKeygen` trait using the system ssh-keygen command.
 
-use super::temp_file;
 use super::traits::SshKeygen;
+use super::{build_ssh_child_env, temp_file};
+use crate::io::process::configure_child_env_os;
+use crate::io::ssh::agent::socket::resolve_agent_socket_path;
 use crate::io::ssh::SshError;
 use crate::support::fs::load_text;
 use crate::support::path::display_path_relative_to_cwd;
@@ -29,7 +31,13 @@ impl DefaultSshKeygen {
 
 impl SshKeygen for DefaultSshKeygen {
     fn derive_public_key(&self, key_path: &Path) -> Result<String> {
-        let output = Command::new(&self.ssh_keygen_path)
+        let mut command = Command::new(&self.ssh_keygen_path);
+        configure_child_env_os(
+            &mut command,
+            &build_ssh_child_env(resolve_agent_socket_path().ok().as_deref()),
+        );
+
+        let output = command
             .args(["-y", "-f"])
             .arg(key_path)
             .output()
@@ -90,7 +98,13 @@ impl SshKeygen for DefaultSshKeygen {
         let allowed_file = temp_file::save_temp_str(&allowed)?;
         let sig_file = temp_file::save_temp_str(signature)?;
 
-        let mut child = Command::new(&self.ssh_keygen_path)
+        let mut child = Command::new(&self.ssh_keygen_path);
+        configure_child_env_os(
+            &mut child,
+            &build_ssh_child_env(resolve_agent_socket_path().ok().as_deref()),
+        );
+
+        let mut child = child
             .args(["-Y", "verify", "-f"])
             .arg(allowed_file.path())
             .args(["-I", namespace, "-n", namespace, "-s"])
@@ -139,7 +153,13 @@ fn run_sign_command(
     let sig_path = build_sig_path(msg_file);
     let _ = std::fs::remove_file(&sig_path);
 
-    Command::new(ssh_keygen_path)
+    let mut command = Command::new(ssh_keygen_path);
+    configure_child_env_os(
+        &mut command,
+        &build_ssh_child_env(resolve_agent_socket_path().ok().as_deref()),
+    );
+
+    command
         .args(["-Y", "sign"])
         .args(["-f", key_path_str])
         .args(["-n", namespace])

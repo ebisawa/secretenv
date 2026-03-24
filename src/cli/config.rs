@@ -6,7 +6,7 @@
 use clap::{Args, Subcommand};
 
 use crate::app::config;
-use crate::app::context::CommonCommandOptions;
+use crate::app::context::options::CommonCommandOptions;
 use crate::cli::common::options::CommonOptions;
 use crate::Error;
 

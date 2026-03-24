@@ -7,13 +7,13 @@ use crate::cli_common::ALICE_MEMBER_ID;
 use crate::keygen_helpers::{make_decrypted_private_key_plaintext, make_verified_members};
 use crate::test_utils::{create_temp_ssh_keypair_in_dir, keygen_test};
 use ed25519_dalek::SigningKey;
-use secretenv::feature::encrypt::SigningContext;
+use secretenv::feature::envelope::signature::SigningContext;
 use secretenv::feature::kv::decrypt::decrypt_kv_document;
 use secretenv::feature::kv::encrypt::encrypt_kv_document;
+use secretenv::format::kv::document::parse_kv_document;
 use secretenv::format::kv::dotenv::{build_dotenv_string, parse_dotenv};
-use secretenv::format::kv::parse_kv_document;
 use secretenv::format::token::TokenCodec;
-use secretenv::model::kv_enc::VerifiedKvEncDocument;
+use secretenv::model::kv_enc::verified::VerifiedKvEncDocument;
 use secretenv::model::verification::{SignatureVerificationProof, VerifyingKeySource};
 use tempfile::TempDir;
 

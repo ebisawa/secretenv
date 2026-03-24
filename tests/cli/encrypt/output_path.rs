@@ -3,8 +3,12 @@
 
 //! Output path-related encryption tests
 
-use crate::cli::common::{default_common_options, set_ssh_key_from_temp_dir, ALICE_MEMBER_ID};
+use crate::cli::common::{
+    cmd, default_common_options, set_ssh_key_from_temp_dir, setup_workspace, ALICE_MEMBER_ID,
+    TEST_MEMBER_ID,
+};
 use crate::test_utils::{setup_test_workspace, with_temp_cwd};
+use predicates::prelude::*;
 use secretenv::cli::encrypt;
 use secretenv::model::identifiers::format;
 use std::fs;
@@ -67,4 +71,28 @@ fn test_encrypt_explicit_out_option() {
         explicit_output.exists(),
         "File should be at explicit --out path"
     );
+}
+
+#[test]
+fn test_encrypt_explicit_out_option_reports_output_path() {
+    let (workspace_dir, home_dir, _ssh_temp, ssh_priv) = setup_workspace();
+    let input_file = home_dir.path().join("data.txt");
+    let output_file = home_dir.path().join("custom_output.encrypted");
+    fs::write(&input_file, b"secret").unwrap();
+
+    cmd()
+        .arg("encrypt")
+        .arg(input_file.to_str().unwrap())
+        .arg("--out")
+        .arg(output_file.to_str().unwrap())
+        .arg("--member-id")
+        .arg(TEST_MEMBER_ID)
+        .arg("--workspace")
+        .arg(workspace_dir.path())
+        .env("SECRETENV_HOME", home_dir.path())
+        .env("SECRETENV_SSH_KEY", ssh_priv.to_str().unwrap())
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("Encrypted to:"))
+        .stderr(predicate::str::contains("custom_output.encrypted"));
 }

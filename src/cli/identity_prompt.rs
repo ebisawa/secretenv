@@ -7,7 +7,7 @@ use dialoguer::{Confirm, Input, Select};
 use std::io::IsTerminal;
 use std::path::Path;
 
-use crate::app::context::SshKeyCandidate;
+use crate::app::context::ssh::SshKeyCandidateView;
 use crate::app::identity::{resolve_github_user_with_fallback, resolve_member_id_with_fallback};
 use crate::support::validation;
 use crate::{Error, Result};
@@ -69,7 +69,7 @@ pub fn confirm_member_overwrite(member_id: &str) -> Result<bool> {
 /// 0 candidates → error (no Ed25519 key found)
 /// 1 candidate  → automatic selection (return index 0)
 /// n candidates → TTY: interactive dialoguer::Select / non-TTY: error
-pub fn select_ssh_key(candidates: &[SshKeyCandidate]) -> Result<usize> {
+pub fn select_ssh_key(candidates: &[SshKeyCandidateView]) -> Result<usize> {
     if candidates.is_empty() {
         return Err(Error::Config {
             message: "No ssh-ed25519 key found in ssh-agent.\n\
@@ -105,7 +105,7 @@ pub fn select_ssh_key(candidates: &[SshKeyCandidate]) -> Result<usize> {
 }
 
 /// Format a candidate for display in the interactive selector.
-fn format_candidate(candidate: &SshKeyCandidate) -> String {
+fn format_candidate(candidate: &SshKeyCandidateView) -> String {
     if candidate.comment.is_empty() {
         candidate.fingerprint.clone()
     } else {
