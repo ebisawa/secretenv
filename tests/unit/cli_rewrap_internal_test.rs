@@ -1,5 +1,5 @@
 use super::*;
-use crate::app::rewrap::{
+use crate::app::rewrap::types::{
     IncomingGithubAccount, IncomingVerificationCategory, IncomingVerificationItem,
     IncomingVerificationReport,
 };

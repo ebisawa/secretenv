@@ -8,9 +8,9 @@ use uuid::Uuid;
 use crate::crypto::types::keys::MasterKey;
 use crate::feature::envelope::entry::encrypt_entry;
 use crate::format::kv::detect_token_codec_from_kv_content;
-use crate::format::kv::enc::KvEncLine;
 use crate::format::token::TokenCodec;
-use crate::model::kv_enc::KvEntryValue;
+use crate::model::kv_enc::entry::KvEntryValue;
+use crate::model::kv_enc::line::KvEncLine;
 use crate::Result;
 
 /// Encode encrypted KV entries to token strings.

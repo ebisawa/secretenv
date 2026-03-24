@@ -5,11 +5,12 @@
 
 use super::decrypt::{decrypt_kv_document, decrypt_kv_single_entry};
 use crate::feature::context::crypto::CryptoContext;
-use crate::feature::verify::kv::verify_kv_content;
+use crate::feature::verify::kv::signature::verify_kv_content;
 use crate::format::content::KvEncContent;
-use crate::format::kv::enc::{KvEncLine, KvEncParser};
+use crate::format::kv::enc::parser::KvEncParser;
 use crate::format::token::TokenCodec;
-use crate::model::kv_enc::KvEntryValue;
+use crate::model::kv_enc::entry::KvEntryValue;
+use crate::model::kv_enc::line::KvEncLine;
 use crate::{Error, Result};
 use std::collections::HashMap;
 

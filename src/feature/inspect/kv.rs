@@ -3,15 +3,17 @@
 
 //! KV-enc inspection.
 
-use crate::format::kv::enc::KvEncLine;
 use crate::format::token::TokenCodec;
-use crate::model::kv_enc::{KvEncDocument, KvEntryValue, KvFileSignature, KvHeader, KvWrap};
+use crate::model::kv_enc::document::{KvEncDocument, KvFileSignature};
+use crate::model::kv_enc::entry::KvEntryValue;
+use crate::model::kv_enc::header::{KvHeader, KvWrap};
+use crate::model::kv_enc::line::KvEncLine;
 use crate::Result;
 
 use super::formatter::{
     append_removed_recipients, append_signer_info, append_wrap_item, push_line,
 };
-use super::{build_section, InspectSection, InspectView};
+use super::{build_section, InspectOutput, InspectSection};
 
 /// Parsed kv-enc inspection data.
 struct KvEncInspectionData {
@@ -133,15 +135,12 @@ fn kv_enc_document_to_inspection_data(doc: &KvEncDocument) -> Result<KvEncInspec
     })
 }
 
-pub(crate) fn inspect_kv_enc(doc: &KvEncDocument) -> Result<InspectView> {
+pub(crate) fn build_kv_inspect_output(doc: &KvEncDocument) -> Result<InspectOutput> {
     let data = kv_enc_document_to_inspection_data(doc)?;
     let mut sections = Vec::new();
 
     if let Some(ref version) = data.version {
-        sections.push(build_section(
-            "Version",
-            vec![format!("Version: {}", version)],
-        ));
+        sections.push(build_section("Version", vec![version.clone()]));
     }
     if let Some(section) = build_kv_enc_header_section(&data) {
         sections.push(section);
@@ -157,7 +156,7 @@ pub(crate) fn inspect_kv_enc(doc: &KvEncDocument) -> Result<InspectView> {
         "Summary",
         vec![format!("Total Entries: {}", data.entries.len())],
     ));
-    Ok(InspectView {
+    Ok(InspectOutput {
         title: "=== KV-Enc v3 Metadata ===".to_string(),
         sections,
     })

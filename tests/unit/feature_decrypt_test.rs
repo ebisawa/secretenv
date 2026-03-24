@@ -12,7 +12,7 @@ use secretenv::feature::context::crypto::CryptoContext;
 use secretenv::feature::decrypt::decrypt_document;
 use secretenv::feature::decrypt::file::decrypt_file_document;
 use secretenv::feature::encrypt::file::encrypt_file_document;
-use secretenv::feature::encrypt::SigningContext;
+use secretenv::feature::envelope::signature::SigningContext;
 use secretenv::feature::verify::file::verify_file_document;
 use secretenv::format::content::FileEncContent;
 use secretenv::io::keystore::storage::{list_kids, load_public_key};

@@ -10,11 +10,10 @@ use crate::keygen_helpers::make_verified_members;
 use crate::test_utils::{
     setup_member_key_context, setup_test_keystore_from_fixtures, setup_test_workspace_from_fixtures,
 };
-use secretenv::feature::encrypt::SigningContext;
+use secretenv::feature::envelope::signature::SigningContext;
 use secretenv::feature::kv::encrypt::encrypt_kv_document;
-use secretenv::feature::kv::{
-    decrypt_kv_value, list_kv_keys, set_kv_entry, unset_kv_entry, KvWriteContext,
-};
+use secretenv::feature::kv::mutate::{set_kv_entry, unset_kv_entry, KvWriteContext};
+use secretenv::feature::kv::query::{decrypt_kv_value, list_kv_keys};
 use secretenv::format::content::KvEncContent;
 use secretenv::format::token::TokenCodec;
 use secretenv::io::keystore::storage::{list_kids, load_public_key};

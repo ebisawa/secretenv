@@ -51,7 +51,7 @@ fn test_inspect_file_enc_shows_metadata() {
         .stdout(predicate::str::contains("Format:"))
         .stdout(predicate::str::contains("Secret ID:"))
         .stdout(predicate::str::contains("Recipients"))
-        .stdout(predicate::str::contains("Signature:"));
+        .stdout(predicate::str::contains("[Signature]"));
 
     // Even when signature verification information is unavailable/failed,
     // embedded attestation metadata should still be inspectable.
@@ -181,7 +181,7 @@ fn test_inspect_shows_signature_verification() {
         .env("SECRETENV_SSH_KEY", ssh_priv.to_str().unwrap())
         .assert()
         .success()
-        .stdout(predicate::str::contains("Signature Verification:"))
+        .stdout(predicate::str::contains("[Signature Verification]"))
         .stdout(predicate::str::contains("Status:"));
 }
 

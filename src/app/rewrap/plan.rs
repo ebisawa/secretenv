@@ -3,7 +3,7 @@
 
 use crate::app::context::options::CommonCommandOptions;
 use crate::app::context::paths::require_workspace;
-use crate::app::member::verify_incoming_members_for_promotion;
+use crate::app::member::verification::verify_incoming_members_for_promotion;
 use crate::feature::member::promotion::IncomingVerificationReport as FeatureIncomingVerificationReport;
 use crate::format::kv::KV_ENC_EXTENSION;
 use crate::support::fs::list_dir;

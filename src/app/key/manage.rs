@@ -4,15 +4,16 @@
 use std::path::Path;
 
 use crate::app::context::options::CommonCommandOptions;
+use crate::app::context::ssh::ResolvedSshSigner;
 use crate::app::key::export::{save_exported_public_key, save_portable_private_key};
 use crate::app::key::identity::{resolve_member_id_for_removal, resolve_required_key_identity};
 use crate::app::key::types::{
     KeyActivateResult, KeyExportPrivateResult, KeyExportResult, KeyListResult, KeyRemoveResult,
 };
-use crate::feature::context::ssh::SshSigningContext;
-use crate::feature::key::manage::{
-    activate_key, export_key, list_keys, load_and_decrypt_private_key, remove_key,
-};
+use crate::feature::key::manage::export::export_key;
+use crate::feature::key::manage::mutation::{activate_key, remove_key};
+use crate::feature::key::manage::private_load::load_and_decrypt_private_key;
+use crate::feature::key::manage::query::list_keys;
 use crate::feature::key::portable_export::export_private_key_portable;
 use crate::Result;
 
@@ -59,7 +60,7 @@ pub fn export_private_key_command(
     member_id: Option<String>,
     kid: Option<String>,
     password: &str,
-    ssh_ctx: SshSigningContext,
+    ssh_ctx: ResolvedSshSigner,
 ) -> Result<KeyExportPrivateResult> {
     let identity = resolve_required_key_identity(options, member_id)?;
     let loaded = load_and_decrypt_private_key(

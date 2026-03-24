@@ -8,7 +8,7 @@ use super::helpers::{
 use crate::cli_common::{ALICE_MEMBER_ID, BOB_MEMBER_ID};
 use crate::keygen_helpers::make_attested_public_key;
 use secretenv::feature::encrypt::file as file_enc;
-use secretenv::feature::encrypt::SigningContext;
+use secretenv::feature::envelope::signature::SigningContext;
 use uuid::Uuid;
 
 #[test]

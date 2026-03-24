@@ -9,11 +9,12 @@
 use crate::cli_common::{ALICE_MEMBER_ID, BOB_MEMBER_ID};
 use crate::keygen_helpers::make_verified_members;
 use crate::test_utils::{setup_member_key_context, setup_test_keystore_from_fixtures};
-use secretenv::app::rewrap::{rewrap_file_content_with_request, SingleRewrapRequest};
+use secretenv::app::rewrap::execution::rewrap_file_content_with_request;
+use secretenv::app::rewrap::types::SingleRewrapRequest;
 use secretenv::feature::context::crypto::CryptoContext;
 use secretenv::feature::decrypt::file::decrypt_file_document;
 use secretenv::feature::encrypt::file::encrypt_file_document;
-use secretenv::feature::encrypt::SigningContext;
+use secretenv::feature::envelope::signature::SigningContext;
 use secretenv::feature::verify::file::verify_file_document;
 use secretenv::format::content::FileEncContent;
 use secretenv::io::keystore::storage::save_key_pair_atomic;

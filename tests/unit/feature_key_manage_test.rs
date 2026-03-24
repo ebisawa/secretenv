@@ -5,7 +5,9 @@
 
 use crate::cli_common::{ALICE_MEMBER_ID, BOB_MEMBER_ID};
 use crate::test_utils::{create_test_private_key, keygen_test, setup_test_keystore_from_fixtures};
-use secretenv::feature::key::manage::{activate_key, export_key, list_keys, remove_key};
+use secretenv::feature::key::manage::export::export_key;
+use secretenv::feature::key::manage::mutation::{activate_key, remove_key};
+use secretenv::feature::key::manage::query::list_keys;
 use secretenv::io::keystore::storage::save_key_pair_atomic;
 
 /// Helper: generate a second key pair, save it to the keystore, and return its kid.

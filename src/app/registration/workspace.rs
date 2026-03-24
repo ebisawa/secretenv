@@ -7,11 +7,13 @@ use crate::app::context::options::CommonCommandOptions;
 use crate::io::keystore::resolver::KeystoreResolver;
 use crate::io::keystore::storage::load_public_key;
 use crate::io::workspace::detection::resolve_workspace_creation_path;
-use crate::io::workspace::members::{active_member_file_path, incoming_member_file_path};
+use crate::io::workspace::members::{
+    active_member_file_path, incoming_member_file_path, MemberStatus,
+};
 use crate::io::workspace::setup;
 use crate::Result;
 
-use super::types::{MemberStatus, RegistrationMode, RegistrationResult};
+use super::types::{RegistrationMode, RegistrationResult};
 
 pub(crate) struct RegistrationPaths {
     pub workspace_path: PathBuf,

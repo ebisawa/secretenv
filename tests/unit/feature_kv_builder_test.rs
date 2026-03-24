@@ -1,7 +1,9 @@
-use super::{KvDocumentBuilder, KvDocumentEntry, WrapSource};
-use crate::format::kv::enc::parser::{KvEncLine, KvEncVersion};
+use super::KvDocumentBuilder;
+use crate::feature::kv::document::{KvDocumentEntry, WrapSource};
 use crate::format::token::TokenCodec;
-use crate::model::kv_enc::{KvEntryValue, KvHeader, KvWrap};
+use crate::model::kv_enc::entry::KvEntryValue;
+use crate::model::kv_enc::header::{KvHeader, KvWrap};
+use crate::model::kv_enc::line::{KvEncLine, KvEncVersion};
 use std::collections::HashMap;
 use uuid::Uuid;
 

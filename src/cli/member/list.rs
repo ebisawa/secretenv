@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::app::context::options::CommonCommandOptions;
-use crate::app::member::list_members;
+use crate::app::member::query::list_members;
 use crate::cli::common::output::json::print_json_output;
 use crate::Error;
 

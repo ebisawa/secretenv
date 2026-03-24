@@ -4,15 +4,15 @@
 //! Rewrap operations for kv-enc v3 format.
 
 use crate::feature::context::crypto::CryptoContext;
-use crate::feature::kv::builder::UnsignedKvDocument;
-use crate::feature::kv::rewrite::VerifiedKvRewriteSession;
+use crate::feature::kv::document::UnsignedKvDocument;
+use crate::feature::kv::rewrite_session::VerifiedKvRewriteSession;
 use crate::feature::rewrap::kv_op::recipients::{add_kv_recipients, remove_kv_recipients};
 use crate::feature::rewrap::kv_op::rotate::rotate_kv_key;
-use crate::feature::verify::kv::verify_kv_content;
+use crate::feature::verify::kv::signature::verify_kv_content;
 use crate::format::content::KvEncContent;
 use crate::format::kv::enc::canonical::extract_recipients_from_wrap;
 use crate::io::workspace::members::list_active_member_ids;
-use crate::model::kv_enc::VerifiedKvEncDocument;
+use crate::model::kv_enc::verified::VerifiedKvEncDocument;
 use crate::{Error, Result};
 use std::path::Path;
 

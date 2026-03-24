@@ -3,7 +3,7 @@
 
 //! Unit tests for JSON Schema validator
 
-use secretenv::io::schema::validator::Validator;
+use secretenv::format::schema::validator::Validator;
 use secretenv::model::identifiers::hpke;
 
 #[test]

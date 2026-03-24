@@ -9,7 +9,7 @@ use super::formatter::{
     append_file_payload_info, append_removed_recipients, append_signer_info, append_wrap_item,
     push_line,
 };
-use super::{build_section, InspectSection, InspectView};
+use super::{build_section, InspectOutput, InspectSection};
 
 fn build_section_lines(build: impl FnOnce(&mut String)) -> Vec<String> {
     let mut out = String::new();
@@ -79,8 +79,8 @@ fn build_file_enc_signature_section(doc: &FileEncDocument) -> InspectSection {
     )
 }
 
-pub(crate) fn inspect_file_enc(doc: &FileEncDocument) -> InspectView {
-    InspectView {
+pub(crate) fn build_file_inspect_output(doc: &FileEncDocument) -> InspectOutput {
+    InspectOutput {
         title: "=== File-Enc v3 Metadata ===".to_string(),
         sections: vec![
             build_file_enc_header_section(doc),

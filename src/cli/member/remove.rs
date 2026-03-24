@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::app::context::options::CommonCommandOptions;
-use crate::app::member::remove_member;
+use crate::app::member::mutation::remove_member;
 use crate::Error;
 
 use super::RemoveArgs;

@@ -6,10 +6,13 @@
 use crate::crypto::types::keys::MasterKey;
 use crate::feature::envelope::entry::decrypt_entry;
 use crate::feature::envelope::unwrap::unwrap_master_key_for_kv;
-use crate::format::kv::enc::{extract_head_and_wrap_tokens, KvEncLine, KvEncParser};
+use crate::format::kv::enc::canonical::extract_head_and_wrap_tokens;
+use crate::format::kv::enc::parser::KvEncParser;
 use crate::format::token::TokenCodec;
-use crate::model::kv_enc::VerifiedKvEncDocument;
-use crate::model::kv_enc::{KvEntryValue, KvHeader, KvWrap};
+use crate::model::kv_enc::entry::KvEntryValue;
+use crate::model::kv_enc::header::{KvHeader, KvWrap};
+use crate::model::kv_enc::line::KvEncLine;
+use crate::model::kv_enc::verified::VerifiedKvEncDocument;
 use crate::model::verified::VerifiedPrivateKey;
 use crate::Result;
 use std::collections::HashMap;

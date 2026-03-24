@@ -46,29 +46,28 @@ pub fn save_encrypted_output(
     output_path: Option<&PathBuf>,
     content: &str,
     quiet: bool,
-) -> Result<()> {
+) -> Result<Option<String>> {
     match output_path {
         Some(path) => {
             atomic::save_text(path, content)?;
-            if !quiet {
-                eprintln!(
-                    "Encrypted to: {}",
-                    display_path_relative_to_cwd(path.as_path())
-                );
-            }
+            Ok(build_output_notice("Encrypted to", path.as_path(), quiet))
         }
-        None => print!("{}", content),
+        None => {
+            print!("{}", content);
+            Ok(None)
+        }
     }
-    Ok(())
 }
 
-pub fn save_decrypted_file(plaintext_bytes: &[u8], output_path: &Path, quiet: bool) -> Result<()> {
+pub fn save_decrypted_file(
+    plaintext_bytes: &[u8],
+    output_path: &Path,
+    quiet: bool,
+) -> Result<Option<String>> {
     atomic::save_bytes(output_path, plaintext_bytes)?;
-    if !quiet {
-        eprintln!(
-            "Decrypted to: {}",
-            display_path_relative_to_cwd(output_path)
-        );
-    }
-    Ok(())
+    Ok(build_output_notice("Decrypted to", output_path, quiet))
+}
+
+fn build_output_notice(label: &str, output_path: &Path, quiet: bool) -> Option<String> {
+    (!quiet).then(|| format!("{}: {}", label, display_path_relative_to_cwd(output_path)))
 }

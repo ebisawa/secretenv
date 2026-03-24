@@ -8,9 +8,9 @@
 
 use crate::cli_common::{ALICE_MEMBER_ID, BOB_MEMBER_ID, CAROL_MEMBER_ID, DAVE_MEMBER_ID};
 use crate::test_utils::{setup_test_keystore, EnvGuard};
-use secretenv::feature::inspect::{inspect_document_with_verification, InspectOutput};
+use secretenv::feature::inspect::{build_inspect_view, InspectOutput};
 use secretenv::feature::verify::file::verify_file_document_report;
-use secretenv::feature::verify::kv::verify_kv_document_report;
+use secretenv::feature::verify::kv::signature::verify_kv_document_report;
 use secretenv::format::content::EncryptedContent;
 use secretenv::model::verification::VerifyingKeySource;
 use std::fs;
@@ -136,8 +136,7 @@ fn test_inspect_file_enc_shows_format() {
     let (_temp_dir, content) = create_file_enc_content(ALICE_MEMBER_ID);
 
     let encrypted = EncryptedContent::detect(content).unwrap();
-    let output =
-        inspect_document_with_verification(&encrypted, "secret.json", None, false).unwrap();
+    let output = build_inspect_view(&encrypted).unwrap();
 
     assert!(
         inspect_contains(&output, "Format:"),
@@ -150,8 +149,7 @@ fn test_inspect_file_enc_shows_recipients() {
     let (_temp_dir, content) = create_file_enc_content(BOB_MEMBER_ID);
 
     let encrypted = EncryptedContent::detect(content).unwrap();
-    let output =
-        inspect_document_with_verification(&encrypted, "secret.json", None, false).unwrap();
+    let output = build_inspect_view(&encrypted).unwrap();
 
     assert!(
         inspect_contains(&output, "Recipients"),
@@ -164,8 +162,7 @@ fn test_inspect_file_enc_shows_signature() {
     let (_temp_dir, content) = create_file_enc_content(CAROL_MEMBER_ID);
 
     let encrypted = EncryptedContent::detect(content).unwrap();
-    let output =
-        inspect_document_with_verification(&encrypted, "secret.json", None, false).unwrap();
+    let output = build_inspect_view(&encrypted).unwrap();
 
     assert!(
         inspect_contains(&output, "Signature"),
@@ -199,8 +196,7 @@ fn test_inspect_kv_enc_shows_head() {
     let (_temp_dir, content) = create_kv_enc_content(ALICE_MEMBER_ID);
 
     let encrypted = EncryptedContent::detect(content).unwrap();
-    let output =
-        inspect_document_with_verification(&encrypted, "default.kvenc", None, false).unwrap();
+    let output = build_inspect_view(&encrypted).unwrap();
 
     assert!(
         inspect_contains(&output, "HEAD Data"),
@@ -217,8 +213,7 @@ fn test_inspect_kv_enc_shows_entries() {
     let (_temp_dir, content) = create_kv_enc_content(BOB_MEMBER_ID);
 
     let encrypted = EncryptedContent::detect(content).unwrap();
-    let output =
-        inspect_document_with_verification(&encrypted, "default.kvenc", None, false).unwrap();
+    let output = build_inspect_view(&encrypted).unwrap();
 
     assert!(
         inspect_contains(&output, "Entries"),
@@ -235,8 +230,7 @@ fn test_inspect_kv_enc_shows_wrap() {
     let (_temp_dir, content) = create_kv_enc_content(CAROL_MEMBER_ID);
 
     let encrypted = EncryptedContent::detect(content).unwrap();
-    let output =
-        inspect_document_with_verification(&encrypted, "default.kvenc", None, false).unwrap();
+    let output = build_inspect_view(&encrypted).unwrap();
 
     assert!(
         inspect_contains(&output, "WRAP Data"),
@@ -341,22 +335,18 @@ fn test_inspect_kv_enc_with_verification() {
     let encrypted_content = fs::read_to_string(&encrypted_path).unwrap();
 
     // Inspect with verification
-    let encrypted = EncryptedContent::detect(encrypted_content).unwrap();
-    let output = inspect_document_with_verification(
-        &encrypted,
-        "default.kvenc",
-        Some(&workspace_dir),
-        false,
-    )
-    .unwrap();
+    let encrypted = EncryptedContent::detect(encrypted_content.clone()).unwrap();
+    let output = build_inspect_view(&encrypted).unwrap();
+    let signature_report =
+        verify_kv_document_report(&encrypted_content, Some(&workspace_dir), false);
 
     // Check that verification result is included
     assert!(
-        output.signature_report.verified,
+        signature_report.verified,
         "signature report should indicate verification success"
     );
     assert!(
-        output.signature_report.signer_member_id.as_deref() == Some(ALICE_MEMBER_ID),
+        signature_report.signer_member_id.as_deref() == Some(ALICE_MEMBER_ID),
         "signature report should include signer member_id"
     );
     assert!(
@@ -415,16 +405,17 @@ fn test_inspect_kv_enc_with_verification_failure_no_keystore() {
 
     // Inspect with verification (keystore doesn't have the key).
     // With graceful degradation, inspect succeeds and shows FAILED verification status.
-    let encrypted = EncryptedContent::detect(kv_content).unwrap();
-    let result = inspect_document_with_verification(&encrypted, "default.kvenc", None, false);
+    let encrypted = EncryptedContent::detect(kv_content.clone()).unwrap();
+    let result = build_inspect_view(&encrypted);
 
     assert!(
         result.is_ok(),
         "Inspect should succeed even when keystore does not contain the signing key"
     );
     let output = result.unwrap();
+    let signature_report = verify_kv_document_report(&kv_content, None, false);
     assert!(
-        !output.signature_report.verified,
+        !signature_report.verified,
         "Output should show FAILED verification status: {output:?}",
     );
 }

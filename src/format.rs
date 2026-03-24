@@ -15,6 +15,7 @@ pub mod error;
 pub mod file;
 pub mod jcs;
 pub mod kv;
+pub mod schema;
 pub mod token;
 
 pub use error::FormatError;

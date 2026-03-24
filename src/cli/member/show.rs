@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::app::context::options::CommonCommandOptions;
-use crate::app::member::{show_member, MemberStatus};
+use crate::app::member::query::show_member;
+use crate::io::workspace::members::MemberStatus;
 use crate::Error;
 
 use super::ShowArgs;

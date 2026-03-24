@@ -7,7 +7,7 @@
 //! used by both file-enc and kv-enc rewrap operations.
 
 use crate::feature::context::crypto::CryptoContext;
-use crate::feature::verify::recipients::verify_recipient_public_keys;
+use crate::feature::verify::public_key::verify_recipient_public_keys;
 use crate::model::common::RemovedRecipient;
 use crate::model::public_key::{PublicKey, VerifiedPublicKeyAttested};
 use crate::support::time::current_timestamp;

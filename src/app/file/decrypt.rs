@@ -7,7 +7,7 @@ use zeroize::Zeroizing;
 
 use crate::app::context::execution::ExecutionContext;
 use crate::app::context::options::CommonCommandOptions;
-use crate::feature::context::ssh::SshSigningContext;
+use crate::app::context::ssh::ResolvedSshSigner;
 use crate::feature::decrypt::decrypt_document;
 use crate::format::content::FileEncContent;
 use crate::support::fs::load_text;
@@ -28,7 +28,7 @@ impl DecryptFileSession {
         options: &CommonCommandOptions,
         member_id: Option<String>,
         kid: Option<&str>,
-        ssh_ctx: Option<SshSigningContext>,
+        ssh_ctx: Option<ResolvedSshSigner>,
     ) -> Result<ExecutionContext> {
         ExecutionContext::resolve(options, member_id, kid, ssh_ctx)
     }
@@ -44,7 +44,7 @@ pub fn decrypt_file_command(
     member_id: Option<String>,
     kid: Option<&str>,
     input_path: &Path,
-    ssh_ctx: Option<SshSigningContext>,
+    ssh_ctx: Option<ResolvedSshSigner>,
 ) -> Result<Zeroizing<Vec<u8>>> {
     let session = DecryptFileSession::load_input(input_path)?;
     let execution = DecryptFileSession::load_execution(options, member_id, kid, ssh_ctx)?;

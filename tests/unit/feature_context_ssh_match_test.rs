@@ -1,11 +1,10 @@
 // Copyright 2026 Satoshi Ebisawa
 // SPDX-License-Identifier: Apache-2.0
 
-use secretenv::feature::context::ssh::find_candidate_by_fingerprint;
-use secretenv::io::ssh::external::pubkey::SshKeyCandidate;
+use secretenv::app::context::ssh::{find_ssh_candidate_by_fingerprint, SshKeyCandidateView};
 
-fn build_candidate(fingerprint: &str, comment: &str) -> SshKeyCandidate {
-    SshKeyCandidate {
+fn build_candidate(fingerprint: &str, comment: &str) -> SshKeyCandidateView {
+    SshKeyCandidateView {
         public_key: format!("ssh-ed25519 AAAA{}data {}", fingerprint, comment),
         fingerprint: fingerprint.to_string(),
         comment: comment.to_string(),
@@ -19,7 +18,7 @@ fn test_find_candidate_by_fingerprint_single_match() {
         build_candidate("SHA256:bbbb", "key-b"),
     ];
 
-    let result = find_candidate_by_fingerprint(&candidates, "SHA256:bbbb").unwrap();
+    let result = find_ssh_candidate_by_fingerprint(&candidates, "SHA256:bbbb").unwrap();
     assert_eq!(result.fingerprint, "SHA256:bbbb");
     assert_eq!(result.comment, "key-b");
 }
@@ -32,7 +31,7 @@ fn test_find_candidate_by_fingerprint_first_of_many() {
         build_candidate("SHA256:zzzz", "third"),
     ];
 
-    let result = find_candidate_by_fingerprint(&candidates, "SHA256:xxxx").unwrap();
+    let result = find_ssh_candidate_by_fingerprint(&candidates, "SHA256:xxxx").unwrap();
     assert_eq!(result.fingerprint, "SHA256:xxxx");
     assert_eq!(result.comment, "first");
 }
@@ -44,7 +43,7 @@ fn test_find_candidate_by_fingerprint_no_match_error() {
         build_candidate("SHA256:bbbb", "key-b"),
     ];
 
-    let err = find_candidate_by_fingerprint(&candidates, "SHA256:missing")
+    let err = find_ssh_candidate_by_fingerprint(&candidates, "SHA256:missing")
         .unwrap_err()
         .to_string();
     assert!(
@@ -59,9 +58,9 @@ fn test_find_candidate_by_fingerprint_no_match_error() {
 
 #[test]
 fn test_find_candidate_by_fingerprint_empty_candidates_error() {
-    let candidates: Vec<SshKeyCandidate> = vec![];
+    let candidates: Vec<SshKeyCandidateView> = vec![];
 
-    let err = find_candidate_by_fingerprint(&candidates, "SHA256:any")
+    let err = find_ssh_candidate_by_fingerprint(&candidates, "SHA256:any")
         .unwrap_err()
         .to_string();
     assert!(

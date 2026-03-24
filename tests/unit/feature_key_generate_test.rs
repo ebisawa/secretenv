@@ -14,12 +14,10 @@ use crate::test_utils::{keygen_test, setup_test_keystore_from_fixtures};
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
 use ed25519_dalek::{SigningKey, VerifyingKey};
-use secretenv::config::types::SshSigner;
-use secretenv::feature::context::ssh::SshSigningContext;
-use secretenv::feature::key::generate::{
-    build_identity_keys, build_public_key, generate_keypairs, KeyGenerationOptions,
-    PublicKeyBuildParams,
-};
+use secretenv::feature::key::generate::KeyGenerationOptions;
+use secretenv::feature::key::material::{build_identity_keys, generate_keypairs};
+use secretenv::feature::key::public_key_document::{build_public_key, PublicKeyBuildParams};
+use secretenv::feature::key::ssh_binding::SshBindingContext;
 use secretenv::io::keystore::active::load_active_kid;
 use secretenv::io::keystore::resolver::KeystoreResolver;
 use secretenv::io::keystore::signer::load_signer_public_key_if_needed;
@@ -532,8 +530,7 @@ fn test_generate_key_rejects_skipped_determinism() {
     let fingerprint =
         secretenv::io::ssh::protocol::build_sha256_fingerprint(ssh_pub_content.trim()).unwrap();
 
-    let ssh_context = SshSigningContext {
-        signing_method: SshSigner::SshKeygen,
+    let ssh_binding = SshBindingContext {
         public_key: ssh_pub_content.trim().to_string(),
         fingerprint,
         backend,
@@ -554,7 +551,7 @@ fn test_generate_key_rejects_skipped_determinism() {
         debug: false,
         github_account: None,
         verbose: false,
-        ssh_context,
+        ssh_binding,
     });
 
     let err_msg = match result {

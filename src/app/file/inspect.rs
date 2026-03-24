@@ -9,9 +9,10 @@ use crate::feature::inspect::verification::{
     build_online_verification_section, build_signature_verification_section,
     OnlineVerificationDisplay,
 };
-use crate::feature::inspect::{
-    inspect_document_with_verification, InspectSection as FeatureInspectSection,
-};
+use crate::feature::inspect::{build_inspect_view, InspectSection as FeatureInspectSection};
+use crate::feature::verify::file::verify_file_document_report;
+use crate::feature::verify::kv::signature::verify_kv_document_report;
+use crate::feature::verify::SignatureVerificationReport;
 use crate::format::content::EncryptedContent;
 use crate::io::verify_online::github::verify_github_account;
 use crate::io::verify_online::VerificationResult as OnlineVerificationResult;
@@ -67,9 +68,9 @@ pub(crate) fn inspect_file_command(
     input_path: &Path,
 ) -> Result<InspectCommandOutput> {
     let session = InspectFileSession::load(options, input_path)?;
-    let inspect_output = inspect_document_with_verification(
+    let inspect_output = build_inspect_view(&session.content)?;
+    let signature_report = build_signature_report(
         &session.content,
-        &session.input_display,
         session
             .workspace_root
             .as_ref()
@@ -77,10 +78,8 @@ pub(crate) fn inspect_file_command(
         options.verbose,
     )?;
     let mut sections = inspect_output.sections;
-    sections.push(build_signature_verification_section(
-        &inspect_output.signature_report,
-    ));
-    let report = &inspect_output.signature_report;
+    sections.push(build_signature_verification_section(&signature_report));
+    let report = &signature_report;
 
     if report.verified {
         if let Some(ref public_key) = report.signer_public_key {
@@ -118,5 +117,21 @@ pub(crate) fn inspect_file_command(
         input_display: session.input_display,
         title: inspect_output.title,
         sections: sections.into_iter().map(InspectSection::from).collect(),
+    })
+}
+
+fn build_signature_report(
+    content: &EncryptedContent,
+    workspace_path: Option<&Path>,
+    debug: bool,
+) -> Result<SignatureVerificationReport> {
+    Ok(match content {
+        EncryptedContent::FileEnc(file_content) => {
+            let doc = file_content.parse()?;
+            verify_file_document_report(&doc, workspace_path, debug)
+        }
+        EncryptedContent::KvEnc(kv_content) => {
+            verify_kv_document_report(kv_content.as_str(), workspace_path, debug)
+        }
     })
 }

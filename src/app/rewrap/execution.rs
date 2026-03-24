@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::app::context::execution::ExecutionContext;
-use crate::app::member::promote_members;
-use crate::feature::context::ssh::SshSigningContext;
+use crate::app::context::ssh::ResolvedSshSigner;
+use crate::app::member::mutation::promote_members;
 use crate::feature::rewrap::file::rewrap_file_document;
 use crate::feature::rewrap::kv::rewrap_kv_document;
 use crate::feature::rewrap::RewrapOptions;
@@ -22,7 +22,7 @@ use super::types::{
 pub fn execute_rewrap_batch(
     request: &RewrapBatchRequest,
     plan: &RewrapBatchPlan,
-    ssh_ctx: Option<SshSigningContext>,
+    ssh_ctx: Option<ResolvedSshSigner>,
 ) -> Result<RewrapBatchOutcome> {
     if !request.accepted_promotions.is_empty() {
         promote_members(&plan.workspace_root, &request.accepted_promotions)?;

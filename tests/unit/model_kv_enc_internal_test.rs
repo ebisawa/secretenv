@@ -1,4 +1,4 @@
-use super::*;
+use super::entry::KvEntryValue;
 
 #[test]
 fn kv_entry_value_disclosed_true_serializes() {

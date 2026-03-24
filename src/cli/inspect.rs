@@ -38,8 +38,9 @@ fn render_inspect_output(title: &str, sections: &[InspectSection]) -> String {
     out.push('\n');
     out.push('\n');
     for (index, section) in sections.iter().enumerate() {
+        out.push('[');
         out.push_str(&section.title);
-        out.push_str(":\n");
+        out.push_str("]\n");
         for line in &section.lines {
             out.push_str(line);
             out.push('\n');

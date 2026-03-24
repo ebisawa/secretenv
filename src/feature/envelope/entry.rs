@@ -11,7 +11,7 @@ use crate::crypto::types::keys::{MasterKey, XChaChaKey};
 use crate::crypto::types::primitives::XChaChaNonce;
 use crate::feature::envelope::binding::build_kv_entry_aad;
 use crate::model::identifiers::alg;
-use crate::model::kv_enc::KvEntryValue;
+use crate::model::kv_enc::entry::KvEntryValue;
 use crate::support::base64url::{b64_decode_array, b64_decode_ciphertext, b64_encode};
 use crate::Result;
 use tracing::debug;

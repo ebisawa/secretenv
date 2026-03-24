@@ -47,7 +47,7 @@ fn test_verify_file_enc_valid_signature() {
         .env("SECRETENV_SSH_KEY", ssh_priv.to_str().unwrap())
         .assert()
         .success()
-        .stdout(predicate::str::contains("Signature Verification:"))
+        .stdout(predicate::str::contains("[Signature Verification]"))
         .stdout(predicate::str::contains("Status:   OK"));
 }
 
@@ -82,7 +82,7 @@ fn test_verify_kv_enc_valid_signature() {
         .env("SECRETENV_SSH_KEY", ssh_priv.to_str().unwrap())
         .assert()
         .success()
-        .stdout(predicate::str::contains("Signature Verification:"))
+        .stdout(predicate::str::contains("[Signature Verification]"))
         .stdout(predicate::str::contains("Status:   OK"));
 }
 

@@ -6,7 +6,7 @@
 //! Re-encrypts a decrypted private key with a user-supplied password,
 //! then JCS-normalizes and Base64url-encodes the result for portable transport.
 
-use crate::feature::key::protection::encrypt_private_key_with_password;
+use crate::feature::key::protection::password_encryption::encrypt_private_key_with_password;
 use crate::format::jcs;
 use crate::model::private_key::PrivateKeyPlaintext;
 use crate::support::base64url::b64_encode;

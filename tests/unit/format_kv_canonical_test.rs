@@ -7,7 +7,7 @@ use secretenv::format::kv::enc::canonical::{build_canonical_bytes, extract_recip
 use secretenv::format::kv::enc::parser::KvEncParser;
 use secretenv::model::common::WrapItem;
 use secretenv::model::identifiers::hpke;
-use secretenv::model::kv_enc::KvWrap;
+use secretenv::model::kv_enc::header::KvWrap;
 
 #[test]
 fn test_build_canonical_bytes() {

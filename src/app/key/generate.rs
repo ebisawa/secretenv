@@ -2,13 +2,13 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::app::context::options::CommonCommandOptions;
+use crate::app::context::ssh::ResolvedSshSigner;
 use crate::app::identity::resolve_github_user_with_fallback;
 use crate::app::key::github::{resolve_github_account, verify_preflight_github_binding};
 use crate::app::key::identity::resolve_required_key_identity;
 use crate::app::key::timestamp::resolve_key_timestamps;
 use crate::app::key::types::KeyNewResult;
 use crate::app::verification::OnlineVerificationStatus;
-use crate::feature::context::ssh::SshSigningContext;
 use crate::feature::key::generate::{generate_key, KeyGenerationOptions};
 use crate::Result;
 
@@ -21,7 +21,7 @@ pub fn generate_key_with_github_user(
     options.github_account = github_account.clone();
 
     let github_verification = if let Some(account) = github_account.as_ref() {
-        verify_preflight_github_binding(&options.ssh_context.public_key, account, options.verbose)?
+        verify_preflight_github_binding(&options.ssh_binding.public_key, account, options.verbose)?
             .into()
     } else {
         OnlineVerificationStatus::NotConfigured
@@ -40,7 +40,7 @@ pub fn generate_key_command(
     expires_at_arg: &Option<String>,
     valid_for_arg: &Option<String>,
     no_activate: bool,
-    ssh_ctx: SshSigningContext,
+    ssh_ctx: ResolvedSshSigner,
 ) -> Result<KeyNewResult> {
     let identity = resolve_required_key_identity(options, member_id_arg)?;
     let github_user = resolve_github_user_with_fallback(github_user_arg, options.home.as_deref())?;
@@ -56,7 +56,7 @@ pub fn generate_key_command(
             debug: options.verbose,
             github_account: None,
             verbose: options.verbose,
-            ssh_context: ssh_ctx,
+            ssh_binding: ssh_ctx.into_ssh_binding(),
         },
         github_user,
     )

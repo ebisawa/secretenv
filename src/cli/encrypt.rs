@@ -50,7 +50,11 @@ pub fn run(args: EncryptArgs) -> Result<()> {
     )?;
     let output_path = resolve_encrypted_output_path(args.out.as_ref(), &args.input)?;
 
-    save_encrypted_output(output_path.as_ref(), &encrypted, args.common.quiet)?;
+    if let Some(message) =
+        save_encrypted_output(output_path.as_ref(), &encrypted, args.common.quiet)?
+    {
+        eprintln!("{message}");
+    }
 
     Ok(())
 }

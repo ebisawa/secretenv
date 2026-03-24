@@ -6,9 +6,9 @@
 use super::promotion::{confirm_incoming_promotions, print_promotion_summary};
 use super::RewrapArgs;
 use crate::app::context::options::CommonCommandOptions;
-use crate::app::rewrap::{
-    build_rewrap_batch_plan, execute_rewrap_batch, RewrapBatchOutcome, RewrapBatchRequest,
-};
+use crate::app::rewrap::execution::execute_rewrap_batch;
+use crate::app::rewrap::plan::build_rewrap_batch_plan;
+use crate::app::rewrap::types::{RewrapBatchOutcome, RewrapBatchRequest};
 use crate::cli::common::output::json;
 use crate::cli::common::ssh::resolve_ssh_context_optional;
 use crate::support::path::display_path_relative_to_cwd;

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::app::context::options::CommonCommandOptions;
-use crate::app::member::add_member;
+use crate::app::member::mutation::add_member;
 use crate::Error;
 
 use super::AddArgs;

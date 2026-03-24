@@ -3,28 +3,14 @@
 
 //! Init feature - workspace setup and member registration.
 
-use crate::feature::context::ssh::SshSigningContext;
 use crate::feature::key::generate::{generate_key, KeyGenerationOptions};
+use crate::feature::key::ssh_binding::SshBindingContext;
 use crate::io::keystore::member::find_active_key_document;
-use crate::io::keystore::member::load_single_member_id_from_keystore as load_single_member_id;
-use crate::io::keystore::resolver::KeystoreResolver;
-use crate::io::keystore::storage::load_public_key;
-use crate::io::workspace::setup;
 use crate::model::public_key::GithubAccount;
 use crate::model::ssh::SshDeterminismStatus;
 use crate::support::time as time_util;
 use crate::Result;
 use std::path::{Path, PathBuf};
-
-/// Resolve keystore root from home override or default.
-pub fn resolve_keystore_root(home: &Option<PathBuf>) -> Result<PathBuf> {
-    KeystoreResolver::resolve(home.as_ref())
-}
-
-/// Load member_id from keystore if exactly one exists.
-pub fn load_single_member_id_from_keystore(keystore_root: &Path) -> Result<Option<String>> {
-    load_single_member_id(keystore_root)
-}
 
 /// Result of ensuring key exists.
 #[derive(Debug, Clone)]
@@ -66,7 +52,7 @@ pub fn generate_new_key(
     home: Option<PathBuf>,
     verbose: bool,
     github_account: Option<GithubAccount>,
-    ssh_context: SshSigningContext,
+    ssh_binding: SshBindingContext,
 ) -> Result<EnsureKeyExistsResult> {
     let (created_at, expires_at) = default_key_timestamps()?;
     let result = generate_key(KeyGenerationOptions {
@@ -78,7 +64,7 @@ pub fn generate_new_key(
         debug: verbose,
         github_account,
         verbose,
-        ssh_context,
+        ssh_binding,
     })?;
 
     Ok(EnsureKeyExistsResult {
@@ -97,12 +83,12 @@ pub fn ensure_key_exists(
     home: Option<PathBuf>,
     verbose: bool,
     github_account: Option<GithubAccount>,
-    ssh_context: SshSigningContext,
+    ssh_binding: SshBindingContext,
 ) -> Result<EnsureKeyExistsResult> {
     if let Some(result) = find_active_key(member_id, keystore_root)? {
         return Ok(result);
     }
-    generate_new_key(member_id, home, verbose, github_account, ssh_context)
+    generate_new_key(member_id, home, verbose, github_account, ssh_binding)
 }
 
 fn default_key_timestamps() -> Result<(String, String)> {
@@ -113,25 +99,4 @@ fn default_key_timestamps() -> Result<(String, String)> {
     let expires_at_str = time_util::build_timestamp_display(expires_at)?;
 
     Ok((created_at_str, expires_at_str))
-}
-
-/// Ensure workspace structure exists - create if missing.
-pub fn ensure_workspace_structure(workspace_path: &Path) -> Result<bool> {
-    setup::ensure_workspace_structure(workspace_path)
-}
-
-/// Save member document to workspace.
-pub fn save_member_document(
-    member_file: &Path,
-    member_id: &str,
-    kid: &str,
-    keystore_root: &Path,
-) -> Result<()> {
-    let public_doc = load_public_key(keystore_root, member_id, kid)?;
-    setup::save_member_document(member_file, &public_doc)
-}
-
-/// Verify that workspace structure already exists (used by join command).
-pub fn validate_workspace_exists(workspace_path: &Path) -> Result<()> {
-    setup::validate_workspace_exists(workspace_path)
 }

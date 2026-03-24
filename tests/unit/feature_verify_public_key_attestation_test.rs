@@ -27,7 +27,7 @@ fn generate_real_ssh_attested_public_key(
         check_determinism: true,
     };
     let candidates = resolve_ssh_key_candidates_with_params(&params).unwrap();
-    let ssh_context =
+    let ssh_signer =
         build_ssh_signing_context_with_params(&params, &candidates[0].public_key).unwrap();
 
     let result = generate_key(KeyGenerationOptions {
@@ -39,7 +39,7 @@ fn generate_real_ssh_attested_public_key(
         debug: false,
         github_account: None,
         verbose: false,
-        ssh_context,
+        ssh_binding: ssh_signer.into_ssh_binding(),
     })
     .unwrap();
 

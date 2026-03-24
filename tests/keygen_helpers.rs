@@ -10,11 +10,11 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
 use ed25519_dalek::{SigningKey, VerifyingKey};
 use rand::rngs::OsRng;
-use secretenv::feature::context::ssh::SshSigningContext;
 use secretenv::feature::key::protection::encryption::{
     encrypt_private_key, PrivateKeyEncryptionParams,
 };
 use secretenv::feature::key::public_key_document::build_attestation;
+use secretenv::feature::key::ssh_binding::SshBindingContext;
 use secretenv::io::ssh::backend::ssh_keygen::SshKeygenBackend;
 use secretenv::io::ssh::backend::SignatureBackend;
 use secretenv::io::ssh::external::keygen::DefaultSshKeygen;
@@ -44,15 +44,14 @@ const PUBLIC_KEY_FORMAT: &str = secretenv::model::identifiers::format::PUBLIC_KE
 // SSH context helpers
 // ============================================================================
 
-/// Build a SshSigningContext for tests using a real SSH keypair.
-fn build_test_ssh_context(ssh_key_path: &Path, ssh_pubkey: &str) -> Result<SshSigningContext> {
+/// Build an SshBindingContext for tests using a real SSH keypair.
+fn build_test_ssh_context(ssh_key_path: &Path, ssh_pubkey: &str) -> Result<SshBindingContext> {
     let fingerprint = build_sha256_fingerprint(ssh_pubkey)?;
     let backend: Box<dyn SignatureBackend> = Box::new(SshKeygenBackend::new(
         Box::new(DefaultSshKeygen::new("ssh-keygen")),
         SshKeyDescriptor::from_path(ssh_key_path.to_path_buf()),
     ));
-    Ok(SshSigningContext {
-        signing_method: secretenv::config::types::SshSigner::SshKeygen,
+    Ok(SshBindingContext {
         public_key: ssh_pubkey.to_string(),
         fingerprint,
         backend,

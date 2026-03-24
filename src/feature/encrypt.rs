@@ -6,11 +6,10 @@
 pub mod file;
 
 use crate::feature::encrypt::file::encrypt_file_document as encrypt_file_inner;
+use crate::feature::envelope::signature::SigningContext;
 use crate::model::common::normalize_recipients;
 use crate::model::public_key::VerifiedPublicKeyAttested;
 use crate::{Error, Result};
-
-pub use crate::feature::envelope::signature::SigningContext;
 
 /// Validate that recipients count matches public keys count.
 fn validate_recipients_and_keys(

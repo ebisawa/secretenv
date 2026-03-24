@@ -18,17 +18,17 @@ use secretenv::crypto::types::keys::MasterKey;
 use secretenv::feature::context::crypto::CryptoContext;
 use secretenv::feature::decrypt::file::decrypt_file_document;
 use secretenv::feature::encrypt::file::encrypt_file_document;
-use secretenv::feature::encrypt::SigningContext;
 use secretenv::feature::envelope::binding::build_file_wrap_info;
+use secretenv::feature::envelope::signature::SigningContext;
 use secretenv::feature::envelope::unwrap::{unwrap_master_key, unwrap_master_key_for_file};
 use secretenv::feature::envelope::wrap::build_wrap_item_for_file;
-use secretenv::feature::key::protection::decrypt_private_key;
+use secretenv::feature::key::protection::encryption::decrypt_private_key;
 use secretenv::feature::kv::decrypt::decrypt_kv_document;
 use secretenv::feature::kv::encrypt::encrypt_kv_document;
 use secretenv::feature::verify::file::verify_file_document;
-use secretenv::feature::verify::kv::verify_kv_document;
+use secretenv::feature::verify::kv::signature::verify_kv_document;
+use secretenv::format::kv::document::parse_kv_document;
 use secretenv::format::kv::dotenv::parse_dotenv;
-use secretenv::format::kv::parse_kv_document;
 use secretenv::format::token::TokenCodec;
 use secretenv::io::keystore::storage::{list_kids, load_private_key, load_public_key};
 use secretenv::io::ssh::backend::signature_backend::SignatureBackend;
@@ -100,7 +100,7 @@ fn encrypt_file_for_test(
 fn encrypt_kv_for_test(
     dotenv_content: &str,
 ) -> (
-    secretenv::model::kv_enc::VerifiedKvEncDocument,
+    secretenv::model::kv_enc::verified::VerifiedKvEncDocument,
     CryptoContext,
     String,
     TempDir,

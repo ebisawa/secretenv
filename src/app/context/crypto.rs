@@ -9,7 +9,7 @@ use crate::feature::context::crypto::{
     build_signing_key, validate_and_wrap_private_key_ssh, CryptoContext,
 };
 use crate::feature::context::env_key;
-use crate::feature::key::protection::decrypt_private_key;
+use crate::feature::key::protection::encryption::decrypt_private_key;
 use crate::io::config::paths::get_base_dir;
 use crate::io::keystore::helpers::resolve_kid;
 use crate::io::keystore::paths::get_keystore_root_from_base;
@@ -20,6 +20,10 @@ use crate::io::keystore::storage::load_private_key;
 use crate::io::ssh::backend::SignatureBackend;
 use crate::model::private_key::PrivateKeyAlgorithm;
 use crate::{Error, Result};
+
+pub fn is_env_key_mode() -> bool {
+    env_key::is_env_key_mode()
+}
 
 pub fn load_crypto_context(
     member_id: &str,

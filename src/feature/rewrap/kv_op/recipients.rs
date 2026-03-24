@@ -9,8 +9,8 @@ use crate::feature::rewrap::common::{
     check_recipient_exists, resolve_attested_recipients, validate_not_empty_recipients,
     warn_recipient_not_found,
 };
-use crate::format::kv::enc::{extract_recipients_from_wrap, parse_kv_wrap};
-use crate::model::kv_enc::KvWrap;
+use crate::format::kv::enc::canonical::{extract_recipients_from_wrap, parse_kv_wrap};
+use crate::model::kv_enc::header::KvWrap;
 use crate::Result;
 use uuid::Uuid;
 

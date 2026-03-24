@@ -8,9 +8,9 @@
 //! across feature functions.
 
 use crate::format::detection::{detect_format, InputFormat};
-use crate::format::kv::parse_kv_document;
+use crate::format::kv::document::parse_kv_document;
 use crate::model::file_enc::FileEncDocument;
-use crate::model::kv_enc::KvEncDocument;
+use crate::model::kv_enc::document::KvEncDocument;
 use crate::{Error, Result};
 
 /// File-enc content (JSON string, format-detected but unparsed).
@@ -56,7 +56,8 @@ impl FileEncContent {
             source: Some(Box::new(e)),
         })?;
 
-        crate::io::schema::validator::embedded_validator()?.validate_file_enc_document(&value)?;
+        crate::format::schema::validator::embedded_validator()?
+            .validate_file_enc_document(&value)?;
 
         serde_json::from_value(value).map_err(|e| Error::Parse {
             message: format!("Failed to deserialize FileEncDocument: {}", e),

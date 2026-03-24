@@ -7,8 +7,8 @@ use crate::app::context::crypto::{load_crypto_context, load_crypto_context_from_
 use crate::app::context::member::resolve_member_context;
 use crate::app::context::options::CommonCommandOptions;
 use crate::app::context::paths::ResolvedCommandPaths;
+use crate::app::context::ssh::ResolvedSshSigner;
 use crate::feature::context::crypto::CryptoContext;
-use crate::feature::context::ssh::SshSigningContext;
 use crate::{Error, Result};
 
 /// Fully resolved command execution context.
@@ -25,7 +25,7 @@ impl ExecutionContext {
         options: &CommonCommandOptions,
         member_id: Option<String>,
         explicit_kid: Option<&str>,
-        ssh_ctx: SshSigningContext,
+        ssh_ctx: ResolvedSshSigner,
     ) -> Result<Self> {
         let resolved = resolve_member_context(options, member_id)?;
         let workspace_root = resolved.paths.workspace_root.clone();
@@ -53,7 +53,7 @@ impl ExecutionContext {
         options: &CommonCommandOptions,
         member_id: Option<String>,
         explicit_kid: Option<&str>,
-        ssh_ctx: Option<SshSigningContext>,
+        ssh_ctx: Option<ResolvedSshSigner>,
     ) -> Result<Self> {
         match ssh_ctx {
             Some(ctx) => Self::load(options, member_id, explicit_kid, ctx),

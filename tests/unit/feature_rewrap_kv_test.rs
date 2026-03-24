@@ -6,17 +6,19 @@
 use crate::cli_common::{ALICE_MEMBER_ID, BOB_MEMBER_ID};
 use crate::keygen_helpers::make_verified_members;
 use crate::test_utils::{setup_member_key_context, setup_test_keystore_from_fixtures};
-use secretenv::app::rewrap::{rewrap_kv_content_with_request, SingleRewrapRequest};
+use secretenv::app::rewrap::execution::rewrap_kv_content_with_request;
+use secretenv::app::rewrap::types::SingleRewrapRequest;
 use secretenv::feature::context::crypto::CryptoContext;
-use secretenv::feature::encrypt::SigningContext;
+use secretenv::feature::envelope::signature::SigningContext;
 use secretenv::feature::kv::encrypt::encrypt_kv_document;
 use secretenv::format::content::KvEncContent;
+use secretenv::format::kv::document::parse_kv_document;
 use secretenv::format::kv::dotenv::parse_dotenv;
-use secretenv::format::kv::enc::parser::KvEncLine;
-use secretenv::format::kv::parse_kv_document;
 use secretenv::format::token::TokenCodec;
 use secretenv::io::keystore::storage::{list_kids, load_public_key};
-use secretenv::model::kv_enc::{KvEntryValue, KvWrap};
+use secretenv::model::kv_enc::entry::KvEntryValue;
+use secretenv::model::kv_enc::header::KvWrap;
+use secretenv::model::kv_enc::line::KvEncLine;
 use std::fs;
 use tempfile::TempDir;
 
@@ -256,7 +258,8 @@ fn test_rewrap_kv_add_recipient() {
         .unwrap()
         .strip_prefix(":WRAP ")
         .unwrap();
-    let wrap_data: secretenv::model::kv_enc::KvWrap = TokenCodec::decode_auto(wrap_token).unwrap();
+    let wrap_data: secretenv::model::kv_enc::header::KvWrap =
+        TokenCodec::decode_auto(wrap_token).unwrap();
     let recipient_ids: Vec<&str> = wrap_data.wrap.iter().map(|w| w.rid.as_str()).collect();
     assert!(
         recipient_ids.contains(&BOB_MEMBER_ID),

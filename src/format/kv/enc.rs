@@ -19,7 +19,3 @@
 pub mod canonical;
 pub mod parser;
 pub mod writer;
-
-pub use crate::model::kv_enc::{KvEncLine, KvEncVersion};
-pub use canonical::{extract_head_and_wrap_tokens, extract_recipients_from_wrap, parse_kv_wrap};
-pub use parser::KvEncParser;

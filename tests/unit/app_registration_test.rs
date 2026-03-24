@@ -3,9 +3,9 @@
 
 use crate::test_utils::setup_test_keystore_from_fixtures;
 use secretenv::app::context::options::CommonCommandOptions;
-use secretenv::app::registration::{
-    build_join_registration, resolve_registration_key_plan, RegistrationKeyPlan, RegistrationMode,
-};
+use secretenv::app::registration::command::build_join_registration;
+use secretenv::app::registration::key_plan::resolve_registration_key_plan;
+use secretenv::app::registration::types::{RegistrationKeyPlan, RegistrationMode};
 use tempfile::TempDir;
 
 fn build_common_options(home: &TempDir, workspace: &TempDir) -> CommonCommandOptions {

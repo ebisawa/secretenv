@@ -7,11 +7,12 @@
 //! - Build canonical byte representation for signature verification
 //! - Parse and extract HEAD and WRAP data from kv-enc content
 
-use super::parser::{KvEncLine, KvEncParser};
+use super::parser::KvEncParser;
 use crate::format::kv::HEADER_LINE_PREFIX;
 use crate::format::token::TokenCodec;
 use crate::format::FormatError;
-use crate::model::kv_enc::{KvHeader, KvWrap};
+use crate::model::kv_enc::header::{KvHeader, KvWrap};
+use crate::model::kv_enc::line::KvEncLine;
 use crate::Result;
 
 /// Build canonical bytes from kv-enc lines for signature verification

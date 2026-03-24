@@ -3,11 +3,10 @@
 
 //! Recipient public key verification.
 
+use super::public_key::verify_recipient_public_keys;
 use crate::io::keystore::public_key_source::PublicKeySource;
 use crate::model::public_key::VerifiedPublicKeyAttested;
 use crate::Result;
-
-pub use super::public_key::verify_recipient_public_keys;
 
 /// Load and verify recipient public keys in one step.
 pub fn load_and_verify_recipient_public_keys(

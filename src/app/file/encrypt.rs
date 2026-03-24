@@ -5,10 +5,10 @@ use std::path::Path;
 
 use crate::app::context::execution::ExecutionContext;
 use crate::app::context::options::CommonCommandOptions;
-use crate::feature::context::ssh::SshSigningContext;
+use crate::app::context::ssh::ResolvedSshSigner;
 use crate::feature::encrypt::encrypt_file_document;
 use crate::feature::envelope::signature::{build_signing_context, SigningContext};
-use crate::feature::verify::recipients::verify_recipient_public_keys;
+use crate::feature::verify::public_key::verify_recipient_public_keys;
 use crate::io::workspace::detection::WorkspaceRoot;
 use crate::io::workspace::members::{list_active_member_ids, load_member_files};
 use crate::support::fs::load_bytes;
@@ -27,7 +27,7 @@ impl EncryptFileSession {
         options: &CommonCommandOptions,
         member_id: Option<String>,
         input_path: &Path,
-        ssh_ctx: Option<SshSigningContext>,
+        ssh_ctx: Option<ResolvedSshSigner>,
     ) -> Result<Self> {
         let execution = ExecutionContext::resolve(options, member_id, None, ssh_ctx)?;
         let workspace_root = execution
@@ -69,7 +69,7 @@ pub fn encrypt_file_command(
     member_id: Option<String>,
     no_signer_pub: bool,
     input_path: &Path,
-    ssh_ctx: Option<SshSigningContext>,
+    ssh_ctx: Option<ResolvedSshSigner>,
 ) -> Result<String> {
     let session = EncryptFileSession::load(options, member_id, input_path, ssh_ctx)?;
     let verified_keys = session.verified_recipient_keys(options.verbose)?;

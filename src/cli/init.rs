@@ -11,7 +11,7 @@
 
 use clap::Args;
 
-use crate::app::registration::RegistrationMode;
+use crate::app::registration::types::RegistrationMode;
 use crate::cli::common::options::CommonOptions;
 use crate::cli::registration::execute_registration_command;
 use crate::Error;

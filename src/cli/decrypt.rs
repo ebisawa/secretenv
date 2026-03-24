@@ -57,5 +57,11 @@ pub fn run(args: DecryptArgs) -> Result<()> {
         ssh_ctx,
     )?;
 
-    save_decrypted_file(plaintext_bytes.as_ref(), out_path, args.common.quiet)
+    if let Some(message) =
+        save_decrypted_file(plaintext_bytes.as_ref(), out_path, args.common.quiet)?
+    {
+        eprintln!("{message}");
+    }
+
+    Ok(())
 }

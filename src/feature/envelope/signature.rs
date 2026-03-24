@@ -11,7 +11,7 @@ use crate::format::token::TokenCodec;
 use crate::io::keystore::signer::load_signer_public_key_if_needed;
 use crate::model::file_enc::FileEncDocumentProtected;
 use crate::model::identifiers::alg;
-use crate::model::kv_enc::KvEncDocument;
+use crate::model::kv_enc::document::KvEncDocument;
 use crate::model::public_key::PublicKey;
 use crate::model::signature::Signature;
 use crate::Result;

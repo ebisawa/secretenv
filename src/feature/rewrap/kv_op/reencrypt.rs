@@ -5,13 +5,13 @@
 
 use crate::feature::context::crypto::CryptoContext;
 use crate::feature::envelope::signature::build_signing_context;
-use crate::feature::kv::decrypt_all_kv_values;
-use crate::feature::kv::rewrite::encrypt_and_sign_kv_map;
+use crate::feature::kv::query::decrypt_all_kv_values;
+use crate::feature::kv::rewrite_session::encrypt_and_sign_kv_map;
 use crate::feature::rewrap::common::{add_to_removed_history, merge_removed_history};
 use crate::feature::verify::recipients::load_and_verify_recipient_public_keys;
 use crate::format::content::KvEncContent;
 use crate::format::kv::detect_token_codec_from_kv_content;
-use crate::format::kv::enc::parse_kv_wrap;
+use crate::format::kv::enc::canonical::parse_kv_wrap;
 use crate::format::token::TokenCodec;
 use crate::Result;
 use std::collections::HashMap;
@@ -100,8 +100,8 @@ pub fn decrypt_and_reencrypt_kv(
 
 /// Merge removed history from old wrap into new wrap, adding newly removed recipients.
 fn merge_removed_history_from_old(
-    new_wrap: &mut crate::model::kv_enc::KvWrap,
-    old_wrap: &crate::model::kv_enc::KvWrap,
+    new_wrap: &mut crate::model::kv_enc::header::KvWrap,
+    old_wrap: &crate::model::kv_enc::header::KvWrap,
     removed_recipients: &[String],
 ) -> Result<()> {
     for rid in removed_recipients {

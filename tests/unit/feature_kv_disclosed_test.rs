@@ -6,17 +6,18 @@
 use crate::cli_common::{ALICE_MEMBER_ID, BOB_MEMBER_ID};
 use crate::keygen_helpers::make_verified_members;
 use crate::test_utils::{setup_member_key_context, setup_test_keystore_from_fixtures};
-use secretenv::app::rewrap::{rewrap_kv_content_with_request, SingleRewrapRequest};
+use secretenv::app::rewrap::execution::rewrap_kv_content_with_request;
+use secretenv::app::rewrap::types::SingleRewrapRequest;
 use secretenv::feature::context::crypto::CryptoContext;
-use secretenv::feature::encrypt::SigningContext;
+use secretenv::feature::envelope::signature::SigningContext;
 use secretenv::feature::kv::encrypt::encrypt_kv_document;
-use secretenv::feature::kv::{set_kv_entry, KvWriteContext};
+use secretenv::feature::kv::mutate::{set_kv_entry, KvWriteContext};
 use secretenv::format::content::KvEncContent;
-use secretenv::format::kv::enc::parser::KvEncLine;
-use secretenv::format::kv::parse_kv_document;
+use secretenv::format::kv::document::parse_kv_document;
 use secretenv::format::token::TokenCodec;
 use secretenv::io::keystore::storage::{list_kids, load_public_key};
-use secretenv::model::kv_enc::KvEntryValue;
+use secretenv::model::kv_enc::entry::KvEntryValue;
+use secretenv::model::kv_enc::line::KvEncLine;
 use std::fs;
 use tempfile::TempDir;
 

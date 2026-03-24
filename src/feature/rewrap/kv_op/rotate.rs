@@ -5,9 +5,10 @@
 
 use crate::feature::context::crypto::CryptoContext;
 use crate::format::kv::detect_token_codec_from_kv_content;
-use crate::format::kv::enc::{extract_recipients_from_wrap, parse_kv_wrap, KvEncLine};
+use crate::format::kv::enc::canonical::{extract_recipients_from_wrap, parse_kv_wrap};
 use crate::format::token::TokenCodec;
-use crate::model::kv_enc::KvEntryValue;
+use crate::model::kv_enc::entry::KvEntryValue;
+use crate::model::kv_enc::line::KvEncLine;
 use crate::Result;
 
 use super::reencrypt::{decrypt_kv_content, encrypt_kv_with_recipients};

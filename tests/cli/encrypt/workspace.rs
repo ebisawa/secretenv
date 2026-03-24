@@ -11,7 +11,7 @@ use secretenv::cli::encrypt;
 use secretenv::cli::set;
 use secretenv::format::kv;
 use secretenv::format::token::TokenCodec;
-use secretenv::model::kv_enc::KvWrap;
+use secretenv::model::kv_enc::header::KvWrap;
 use std::fs;
 
 #[test]
