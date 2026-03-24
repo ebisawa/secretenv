@@ -108,7 +108,15 @@ fn test_verify_own_public_key_with_attested_keys() {
     let (plaintext, public_key) =
         keygen_test(member_id, &ssh_priv, &ssh_pub_content).expect("keygen should succeed");
 
-    let result = verify_own_public_key(&plaintext, &public_key);
+    let verified_private = secretenv::model::verified::VerifiedPrivateKey::new(
+        plaintext,
+        secretenv::model::verified::DecryptionProof {
+            member_id: member_id.to_string(),
+            kid: public_key.protected.kid.clone(),
+            ssh_fpr: None,
+        },
+    );
+    let result = verify_own_public_key(&verified_private, &public_key, false);
     assert!(
         result.is_ok(),
         "matching attested keys should verify: {:?}",
@@ -128,7 +136,15 @@ fn test_verify_own_public_key_different_keys_fails() {
         .expect("keygen b should succeed");
 
     // Verify plaintext_a against pub_b should fail (different key material)
-    let result = verify_own_public_key(&plaintext_a, &pub_b);
+    let verified_private = secretenv::model::verified::VerifiedPrivateKey::new(
+        plaintext_a,
+        secretenv::model::verified::DecryptionProof {
+            member_id: "user-a@example.com".to_string(),
+            kid: pub_b.protected.kid.clone(),
+            ssh_fpr: None,
+        },
+    );
+    let result = verify_own_public_key(&verified_private, &pub_b, false);
     assert!(result.is_err(), "mismatched keys should fail");
     let err = result.unwrap_err().to_string();
     assert!(
@@ -154,7 +170,7 @@ fn test_env_key_roundtrip_preserves_key_material_for_decryption() {
         load_private_key_from_env(false).expect("load from env should succeed");
 
     // Verify the loaded key matches the public key (simulates what CryptoContext does)
-    let result = verify_own_public_key(verified_key.document(), &public_key);
+    let result = verify_own_public_key(&verified_key, &public_key, false);
     assert!(
         result.is_ok(),
         "env-loaded key should match its own public key: {:?}",

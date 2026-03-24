@@ -11,44 +11,24 @@ use crate::support::base64url::b64_decode_array;
 use crate::{Error, Result};
 use ed25519_dalek::VerifyingKey;
 
-use super::public_key::verify_public_key_with_attestation;
+use super::public_key::{public_key_expiry_warning, verify_public_key_for_verification};
 
 /// Check if a PublicKey has expired. Returns a warning message if expired.
 /// Used for verification where expired keys are allowed but warned about.
+#[cfg_attr(not(test), allow(dead_code))]
 fn check_key_expiry_for_verification(doc: &PublicKey) -> Result<Option<String>> {
-    check_key_expiry_inner(doc)
+    public_key_expiry_warning(doc)
 }
 
 #[cfg(test)]
 fn check_key_expiry_for_signing(doc: &PublicKey) -> Result<()> {
-    if let Some(expired_msg) = check_key_expiry_inner(doc)? {
+    if let Some(expired_msg) = check_key_expiry_for_verification(doc)? {
         return Err(Error::Crypto {
             message: expired_msg,
             source: None,
         });
     }
     Ok(())
-}
-
-/// Inner expiry check returning an optional warning message if the key is expired.
-fn check_key_expiry_inner(doc: &PublicKey) -> Result<Option<String>> {
-    if !doc.protected.expires_at.is_empty() {
-        let expires_at = time::OffsetDateTime::parse(
-            &doc.protected.expires_at,
-            &time::format_description::well_known::Rfc3339,
-        )
-        .map_err(|e| Error::Crypto {
-            message: format!("Invalid expires_at format in PublicKey: {}", e),
-            source: Some(Box::new(e)),
-        })?;
-        if expires_at < time::OffsetDateTime::now_utc() {
-            return Ok(Some(format!(
-                "PublicKey has expired (expires_at: {})",
-                doc.protected.expires_at
-            )));
-        }
-    }
-    Ok(None)
 }
 
 /// Find PublicKey by kid, searching workspace active members.
@@ -158,7 +138,7 @@ fn build_loaded_verifying_key(
     debug: bool,
 ) -> Result<LoadedVerifyingKey> {
     let verified =
-        verify_public_key_with_attestation(public_key, debug).map_err(|e| Error::Crypto {
+        verify_public_key_for_verification(public_key, debug).map_err(|e| Error::Crypto {
             message: format!(
                 "PublicKey document verification failed ({}): {}",
                 source_label, e
@@ -166,7 +146,7 @@ fn build_loaded_verifying_key(
             source: Some(Box::new(e)),
         })?;
 
-    let doc = verified.document();
+    let doc = verified.verified_public_key.document();
     if expected_kid != doc.protected.kid {
         return Err(Error::Crypto {
             message: format!(
@@ -177,16 +157,11 @@ fn build_loaded_verifying_key(
         });
     }
 
-    let mut warnings = Vec::new();
-    if let Some(warning) = check_key_expiry_for_verification(doc)? {
-        warnings.push(warning);
-    }
-
     Ok(LoadedVerifyingKey {
         verifying_key: extract_verifying_key(doc)?,
         member_id: doc.protected.member_id.clone(),
         source,
-        warnings,
+        warnings: verified.warnings,
         public_key: public_key.clone(),
     })
 }

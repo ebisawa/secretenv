@@ -11,8 +11,11 @@ use secretenv::model::private_key::{
     EncryptedData, IdentityKeysPrivate, JwkOkpPrivateKey, PrivateKey, PrivateKeyAlgorithm,
     PrivateKeyPlaintext, PrivateKeyProtected,
 };
+use secretenv::model::public_key::PublicKey;
+use secretenv::model::verified::{DecryptionProof, VerifiedPrivateKey};
+use tempfile::TempDir;
 
-use crate::test_utils::EnvGuard;
+use crate::test_utils::{create_temp_ssh_keypair_in_dir, keygen_test, EnvGuard};
 
 const ENV_PRIVATE_KEY: &str = "SECRETENV_PRIVATE_KEY";
 const ENV_KEY_PASSWORD: &str = "SECRETENV_KEY_PASSWORD";
@@ -57,6 +60,52 @@ fn build_exported_key(plaintext: &PrivateKeyPlaintext, password: &str) -> String
         false,
     )
     .expect("export should succeed")
+}
+
+fn build_verified_private_key(
+    plaintext: PrivateKeyPlaintext,
+    member_id: &str,
+    kid: &str,
+) -> VerifiedPrivateKey {
+    VerifiedPrivateKey::new(
+        plaintext,
+        DecryptionProof {
+            member_id: member_id.to_string(),
+            kid: kid.to_string(),
+            ssh_fpr: None,
+        },
+    )
+}
+
+fn generate_attested_pair(member_id: &str) -> (VerifiedPrivateKey, PublicKey) {
+    let temp_dir = TempDir::new().unwrap();
+    let (ssh_priv, _ssh_pub, ssh_pub_content) = create_temp_ssh_keypair_in_dir(&temp_dir);
+    let (plaintext, public_key) = keygen_test(member_id, &ssh_priv, &ssh_pub_content).unwrap();
+    let verified_private =
+        build_verified_private_key(plaintext, member_id, &public_key.protected.kid);
+    (verified_private, public_key)
+}
+
+fn resign_public_key(public_key: &mut PublicKey, private_key: &VerifiedPrivateKey) {
+    let sig_key_bytes = URL_SAFE_NO_PAD
+        .decode(&private_key.document().keys.sig.d)
+        .expect("decode signing key");
+    let signing_key = ed25519_dalek::SigningKey::from_bytes(
+        sig_key_bytes
+            .as_slice()
+            .try_into()
+            .expect("32-byte signing key"),
+    );
+    let protected_jcs = secretenv::format::jcs::normalize(&public_key.protected).expect("jcs");
+    let signature = secretenv::crypto::sign::sign_bytes(
+        &protected_jcs,
+        &signing_key,
+        &public_key.protected.kid,
+        None,
+        secretenv::model::identifiers::alg::SIGNATURE_ED25519,
+    )
+    .expect("re-sign public key");
+    public_key.signature = signature.sig;
 }
 
 fn assert_env_key_vars_cleared() {
@@ -137,99 +186,31 @@ fn test_env_key_invalid_base64_error() {
 #[test]
 fn test_verify_own_public_key_match() {
     use secretenv::feature::context::env_key::verify_own_public_key;
-    use secretenv::model::public_key::{
-        Attestation, Identity, IdentityKeys, JwkOkpPublicKey, PublicKey, PublicKeyProtected,
-    };
-
-    let plaintext = build_test_plaintext();
-
-    // Build a PublicKey with matching public components
-    let public_key = PublicKey {
-        protected: PublicKeyProtected {
-            format: "secretenv.public.key@3".to_string(),
-            member_id: "alice@example.com".to_string(),
-            kid: "01HN8Z3Q4R5S6T7V8W9X0Y1Z2A".to_string(),
-            identity: Identity {
-                keys: IdentityKeys {
-                    sig: JwkOkpPublicKey {
-                        kty: "OKP".to_string(),
-                        crv: "Ed25519".to_string(),
-                        x: plaintext.keys.sig.x.clone(),
-                    },
-                    kem: JwkOkpPublicKey {
-                        kty: "OKP".to_string(),
-                        crv: "X25519".to_string(),
-                        x: plaintext.keys.kem.x.clone(),
-                    },
-                },
-                attestation: Attestation {
-                    method: "ssh".to_string(),
-                    pub_: "ssh-ed25519 AAAA test".to_string(),
-                    sig: "dummy".to_string(),
-                },
-            },
-            binding_claims: None,
-            expires_at: "2027-01-01T00:00:00Z".to_string(),
-            created_at: Some("2026-01-01T00:00:00Z".to_string()),
-        },
-        signature: "dummy".to_string(),
-    };
-
-    // Should succeed (only checks key component matching, not signature)
-    let result = verify_own_public_key(&plaintext, &public_key);
+    let (verified_private, public_key) = generate_attested_pair("alice@example.com");
+    let result = verify_own_public_key(&verified_private, &public_key, false);
     assert!(result.is_ok(), "matching keys should verify: {:?}", result);
+    assert!(result.unwrap().warnings.is_empty());
 }
 
 #[test]
-fn test_verify_own_public_key_mismatch_fails() {
+fn test_verify_own_public_key_sig_mismatch_fails() {
     use secretenv::feature::context::env_key::verify_own_public_key;
-    use secretenv::model::public_key::{
-        Attestation, Identity, IdentityKeys, JwkOkpPublicKey, PublicKey, PublicKeyProtected,
-    };
+    let (verified_private, public_key) = generate_attested_pair("alice@example.com");
+    let (other_private, _) = generate_attested_pair("alice@example.com");
+    let mut mismatched_plaintext = verified_private.document().clone();
+    mismatched_plaintext.keys.sig = other_private.document().keys.sig.clone();
+    let mismatched_private = build_verified_private_key(
+        mismatched_plaintext,
+        &verified_private.proof().member_id,
+        &verified_private.proof().kid,
+    );
 
-    let plaintext = build_test_plaintext();
-
-    // Build a PublicKey with DIFFERENT sig public key
-    let other_sig_sk = SigningKey::generate(&mut OsRng);
-    let other_sig_pk = ed25519_dalek::VerifyingKey::from(&other_sig_sk);
-
-    let public_key = PublicKey {
-        protected: PublicKeyProtected {
-            format: "secretenv.public.key@3".to_string(),
-            member_id: "alice@example.com".to_string(),
-            kid: "01HN8Z3Q4R5S6T7V8W9X0Y1Z2A".to_string(),
-            identity: Identity {
-                keys: IdentityKeys {
-                    sig: JwkOkpPublicKey {
-                        kty: "OKP".to_string(),
-                        crv: "Ed25519".to_string(),
-                        x: b64(&other_sig_pk.to_bytes()),
-                    },
-                    kem: JwkOkpPublicKey {
-                        kty: "OKP".to_string(),
-                        crv: "X25519".to_string(),
-                        x: plaintext.keys.kem.x.clone(),
-                    },
-                },
-                attestation: Attestation {
-                    method: "ssh".to_string(),
-                    pub_: "ssh-ed25519 AAAA test".to_string(),
-                    sig: "dummy".to_string(),
-                },
-            },
-            binding_claims: None,
-            expires_at: "2027-01-01T00:00:00Z".to_string(),
-            created_at: Some("2026-01-01T00:00:00Z".to_string()),
-        },
-        signature: "dummy".to_string(),
-    };
-
-    let result = verify_own_public_key(&plaintext, &public_key);
+    let result = verify_own_public_key(&mismatched_private, &public_key, false);
     assert!(result.is_err(), "mismatched keys should fail");
     let err = result.unwrap_err().to_string();
     assert!(
-        err.contains("mismatch") || err.contains("Mismatch"),
-        "error should mention mismatch: {}",
+        err.contains("Signing key mismatch"),
+        "error should mention signing key mismatch: {}",
         err
     );
 }
@@ -333,53 +314,53 @@ fn test_env_key_rejects_sshsig_algorithm() {
 #[test]
 fn test_verify_own_public_key_kem_mismatch_fails() {
     use secretenv::feature::context::env_key::verify_own_public_key;
-    use secretenv::model::public_key::{
-        Attestation, Identity, IdentityKeys, JwkOkpPublicKey, PublicKey, PublicKeyProtected,
-    };
+    let (verified_private, public_key) = generate_attested_pair("alice@example.com");
+    let (other_private, _) = generate_attested_pair("alice@example.com");
+    let mut mismatched_plaintext = verified_private.document().clone();
+    mismatched_plaintext.keys.kem = other_private.document().keys.kem.clone();
+    let mismatched_private = build_verified_private_key(
+        mismatched_plaintext,
+        &verified_private.proof().member_id,
+        &verified_private.proof().kid,
+    );
 
-    let plaintext = build_test_plaintext();
-
-    // Build a PublicKey with matching sig but DIFFERENT kem
-    let other_kem_sk = x25519_dalek::StaticSecret::random_from_rng(OsRng);
-    let other_kem_pk = x25519_dalek::PublicKey::from(&other_kem_sk);
-
-    let public_key = PublicKey {
-        protected: PublicKeyProtected {
-            format: "secretenv.public.key@3".to_string(),
-            member_id: "alice@example.com".to_string(),
-            kid: "01HN8Z3Q4R5S6T7V8W9X0Y1Z2A".to_string(),
-            identity: Identity {
-                keys: IdentityKeys {
-                    sig: JwkOkpPublicKey {
-                        kty: "OKP".to_string(),
-                        crv: "Ed25519".to_string(),
-                        x: plaintext.keys.sig.x.clone(),
-                    },
-                    kem: JwkOkpPublicKey {
-                        kty: "OKP".to_string(),
-                        crv: "X25519".to_string(),
-                        x: b64(other_kem_pk.as_bytes()),
-                    },
-                },
-                attestation: Attestation {
-                    method: "ssh".to_string(),
-                    pub_: "ssh-ed25519 AAAA test".to_string(),
-                    sig: "dummy".to_string(),
-                },
-            },
-            binding_claims: None,
-            expires_at: "2027-01-01T00:00:00Z".to_string(),
-            created_at: Some("2026-01-01T00:00:00Z".to_string()),
-        },
-        signature: "dummy".to_string(),
-    };
-
-    let result = verify_own_public_key(&plaintext, &public_key);
+    let result = verify_own_public_key(&mismatched_private, &public_key, false);
     assert!(result.is_err(), "KEM mismatch should fail");
     let err = result.unwrap_err().to_string();
     assert!(
         err.contains("KEM") && err.contains("mismatch"),
         "error should mention KEM mismatch: {}",
+        err
+    );
+}
+
+#[test]
+fn test_verify_own_public_key_expired_returns_warning() {
+    use secretenv::feature::context::env_key::verify_own_public_key;
+
+    let (verified_private, mut public_key) = generate_attested_pair("alice@example.com");
+    public_key.protected.expires_at = "2020-01-01T00:00:00Z".to_string();
+    resign_public_key(&mut public_key, &verified_private);
+
+    let result = verify_own_public_key(&verified_private, &public_key, false)
+        .expect("expired verified key should still succeed");
+    assert_eq!(result.warnings.len(), 1);
+    assert!(result.warnings[0].contains("expired"));
+}
+
+#[test]
+fn test_verify_own_public_key_rejects_tampered_public_key_document() {
+    use secretenv::feature::context::env_key::verify_own_public_key;
+
+    let (verified_private, mut public_key) = generate_attested_pair("alice@example.com");
+    public_key.signature = "AAAA".to_string();
+
+    let result = verify_own_public_key(&verified_private, &public_key, false);
+    assert!(result.is_err(), "tampered self-signature should fail");
+    let err = result.unwrap_err().to_string();
+    assert!(
+        err.contains("self-signature") || err.contains("signature"),
+        "error should mention self-signature failure: {}",
         err
     );
 }

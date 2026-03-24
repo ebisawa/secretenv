@@ -921,12 +921,12 @@ HKDF info 文字列（`secretenv:password-private-key-enc@3:{kid}`）は SSH ベ
 workspace から署名者自身の公開鍵を検証する手順:
 
 1. `members/active/<member_id>.json` を検索する（`member_id` は環境変数鍵の `protected.member_id` から取得）
-2. `identity.keys.sig.x` が復号された秘密鍵平文の Ed25519 公開鍵と一致することを確認する
-3. `identity.keys.kem.x` が復号された秘密鍵平文の X25519 公開鍵と一致することを確認する（AAD 束縛された認証暗号化で保護されているため信頼できる）
-4. PublicKey 文書の自己署名を Ed25519 公開鍵で検証する
-5. 標準の attestation 検証も適用される
+2. 通常の PublicKey 検証と同じ手順で、その文書の自己署名を検証する
+3. 通常の PublicKey 検証と同じ手順で、標準の attestation 検証を適用する
+4. 検証済み PublicKey の `protected.member_id` と `protected.kid` が、env モードで復号された秘密鍵の `member_id` / `kid` と一致することを確認する
+5. 検証済み PublicKey の `identity.keys.sig.x` と `identity.keys.kem.x` が、復号された秘密鍵平文の対応する公開鍵成分と一致することを確認する
 
-これにより、ローカルキーストア経由の場合と同等の鍵対応検証が提供される。秘密鍵の真正性は認証復号の成功により確立され、公開鍵の対応はコンポーネント照合により検証されるためである。
+これにより、env モードでも通常の公開鍵検証と同じ cryptographic verification を用いたうえで、秘密鍵との対応関係を確認する。tampered または unverifiable な member file は load 時点で reject される。一方、期限切れ PublicKey は通常の検証経路と同様に warning 扱いであり、checkout 自体の trust を与えるものではない。
 
 ただし、workspace の `members/active/` 自体は trust boundary 外である。この検証は checkout を trusted input に変えるものではない。したがって、env モードで `SECRETENV_PRIVATE_KEY` を使用してよいのは、以下をすべて満たす trusted CI context に限られる:
 

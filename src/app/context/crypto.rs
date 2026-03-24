@@ -3,7 +3,7 @@
 
 use std::path::PathBuf;
 
-use tracing::debug;
+use tracing::{debug, warn};
 
 use crate::feature::context::crypto::{
     build_signing_key, validate_and_wrap_private_key_ssh, CryptoContext,
@@ -97,7 +97,11 @@ pub fn load_crypto_context_from_env(
 
     let pub_key_source = WorkspacePublicKeySource::new(workspace_path.clone());
     let own_public_key = pub_key_source.load_public_key(&member_id)?;
-    env_key::verify_own_public_key(private_key.document(), &own_public_key)?;
+    let verification =
+        env_key::verify_own_public_key(&private_key, &own_public_key, debug_enabled)?;
+    for warning in verification.warnings {
+        warn!("[CRYPTO] env own PublicKey warning: {}", warning);
+    }
     let signing_key = build_signing_key(private_key.document())?;
 
     Ok(CryptoContext {

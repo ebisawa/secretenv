@@ -921,12 +921,12 @@ In environment variable mode, the local keystore is not available. Public keys (
 To verify the signer's own public key from the workspace:
 
 1. Look up `members/active/<member_id>.json` (where `member_id` is from the environment variable key's `protected.member_id`)
-2. Verify `identity.keys.sig.x` matches the Ed25519 public key from the decrypted private key plaintext
-3. Verify `identity.keys.kem.x` matches the X25519 public key from the decrypted private key plaintext (trustworthy because it is protected by AAD-bound authenticated encryption)
-4. Verify the PublicKey document's self-signature using the Ed25519 public key
-5. Standard attestation verification also applies
+2. Verify the document's self-signature using the same PublicKey verification path used elsewhere
+3. Apply the standard attestation verification using the same PublicKey verification path used elsewhere
+4. Confirm the verified PublicKey's `protected.member_id` and `protected.kid` match the `member_id` / `kid` of the env-loaded private key
+5. Confirm the verified PublicKey's `identity.keys.sig.x` and `identity.keys.kem.x` match the corresponding public components from the decrypted private key plaintext
 
-This provides equivalent key-correspondence verification to the local keystore path, since the private key's authenticity is established by successful authenticated decryption, and the public key's correspondence is verified by component matching.
+This means env mode uses the same cryptographic PublicKey verification as ordinary verification paths before checking correspondence with the private key. Tampered or otherwise unverifiable member files are rejected at load time. Expired PublicKeys remain warnings, consistent with ordinary verification, and this process does not make the checkout itself trusted.
 
 However, the workspace `members/active/` directory itself remains outside the trust boundary. This verification does not turn an attacker-controlled checkout into trusted input. Therefore env mode may be used only in a trusted CI context that satisfies all of the following:
 
