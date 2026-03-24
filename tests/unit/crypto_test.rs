@@ -143,6 +143,74 @@ fn test_hpke_empty_plaintext() {
     assert!(decrypted.as_bytes().is_empty());
 }
 
+#[test]
+fn test_plaintext_debug_redacts_contents() {
+    use secretenv::crypto::types::data::Plaintext;
+
+    let plaintext = Plaintext::from(b"super-secret-token" as &[u8]);
+    let debug = format!("{:?}", plaintext);
+
+    assert!(
+        !debug.contains("super-secret-token"),
+        "plaintext debug output must not expose plaintext"
+    );
+    assert!(
+        !debug.contains("115"),
+        "plaintext debug output must not expose raw byte values"
+    );
+    assert!(
+        debug.contains("REDACTED"),
+        "plaintext debug output should indicate redaction"
+    );
+    assert!(
+        debug.contains("18"),
+        "plaintext debug output should keep length for diagnostics"
+    );
+}
+
+#[test]
+fn test_hpke_open_error_message_sanitized() {
+    use secretenv::crypto::kem::{open_base, seal_base};
+    use secretenv::crypto::types::data::{Aad, Ciphertext, Enc, Info, Plaintext};
+
+    let member_seed = [42u8; 32];
+    let (sk, pk) = generate_x25519_keypair(member_seed);
+
+    let info1 = Info::from(b"correct-info" as &[u8]);
+    let info2 = Info::from(b"wrong-info" as &[u8]);
+    let aad = Aad::from(b"test-aad" as &[u8]);
+    let plaintext = Plaintext::from(b"secret" as &[u8]);
+
+    let (enc, ciphertext) = seal_base(&pk, &info1, &aad, &plaintext).unwrap();
+    let enc_obj = Enc::from(enc.into_bytes());
+    let ct_obj = Ciphertext::from(ciphertext.into_bytes());
+
+    let err = open_base(&sk, &enc_obj, &info2, &aad, &ct_obj).unwrap_err();
+    assert_eq!(
+        err.to_string(),
+        "Cryptographic error: Operation failed: HPKE open failed (wrong key/info/AAD or tampered data)"
+    );
+}
+
+#[test]
+fn test_hpke_invalid_enc_error_message_sanitized() {
+    use secretenv::crypto::kem::{open_base, X25519PublicKey};
+    use secretenv::crypto::types::data::{Aad, Ciphertext, Enc, Info};
+
+    let (sk, _) = generate_x25519_keypair([7u8; 32]);
+    let _unused_pk = X25519PublicKey::from_bytes([9u8; 32]);
+    let enc = Enc::from(vec![0u8; 31]);
+    let info = Info::from(b"test-info" as &[u8]);
+    let aad = Aad::from(b"test-aad" as &[u8]);
+    let ciphertext = Ciphertext::from(vec![0u8; 16]);
+
+    let err = open_base(&sk, &enc, &info, &aad, &ciphertext).unwrap_err();
+    assert_eq!(
+        err.to_string(),
+        "Cryptographic error: Operation failed: Invalid encapsulated key"
+    );
+}
+
 // Ed25519 signature tests
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

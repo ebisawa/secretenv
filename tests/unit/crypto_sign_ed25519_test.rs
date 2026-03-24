@@ -92,10 +92,10 @@ fn test_verify_bytes_rejects_tampered_bytes() {
 
     let result = verify_bytes(tampered, &vk, &sig, SIGNATURE_ED25519);
     assert!(result.is_err());
-    assert!(result
-        .unwrap_err()
-        .to_string()
-        .contains("Signature verification failed"));
+    assert_eq!(
+        result.unwrap_err().to_string(),
+        "Cryptographic error: Operation failed: Signature verification failed"
+    );
 }
 
 #[test]
@@ -187,10 +187,32 @@ fn test_verify_kv_rejects_tampered_content() {
     let result = verify_bytes(tampered, &vk, &sig, SIGNATURE_ED25519);
 
     assert!(result.is_err());
-    assert!(result
-        .unwrap_err()
-        .to_string()
-        .contains("Signature verification failed"));
+    assert_eq!(
+        result.unwrap_err().to_string(),
+        "Cryptographic error: Operation failed: Signature verification failed"
+    );
+}
+
+#[test]
+fn test_verify_bytes_invalid_base64_error_message_sanitized() {
+    let seed = [42u8; 32];
+    let sk = SigningKey::from_bytes(&seed);
+    let vk = sk.verifying_key();
+
+    let bad_sig = Signature {
+        alg: SIGNATURE_ED25519.to_string(),
+        kid: "01HY0G8N3P5X7QRSTV0WXYZ123".to_string(),
+        signer_pub: None,
+        sig: "*not-base64*".to_string(),
+    };
+
+    let result = verify_bytes(b"test canonical bytes", &vk, &bad_sig, SIGNATURE_ED25519);
+
+    assert!(result.is_err());
+    assert_eq!(
+        result.unwrap_err().to_string(),
+        "Cryptographic error: Operation failed: Invalid signature Base64"
+    );
 }
 
 #[test]

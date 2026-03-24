@@ -9,6 +9,11 @@ pub mod error;
 
 pub use error::CryptoError;
 
+/// Creates a cryptographic operation error without exposing inner details
+pub fn crypto_operation_failed(message: impl Into<String>) -> crate::Error {
+    CryptoError::operation_failed(message).into()
+}
+
 /// Creates a cryptographic error with a formatted message
 ///
 /// # Arguments
