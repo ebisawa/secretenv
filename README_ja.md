@@ -1,5 +1,7 @@
 # secretenv
 
+[English README](README.md)
+
 `.env` を Slack や DM で送るのをやめたい。  
 でも、専用サーバーや常時接続の秘密情報管理サービスを前提にしたくない。
 
@@ -38,6 +40,47 @@ git clone <secretenv-repo>
 cd secretenv
 cargo install --path .
 ```
+
+## Getting Started
+
+### 1. ワークスペースの初期化
+
+```bash
+cd /path/to/your-git-repo
+secretenv init --member-id alice@example.com
+```
+
+`.secretenv/` ディレクトリが作成され、鍵ペアの生成と最初のメンバー登録が行われます。
+
+### 2. シークレットの追加
+
+```bash
+# 個別に追加
+secretenv set DATABASE_URL "postgres://user:pass@localhost/mydb"
+secretenv set API_KEY "sk-your-api-key"
+
+# 既存の .env ファイルを一括インポート
+secretenv import .env
+```
+
+### 3. Git にコミット
+
+```bash
+git add .secretenv/
+git commit -m "Initialize secretenv workspace"
+```
+
+### 4. シークレットを使う
+
+```bash
+# 値を個別に取得
+secretenv get DATABASE_URL
+
+# すべてのシークレットを環境変数として注入してコマンドを実行
+secretenv run -- ./my-app
+```
+
+詳しい導入・運用手順は [User Guide](guides/user_guide_ja.md) を参照してください。
 
 ## Read More
 
