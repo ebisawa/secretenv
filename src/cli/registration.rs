@@ -1,7 +1,7 @@
 // Copyright 2026 Satoshi Ebisawa
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::app::context::CommonCommandOptions;
+use crate::app::context::options::CommonCommandOptions;
 use crate::app::registration::{
     apply_registration, build_init_registration, build_join_registration,
     build_registration_outcome, resolve_registration_key_plan, MemberKeySetupResult, MemberStatus,
@@ -51,7 +51,7 @@ pub(crate) fn execute_registration_command(
         }
     };
     let outcome = resolve_registration_outcome(&prepared, force)?;
-    print_registration_outcome(&outcome);
+    print_registration_outcome(&outcome)?;
     Ok(())
 }
 
@@ -98,10 +98,10 @@ fn resolve_registration_outcome(
     }
 }
 
-fn print_registration_outcome(outcome: &RegistrationOutcome) {
+fn print_registration_outcome(outcome: &RegistrationOutcome) -> Result<(), Error> {
     match outcome.result {
         RegistrationResult::NewMember | RegistrationResult::Updated => {
-            print_key_info(&outcome.member_id, &outcome.key_result);
+            print_key_info(&outcome.member_id, &outcome.key_result)?;
             if outcome.is_new_workspace {
                 print_new_workspace_created(&outcome.workspace_path);
             }
@@ -142,6 +142,7 @@ fn print_registration_outcome(outcome: &RegistrationOutcome) {
             );
         }
     }
+    Ok(())
 }
 
 fn print_new_workspace_created(workspace_path: &Path) {
@@ -154,10 +155,9 @@ fn print_new_workspace_created(workspace_path: &Path) {
     eprintln!("  Created secrets/");
 }
 
-fn print_key_info(member_id: &str, key_result: &MemberKeySetupResult) {
+fn print_key_info(member_id: &str, key_result: &MemberKeySetupResult) -> Result<(), Error> {
     if key_result.created {
-        print_generated_key_binding_info(key_result)
-            .expect("registration key generation binding info should be valid");
+        print_generated_key_binding_info(key_result)?;
         eprintln!();
         eprintln!("Generated key for '{}':", member_id);
         eprintln!("  Key ID:  {}", key_result.kid);
@@ -171,17 +171,26 @@ fn print_key_info(member_id: &str, key_result: &MemberKeySetupResult) {
             member_id, key_result.kid
         );
     }
+    Ok(())
 }
 
 fn print_generated_key_binding_info(key_result: &MemberKeySetupResult) -> Result<(), Error> {
-    let ssh_fingerprint = key_result
-        .ssh_fingerprint
-        .as_deref()
-        .expect("created registration key must include SSH fingerprint");
-    let ssh_determinism = key_result
-        .ssh_determinism
-        .as_ref()
-        .expect("created registration key must include SSH determinism");
+    let ssh_fingerprint =
+        key_result
+            .ssh_fingerprint
+            .as_deref()
+            .ok_or_else(|| Error::InvalidOperation {
+                message: "Registration output requires an SSH fingerprint for generated keys"
+                    .to_string(),
+            })?;
+    let ssh_determinism =
+        key_result
+            .ssh_determinism
+            .as_ref()
+            .ok_or_else(|| Error::InvalidOperation {
+                message: "Registration output requires SSH determinism for generated keys"
+                    .to_string(),
+            })?;
 
     print_key_generation_binding_info(
         ssh_fingerprint,

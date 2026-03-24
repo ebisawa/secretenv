@@ -9,10 +9,9 @@ use crate::cli_common::ALICE_MEMBER_ID;
 use crate::keygen_helpers::make_verified_members;
 use crate::test_utils::{setup_member_key_context, setup_test_keystore_from_fixtures};
 use base64::Engine;
+use secretenv::app::rewrap::{rewrap_file_content_with_request, SingleRewrapRequest};
 use secretenv::feature::encrypt::file::encrypt_file_document;
 use secretenv::feature::encrypt::SigningContext;
-use secretenv::feature::rewrap::file::rewrap_file_document;
-use secretenv::feature::rewrap::RewrapOptions;
 use secretenv::format::content::FileEncContent;
 use secretenv::io::keystore::storage::{list_kids, load_public_key};
 use std::fs;
@@ -36,12 +35,17 @@ fn setup_workspace_members(temp_dir: &TempDir, member_id: &str, kid: &str) {
     .unwrap();
 }
 
-/// Build RewrapOptions with no special operations (pure sync behavior).
-fn rewrap_options_default(debug: bool) -> RewrapOptions {
-    RewrapOptions {
+fn single_rewrap_request<'a>(
+    key_ctx: &'a secretenv::feature::context::crypto::CryptoContext,
+    workspace_root: Option<&'a std::path::Path>,
+    debug: bool,
+) -> SingleRewrapRequest<'a> {
+    SingleRewrapRequest {
+        member_id: ALICE_MEMBER_ID,
+        key_ctx,
+        workspace_root,
         rotate_key: false,
         clear_disclosure_history: false,
-        token_codec: None,
         no_signer_pub: false,
         debug,
     }
@@ -80,14 +84,8 @@ fn test_rewrap_file_flow_rejects_invalid_signature() {
         base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(b"tampered_signature");
     let json = serde_json::to_string_pretty(&file_enc_doc_tampered).unwrap();
 
-    let options = rewrap_options_default(false);
-    let result = rewrap_file_document(
-        &options,
-        &FileEncContent::new_unchecked(json),
-        ALICE_MEMBER_ID,
-        &key_ctx,
-        Some(temp_dir.path()),
-    );
+    let request = single_rewrap_request(&key_ctx, Some(temp_dir.path()), false);
+    let result = rewrap_file_content_with_request(&FileEncContent::new_unchecked(json), &request);
 
     assert!(
         result.is_err(),
@@ -124,14 +122,8 @@ fn test_rewrap_file_flow_succeeds_with_valid_signature() {
     .unwrap();
 
     let json = serde_json::to_string_pretty(&file_enc_doc).unwrap();
-    let options = rewrap_options_default(false);
-    let result = rewrap_file_document(
-        &options,
-        &FileEncContent::new_unchecked(json),
-        ALICE_MEMBER_ID,
-        &key_ctx,
-        Some(temp_dir.path()),
-    );
+    let request = single_rewrap_request(&key_ctx, Some(temp_dir.path()), false);
+    let result = rewrap_file_content_with_request(&FileEncContent::new_unchecked(json), &request);
 
     assert!(
         result.is_ok(),

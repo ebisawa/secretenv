@@ -5,8 +5,9 @@
 
 use serde::Serialize;
 
-use crate::app::context::CommonCommandOptions;
-use crate::app::key::{list_keys_command, KeyInfo, KeyListResult};
+use crate::app::context::options::CommonCommandOptions;
+use crate::app::key::manage::list_keys_command;
+use crate::app::key::types::{KeyInfo, KeyListResult};
 use crate::cli::common::output::json::print_json_output;
 use crate::Result;
 

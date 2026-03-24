@@ -6,11 +6,11 @@
 use clap::Args;
 use std::path::PathBuf;
 
-use crate::app::context::CommonCommandOptions;
-use crate::app::file::{decrypt_file_command, validate_decrypt_input};
+use crate::app::context::options::CommonCommandOptions;
+use crate::app::file::decrypt::{decrypt_file_command, validate_decrypt_input};
+use crate::app::file::output::save_decrypted_file;
 use crate::cli::common::options::CommonOptions;
 use crate::cli::common::ssh::resolve_ssh_context_optional;
-use crate::cli::file_output;
 use crate::{Error, Result};
 
 #[derive(Args)]
@@ -57,5 +57,5 @@ pub fn run(args: DecryptArgs) -> Result<()> {
         ssh_ctx,
     )?;
 
-    file_output::save_decrypted_file(plaintext_bytes.as_ref(), out_path, args.common.quiet)
+    save_decrypted_file(plaintext_bytes.as_ref(), out_path, args.common.quiet)
 }

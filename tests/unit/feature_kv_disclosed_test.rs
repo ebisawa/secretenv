@@ -6,12 +6,11 @@
 use crate::cli_common::{ALICE_MEMBER_ID, BOB_MEMBER_ID};
 use crate::keygen_helpers::make_verified_members;
 use crate::test_utils::{setup_member_key_context, setup_test_keystore_from_fixtures};
+use secretenv::app::rewrap::{rewrap_kv_content_with_request, SingleRewrapRequest};
 use secretenv::feature::context::crypto::CryptoContext;
 use secretenv::feature::encrypt::SigningContext;
 use secretenv::feature::kv::encrypt::encrypt_kv_document;
 use secretenv::feature::kv::{set_kv_entry, KvWriteContext};
-use secretenv::feature::rewrap::kv::rewrap_kv_document;
-use secretenv::feature::rewrap::RewrapOptions;
 use secretenv::format::content::KvEncContent;
 use secretenv::format::kv::enc::parser::KvEncLine;
 use secretenv::format::kv::parse_kv_document;
@@ -118,6 +117,21 @@ fn encrypt_two_member_document(
     .unwrap()
 }
 
+fn single_rewrap_request<'a>(
+    key_ctx: &'a CryptoContext,
+    workspace_root: Option<&'a std::path::Path>,
+) -> SingleRewrapRequest<'a> {
+    SingleRewrapRequest {
+        member_id: ALICE_MEMBER_ID,
+        key_ctx,
+        workspace_root,
+        rotate_key: false,
+        clear_disclosure_history: false,
+        no_signer_pub: false,
+        debug: false,
+    }
+}
+
 fn remove_bob_recipient(
     temp_dir: &TempDir,
     encrypted: String,
@@ -125,24 +139,10 @@ fn remove_bob_recipient(
     kid: &str,
 ) -> String {
     setup_workspace_members(temp_dir, ALICE_MEMBER_ID, kid);
-
-    let options = RewrapOptions {
-        rotate_key: false,
-        clear_disclosure_history: false,
-        token_codec: None,
-        no_signer_pub: false,
-        debug: false,
-    };
+    let request = single_rewrap_request(key_ctx, Some(temp_dir.path()));
     let encrypted = KvEncContent::new_unchecked(encrypted);
 
-    rewrap_kv_document(
-        &options,
-        &encrypted,
-        ALICE_MEMBER_ID,
-        key_ctx,
-        Some(temp_dir.path()),
-    )
-    .unwrap()
+    rewrap_kv_content_with_request(&encrypted, &request).unwrap()
 }
 
 #[test]

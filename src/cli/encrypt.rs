@@ -9,11 +9,11 @@
 use clap::Args;
 use std::path::PathBuf;
 
-use crate::app::context::CommonCommandOptions;
-use crate::app::file::{encrypt_file_command, resolve_encrypted_output_path};
+use crate::app::context::options::CommonCommandOptions;
+use crate::app::file::encrypt::encrypt_file_command;
+use crate::app::file::output::{resolve_encrypted_output_path, save_encrypted_output};
 use crate::cli::common::options::CommonOptions;
 use crate::cli::common::ssh::resolve_ssh_context_optional;
-use crate::cli::file_output;
 use crate::Result;
 
 #[derive(Args)]
@@ -50,7 +50,7 @@ pub fn run(args: EncryptArgs) -> Result<()> {
     )?;
     let output_path = resolve_encrypted_output_path(args.out.as_ref(), &args.input)?;
 
-    file_output::save_encrypted_output(output_path.as_ref(), &encrypted, args.common.quiet)?;
+    save_encrypted_output(output_path.as_ref(), &encrypted, args.common.quiet)?;
 
     Ok(())
 }

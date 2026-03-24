@@ -1,7 +1,7 @@
 // Copyright 2026 Satoshi Ebisawa
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::app::context::CommonCommandOptions;
+use crate::app::context::options::CommonCommandOptions;
 use crate::app::member::add_member;
 use crate::Error;
 

@@ -3,8 +3,8 @@
 
 //! Key generation (key new) implementation
 
-use crate::app::context::CommonCommandOptions;
-use crate::app::key::generate_key_command;
+use crate::app::context::options::CommonCommandOptions;
+use crate::app::key::generate::generate_key_command;
 use crate::cli::common::ssh::resolve_ssh_context;
 use crate::cli::identity_prompt;
 use crate::Result;

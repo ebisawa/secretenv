@@ -3,8 +3,8 @@
 
 //! Tests for cli::identity_prompt::select_ssh_key
 
-use secretenv::app::context::SshKeyCandidate;
 use secretenv::cli::identity_prompt::select_ssh_key;
+use secretenv::io::ssh::external::pubkey::SshKeyCandidate;
 
 #[test]
 fn test_select_ssh_key_empty_candidates_fails() {

@@ -7,8 +7,8 @@ use dialoguer::{Confirm, Input, Select};
 use std::io::IsTerminal;
 use std::path::Path;
 
-use crate::app::context::SshKeyCandidate;
 use crate::app::identity::{resolve_github_user_with_fallback, resolve_member_id_with_fallback};
+use crate::io::ssh::external::pubkey::SshKeyCandidate;
 use crate::support::validation;
 use crate::{Error, Result};
 

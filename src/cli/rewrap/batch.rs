@@ -5,7 +5,7 @@
 
 use super::promotion::{confirm_incoming_promotions, print_promotion_summary};
 use super::RewrapArgs;
-use crate::app::context::CommonCommandOptions;
+use crate::app::context::options::CommonCommandOptions;
 use crate::app::rewrap::{
     build_rewrap_batch_plan, execute_rewrap_batch, RewrapBatchOutcome, RewrapBatchRequest,
 };

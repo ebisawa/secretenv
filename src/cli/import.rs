@@ -5,7 +5,7 @@
 
 use clap::Args;
 
-use crate::app::context::CommonCommandOptions;
+use crate::app::context::options::CommonCommandOptions;
 use crate::app::kv::import_kv_command;
 use crate::cli::common::options::CommonOptions;
 use crate::cli::common::output::json::print_json_output;

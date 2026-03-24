@@ -7,7 +7,10 @@
 //! when ssh_ctx is None, and handles workspace / env var requirements.
 
 use crate::test_utils::EnvGuard;
-use secretenv::app::context::{CommonCommandOptions, ExecutionContext};
+use secretenv::app::context::execution::ExecutionContext;
+use secretenv::app::context::member::resolve_member_context;
+use secretenv::app::context::options::CommonCommandOptions;
+use secretenv::app::context::paths::ResolvedCommandPaths;
 use tempfile::TempDir;
 
 const ENV_PRIVATE_KEY: &str = "SECRETENV_PRIVATE_KEY";
@@ -26,6 +29,12 @@ fn build_options_no_workspace(home: &TempDir, non_workspace: &TempDir) -> Common
         workspace: Some(non_workspace.path().to_path_buf()),
         ssh_signer: None,
     }
+}
+
+fn create_workspace_dirs(path: &std::path::Path) {
+    std::fs::create_dir_all(path.join("members/active")).unwrap();
+    std::fs::create_dir_all(path.join("members/incoming")).unwrap();
+    std::fs::create_dir_all(path.join("secrets")).unwrap();
 }
 
 fn expect_err(result: secretenv::Result<ExecutionContext>) -> String {
@@ -151,4 +160,57 @@ fn test_resolve_rejects_kid_in_env_mode() {
         "Expected --kid rejection error, got: {}",
         err
     );
+}
+
+#[test]
+fn test_resolved_command_paths_loads_base_dir_and_keystore_root() {
+    let home = TempDir::new().unwrap();
+    let workspace = TempDir::new().unwrap();
+    create_workspace_dirs(workspace.path());
+    let options = CommonCommandOptions {
+        home: Some(home.path().to_path_buf()),
+        identity: None,
+        quiet: false,
+        verbose: false,
+        workspace: Some(workspace.path().to_path_buf()),
+        ssh_signer: None,
+    };
+
+    let resolved = ResolvedCommandPaths::load(&options).unwrap();
+
+    assert_eq!(resolved.base_dir, home.path());
+    assert_eq!(resolved.keystore_root, home.path().join("keys"));
+    assert_eq!(
+        resolved
+            .workspace_root
+            .as_ref()
+            .map(|w| w.root_path.file_name()),
+        Some(workspace.path().file_name())
+    );
+}
+
+#[test]
+fn test_resolve_member_context_uses_config_resolution_member_id() {
+    let home = TempDir::new().unwrap();
+    let workspace = TempDir::new().unwrap();
+    create_workspace_dirs(workspace.path());
+    std::fs::create_dir_all(home.path()).unwrap();
+    std::fs::write(
+        home.path().join("config.toml"),
+        "member_id = 'alice@example.com'\n",
+    )
+    .unwrap();
+    let options = CommonCommandOptions {
+        home: Some(home.path().to_path_buf()),
+        identity: None,
+        quiet: false,
+        verbose: false,
+        workspace: Some(workspace.path().to_path_buf()),
+        ssh_signer: None,
+    };
+
+    let resolved = resolve_member_context(&options, None).unwrap();
+
+    assert_eq!(resolved.member_id, "alice@example.com");
+    assert_eq!(resolved.paths.base_dir, home.path());
 }

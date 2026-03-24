@@ -2,10 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::test_utils::create_temp_ssh_keypair_in_dir;
-use secretenv::config::types::SshSigner;
-use secretenv::feature::context::ssh::{
-    build_ssh_signing_context, resolve_ssh_key_candidates, SshSigningParams,
+use secretenv::app::context::ssh::{
+    build_ssh_signing_context_with_params, resolve_ssh_key_candidates_with_params, SshSigningParams,
 };
+use secretenv::config::types::SshSigner;
 use secretenv::feature::key::generate::{generate_key, KeyGenerationOptions};
 use secretenv::feature::verify::public_key::verify_public_key_with_attestation;
 use secretenv::io::keystore::storage::load_public_key;
@@ -26,8 +26,9 @@ fn generate_real_ssh_attested_public_key(
         verbose: false,
         check_determinism: true,
     };
-    let candidates = resolve_ssh_key_candidates(&params).unwrap();
-    let ssh_context = build_ssh_signing_context(&params, &candidates[0].public_key).unwrap();
+    let candidates = resolve_ssh_key_candidates_with_params(&params).unwrap();
+    let ssh_context =
+        build_ssh_signing_context_with_params(&params, &candidates[0].public_key).unwrap();
 
     let result = generate_key(KeyGenerationOptions {
         member_id: "attestation-test@example.com".to_string(),

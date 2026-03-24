@@ -6,6 +6,8 @@
 pub mod builder;
 pub mod decrypt;
 pub mod encrypt;
+pub(crate) mod entry_codec;
+pub(crate) mod head;
 mod mutate;
 mod query;
 pub(crate) mod rewrite;

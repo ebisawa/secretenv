@@ -1,29 +1,14 @@
 // Copyright 2026 Satoshi Ebisawa
 // SPDX-License-Identifier: Apache-2.0
 
-//! Crypto context construction for use cases
-//!
-//! Provides context for cryptographic operations requiring member keys.
-//! This module handles IO operations (keystore access, SSH key decryption)
-//! and should be used at the usecase layer.
+//! Crypto context data and key validation helpers.
 
 use ed25519_dalek::SigningKey;
 use std::path::PathBuf;
-use tracing::debug;
 use zeroize::Zeroizing;
 
-use crate::feature::context::env_key;
-use crate::feature::key::protection::decrypt_private_key;
-use crate::io::config::paths::get_base_dir;
-use crate::io::keystore::helpers::resolve_kid;
-use crate::io::keystore::paths::get_keystore_root_from_base;
-use crate::io::keystore::public_key_source::{
-    KeystorePublicKeySource, PublicKeySource, WorkspacePublicKeySource,
-};
-use crate::io::keystore::storage::load_private_key;
-use crate::io::ssh::backend::SignatureBackend;
+use crate::io::keystore::public_key_source::PublicKeySource;
 use crate::model::identifiers::jwk;
-use crate::model::private_key::PrivateKeyAlgorithm;
 use crate::model::private_key::PrivateKeyPlaintext;
 use crate::model::verified::{DecryptionProof, VerifiedPrivateKey};
 use crate::support::base64url::{b64_decode, b64_decode_array};
@@ -39,118 +24,12 @@ pub struct CryptoContext {
     pub signing_key: SigningKey,
 }
 
-impl CryptoContext {
-    /// Load member keys from keystore with SSH key decryption
-    ///
-    /// # Arguments
-    /// * `member_id` - Member ID to load keys for
-    /// * `backend` - SSH signature backend for private key decryption
-    /// * `ssh_pubkey` - SSH public key string
-    /// * `explicit_kid` - Optional explicit key ID (if None, uses active key)
-    /// * `keystore_root` - Optional keystore root path (if None, uses default)
-    /// * `workspace_path` - Optional workspace path for key lookup
-    /// * `debug` - Enable debug logging
-    ///
-    /// # Returns
-    /// CryptoContext with loaded keys
-    pub fn load(
-        member_id: &str,
-        backend: &dyn SignatureBackend,
-        ssh_pubkey: &str,
-        explicit_kid: Option<&str>,
-        keystore_root: Option<&PathBuf>,
-        workspace_path: Option<PathBuf>,
-        debug: bool,
-    ) -> Result<Self> {
-        if debug {
-            debug!(
-                "[CRYPTO] CryptoContext::load: member_id={}, explicit_kid={}",
-                member_id,
-                explicit_kid.unwrap_or("(none)")
-            );
-        }
-        let keystore_root = match keystore_root {
-            Some(path) => path.clone(),
-            None => {
-                let base_dir = get_base_dir()?;
-                get_keystore_root_from_base(&base_dir)
-            }
-        };
-        let kid = resolve_kid(&keystore_root, member_id, explicit_kid)?;
-        if debug {
-            debug!("[CRYPTO] CryptoContext::load: resolved kid={}", kid);
-        }
-        let encrypted_private_key = load_private_key(&keystore_root, member_id, &kid)?;
-        let private_key_plaintext =
-            decrypt_private_key(&encrypted_private_key, backend, ssh_pubkey, debug)?;
-
-        // Extract SSH fingerprint from SshSig algorithm variant
-        let ssh_fpr = match &encrypted_private_key.protected.alg {
-            PrivateKeyAlgorithm::SshSig { fpr, .. } => fpr.as_str(),
-            _ => {
-                return Err(Error::Crypto {
-                    message: "Expected SshSig algorithm for SSH-based decryption".to_string(),
-                    source: None,
-                });
-            }
-        };
-
-        // Validate and create Decrypted wrapper
-        let decrypted_key = validate_and_wrap_private_key(
-            private_key_plaintext,
-            &encrypted_private_key.protected.member_id,
-            &encrypted_private_key.protected.kid,
-            ssh_fpr,
-        )?;
-
-        let sig_key_bytes: Zeroizing<[u8; 32]> = Zeroizing::new(b64_decode_array(
-            &decrypted_key.document().keys.sig.d,
-            "Ed25519 private key",
-        )?);
-        let signing_key = SigningKey::from_bytes(&sig_key_bytes);
-
-        let pub_key_source: Box<dyn PublicKeySource> =
-            Box::new(KeystorePublicKeySource::new(keystore_root));
-
-        Ok(Self {
-            member_id: member_id.to_string(),
-            kid,
-            pub_key_source,
-            workspace_path,
-            private_key: decrypted_key,
-            signing_key,
-        })
-    }
-
-    /// Load member keys from environment variables (CI mode)
-    ///
-    /// Uses SECRETENV_PRIVATE_KEY and SECRETENV_KEY_PASSWORD environment variables
-    /// instead of the local keystore and SSH key decryption. Public keys are loaded
-    /// from the workspace member files.
-    pub fn load_from_env(workspace_path: PathBuf, debug: bool) -> Result<Self> {
-        let (verified_key, member_id) = env_key::load_private_key_from_env(debug)?;
-        let kid = verified_key.proof().kid.clone();
-
-        // Load own public key from workspace and verify consistency
-        let pub_key_source = WorkspacePublicKeySource::new(workspace_path.clone());
-        let own_public_key = pub_key_source.load_public_key(&member_id)?;
-        env_key::verify_own_public_key(verified_key.document(), &own_public_key)?;
-
-        let sig_key_bytes: Zeroizing<[u8; 32]> = Zeroizing::new(b64_decode_array(
-            &verified_key.document().keys.sig.d,
-            "Ed25519 private key",
-        )?);
-        let signing_key = SigningKey::from_bytes(&sig_key_bytes);
-
-        Ok(Self {
-            member_id,
-            kid,
-            pub_key_source: Box::new(pub_key_source),
-            workspace_path: Some(workspace_path),
-            private_key: verified_key,
-            signing_key,
-        })
-    }
+pub(crate) fn build_signing_key(plaintext: &PrivateKeyPlaintext) -> Result<SigningKey> {
+    let sig_key_bytes: Zeroizing<[u8; 32]> = Zeroizing::new(b64_decode_array(
+        &plaintext.keys.sig.d,
+        "Ed25519 private key",
+    )?);
+    Ok(SigningKey::from_bytes(&sig_key_bytes))
 }
 
 /// Validate an OKP key (kty, crv, d/x length).
@@ -222,7 +101,7 @@ pub fn validate_ed25519_consistency(sig_d_bytes: &[u8], sig_x_bytes: &[u8]) -> R
 }
 
 /// Validate private key plaintext and wrap in Decrypted type (SSH-based decryption)
-fn validate_and_wrap_private_key(
+pub(crate) fn validate_and_wrap_private_key_ssh(
     plaintext: PrivateKeyPlaintext,
     member_id: &str,
     kid: &str,

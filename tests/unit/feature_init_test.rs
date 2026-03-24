@@ -5,10 +5,10 @@
 
 use crate::cli_common::ALICE_MEMBER_ID;
 use crate::test_utils::setup_test_keystore_from_fixtures;
-use secretenv::config::types::SshSigner;
-use secretenv::feature::context::ssh::{
-    build_ssh_signing_context, resolve_ssh_key_candidates, SshSigningParams,
+use secretenv::app::context::ssh::{
+    build_ssh_signing_context_with_params, resolve_ssh_key_candidates_with_params, SshSigningParams,
 };
+use secretenv::config::types::SshSigner;
 use secretenv::feature::init::{
     ensure_key_exists, load_single_member_id_from_keystore, resolve_keystore_root,
     save_member_document,
@@ -198,8 +198,9 @@ fn test_ensure_key_exists_creates_new_key() {
         verbose: false,
         check_determinism: true,
     };
-    let candidates = resolve_ssh_key_candidates(&params).unwrap();
-    let ssh_context = build_ssh_signing_context(&params, &candidates[0].public_key).unwrap();
+    let candidates = resolve_ssh_key_candidates_with_params(&params).unwrap();
+    let ssh_context =
+        build_ssh_signing_context_with_params(&params, &candidates[0].public_key).unwrap();
     let result = ensure_key_exists(
         member_id,
         &keystore_root,
@@ -253,8 +254,9 @@ fn test_ensure_key_exists_reuses_existing_key() {
         verbose: false,
         check_determinism: true,
     };
-    let candidates = resolve_ssh_key_candidates(&params).unwrap();
-    let ssh_context = build_ssh_signing_context(&params, &candidates[0].public_key).unwrap();
+    let candidates = resolve_ssh_key_candidates_with_params(&params).unwrap();
+    let ssh_context =
+        build_ssh_signing_context_with_params(&params, &candidates[0].public_key).unwrap();
     let first_result = ensure_key_exists(
         member_id,
         &keystore_root,
@@ -275,8 +277,9 @@ fn test_ensure_key_exists_reuses_existing_key() {
         verbose: false,
         check_determinism: true,
     };
-    let candidates2 = resolve_ssh_key_candidates(&params2).unwrap();
-    let ssh_context2 = build_ssh_signing_context(&params2, &candidates2[0].public_key).unwrap();
+    let candidates2 = resolve_ssh_key_candidates_with_params(&params2).unwrap();
+    let ssh_context2 =
+        build_ssh_signing_context_with_params(&params2, &candidates2[0].public_key).unwrap();
     let second_result = ensure_key_exists(
         member_id,
         &keystore_root,

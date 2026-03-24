@@ -7,7 +7,7 @@ use std::io::{self, Read};
 
 use clap::Args;
 
-use crate::app::context::CommonCommandOptions;
+use crate::app::context::options::CommonCommandOptions;
 use crate::app::kv::set_kv_command;
 use crate::cli::common::options::CommonOptions;
 use crate::cli::common::ssh::resolve_ssh_context_optional;

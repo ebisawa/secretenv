@@ -9,8 +9,8 @@
 use clap::Args;
 use std::path::PathBuf;
 
-use crate::app::context::CommonCommandOptions;
-use crate::app::file::inspect_file_command;
+use crate::app::context::options::CommonCommandOptions;
+use crate::app::file::inspect::{inspect_file_command, InspectSection};
 use crate::cli::common::options::CommonOptions;
 use crate::Result;
 
@@ -26,8 +26,27 @@ pub struct InspectArgs {
 
 pub fn run(args: InspectArgs) -> Result<()> {
     let options = CommonCommandOptions::from(&args.common);
-    let (input_display, output) = inspect_file_command(&options, &args.input)?;
-    eprintln!("Inspecting: {}\n", input_display);
-    print!("{}", output);
+    let output = inspect_file_command(&options, &args.input)?;
+    eprintln!("Inspecting: {}\n", output.input_display);
+    print!("{}", render_inspect_output(&output.title, &output.sections));
     Ok(())
+}
+
+fn render_inspect_output(title: &str, sections: &[InspectSection]) -> String {
+    let mut out = String::new();
+    out.push_str(title);
+    out.push('\n');
+    out.push('\n');
+    for (index, section) in sections.iter().enumerate() {
+        out.push_str(&section.title);
+        out.push_str(":\n");
+        for line in &section.lines {
+            out.push_str(line);
+            out.push('\n');
+        }
+        if index + 1 != sections.len() {
+            out.push('\n');
+        }
+    }
+    out
 }

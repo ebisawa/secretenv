@@ -32,7 +32,7 @@ const NON_DETERMINISTIC_SIGNATURE_MESSAGE: &str =
     "Non-deterministic signature detected: same input produced different signatures";
 
 /// Input parameters for SSH signing context resolution (CLI-type independent).
-pub struct SshSigningParams {
+pub(crate) struct SshSigningParams {
     pub ssh_key: Option<PathBuf>,
     pub signing_method: Option<SshSigner>,
     pub base_dir: Option<PathBuf>,
@@ -60,7 +60,9 @@ struct ResolvedSshCommands {
 /// For explicit key or ssh-keygen mode, returns a single candidate.
 /// For ssh-agent mode without an explicit key, returns all Ed25519 keys
 /// found in the agent.
-pub fn resolve_ssh_key_candidates(params: &SshSigningParams) -> Result<Vec<SshKeyCandidate>> {
+pub(crate) fn resolve_ssh_key_candidates(
+    params: &SshSigningParams,
+) -> Result<Vec<SshKeyCandidate>> {
     let base_dir = params.base_dir.as_deref();
     let signing_method = resolve_signing_method(params, base_dir)?;
     let commands = resolve_ssh_commands(base_dir)?;
@@ -96,7 +98,7 @@ pub fn resolve_ssh_key_candidates(params: &SshSigningParams) -> Result<Vec<SshKe
 /// Re-resolves signing method and SSH commands (cheap config lookups),
 /// validates the key, computes fingerprint, builds backend, and probes
 /// determinism.
-pub fn build_ssh_signing_context(
+pub(crate) fn build_ssh_signing_context(
     params: &SshSigningParams,
     selected_pubkey: &str,
 ) -> Result<SshSigningContext> {

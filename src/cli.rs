@@ -6,7 +6,6 @@
 // Common utilities (enabled for v3)
 pub mod common;
 pub mod error;
-pub mod file_output;
 pub mod identity_prompt;
 
 // Active v3 commands

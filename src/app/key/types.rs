@@ -1,8 +1,8 @@
 // Copyright 2026 Satoshi Ebisawa
 // SPDX-License-Identifier: Apache-2.0
 
+use crate::app::verification::OnlineVerificationStatus;
 use crate::feature::key as feature_key;
-use crate::io::verify_online::VerificationStatus;
 use crate::model::ssh::SshDeterminismStatus;
 
 #[derive(Debug, Clone)]
@@ -17,7 +17,7 @@ pub struct KeyNewResult {
     pub ssh_fingerprint: String,
     pub ssh_public_key: String,
     pub ssh_determinism: SshDeterminismStatus,
-    pub github_verification: VerificationStatus,
+    pub github_verification: OnlineVerificationStatus,
 }
 
 impl From<feature_key::KeyNewResult> for KeyNewResult {
@@ -33,7 +33,7 @@ impl From<feature_key::KeyNewResult> for KeyNewResult {
             ssh_fingerprint: r.ssh_fingerprint,
             ssh_public_key: r.ssh_public_key,
             ssh_determinism: r.ssh_determinism,
-            github_verification: VerificationStatus::NotConfigured,
+            github_verification: OnlineVerificationStatus::NotConfigured,
         }
     }
 }

@@ -8,12 +8,18 @@
 
 use crate::cli_common::{ALICE_MEMBER_ID, BOB_MEMBER_ID, CAROL_MEMBER_ID, DAVE_MEMBER_ID};
 use crate::test_utils::{setup_test_keystore, EnvGuard};
-use secretenv::feature::inspect::inspect_document_with_verification;
+use secretenv::feature::inspect::{inspect_document_with_verification, InspectOutput};
 use secretenv::feature::verify::file::verify_file_document_report;
 use secretenv::feature::verify::kv::verify_kv_document_report;
 use secretenv::format::content::EncryptedContent;
 use secretenv::model::verification::VerifyingKeySource;
 use std::fs;
+
+fn inspect_contains(output: &InspectOutput, needle: &str) -> bool {
+    output.sections.iter().any(|section| {
+        section.title.contains(needle) || section.lines.iter().any(|line| line.contains(needle))
+    })
+}
 
 /// Create a minimal workspace structure in `workspace_dir` and copy the given
 /// member's public key from `keystore_root` into `members/active/`.
@@ -130,14 +136,12 @@ fn test_inspect_file_enc_shows_format() {
     let (_temp_dir, content) = create_file_enc_content(ALICE_MEMBER_ID);
 
     let encrypted = EncryptedContent::detect(content).unwrap();
-    let output = inspect_document_with_verification(&encrypted, "secret.json", None, false)
-        .unwrap()
-        .formatted;
+    let output =
+        inspect_document_with_verification(&encrypted, "secret.json", None, false).unwrap();
 
     assert!(
-        output.contains("Format:"),
-        "file-enc inspect output should contain 'Format:' line. Output:\n{}",
-        output
+        inspect_contains(&output, "Format:"),
+        "file-enc inspect output should contain 'Format:' line. Output: {output:?}",
     );
 }
 
@@ -146,14 +150,12 @@ fn test_inspect_file_enc_shows_recipients() {
     let (_temp_dir, content) = create_file_enc_content(BOB_MEMBER_ID);
 
     let encrypted = EncryptedContent::detect(content).unwrap();
-    let output = inspect_document_with_verification(&encrypted, "secret.json", None, false)
-        .unwrap()
-        .formatted;
+    let output =
+        inspect_document_with_verification(&encrypted, "secret.json", None, false).unwrap();
 
     assert!(
-        output.contains("Recipients"),
-        "file-enc inspect output should contain 'Recipients' section. Output:\n{}",
-        output
+        inspect_contains(&output, "Recipients"),
+        "file-enc inspect output should contain 'Recipients' section. Output: {output:?}",
     );
 }
 
@@ -162,35 +164,29 @@ fn test_inspect_file_enc_shows_signature() {
     let (_temp_dir, content) = create_file_enc_content(CAROL_MEMBER_ID);
 
     let encrypted = EncryptedContent::detect(content).unwrap();
-    let output = inspect_document_with_verification(&encrypted, "secret.json", None, false)
-        .unwrap()
-        .formatted;
+    let output =
+        inspect_document_with_verification(&encrypted, "secret.json", None, false).unwrap();
 
     assert!(
-        output.contains("Signature:"),
-        "file-enc inspect output should contain 'Signature:' section. Output:\n{}",
-        output
+        inspect_contains(&output, "Signature"),
+        "file-enc inspect output should contain 'Signature:' section. Output: {output:?}",
     );
     assert!(
-        output.contains("alg:"),
-        "file-enc inspect output should contain algorithm info. Output:\n{}",
-        output
+        inspect_contains(&output, "alg:"),
+        "file-enc inspect output should contain algorithm info. Output: {output:?}",
     );
     assert!(
-        output.contains("kid:"),
-        "file-enc inspect output should contain kid info. Output:\n{}",
-        output
+        inspect_contains(&output, "kid:"),
+        "file-enc inspect output should contain kid info. Output: {output:?}",
     );
 
     assert!(
-        output.contains("Attestation Method:"),
-        "file-enc inspect output should include attestation method. Output:\n{}",
-        output
+        inspect_contains(&output, "Attestation Method:"),
+        "file-enc inspect output should include attestation method. Output: {output:?}",
     );
     assert!(
-        output.contains("Attestation Pubkey:"),
-        "file-enc inspect output should include attestation pubkey. Output:\n{}",
-        output
+        inspect_contains(&output, "Attestation Pubkey:"),
+        "file-enc inspect output should include attestation pubkey. Output: {output:?}",
     );
 }
 
@@ -203,19 +199,16 @@ fn test_inspect_kv_enc_shows_head() {
     let (_temp_dir, content) = create_kv_enc_content(ALICE_MEMBER_ID);
 
     let encrypted = EncryptedContent::detect(content).unwrap();
-    let output = inspect_document_with_verification(&encrypted, "default.kvenc", None, false)
-        .unwrap()
-        .formatted;
+    let output =
+        inspect_document_with_verification(&encrypted, "default.kvenc", None, false).unwrap();
 
     assert!(
-        output.contains("HEAD Data"),
-        "kv-enc inspect output should contain 'HEAD Data' section. Output:\n{}",
-        output
+        inspect_contains(&output, "HEAD Data"),
+        "kv-enc inspect output should contain 'HEAD Data' section. Output: {output:?}",
     );
     assert!(
-        output.contains("SID:"),
-        "kv-enc inspect output should contain SID in HEAD section. Output:\n{}",
-        output
+        inspect_contains(&output, "SID:"),
+        "kv-enc inspect output should contain SID in HEAD section. Output: {output:?}",
     );
 }
 
@@ -224,19 +217,16 @@ fn test_inspect_kv_enc_shows_entries() {
     let (_temp_dir, content) = create_kv_enc_content(BOB_MEMBER_ID);
 
     let encrypted = EncryptedContent::detect(content).unwrap();
-    let output = inspect_document_with_verification(&encrypted, "default.kvenc", None, false)
-        .unwrap()
-        .formatted;
+    let output =
+        inspect_document_with_verification(&encrypted, "default.kvenc", None, false).unwrap();
 
     assert!(
-        output.contains("Entries"),
-        "kv-enc inspect output should contain 'Entries' section. Output:\n{}",
-        output
+        inspect_contains(&output, "Entries"),
+        "kv-enc inspect output should contain 'Entries' section. Output: {output:?}",
     );
     assert!(
-        output.contains("DATABASE_URL"),
-        "kv-enc inspect output should list the entry key. Output:\n{}",
-        output
+        inspect_contains(&output, "DATABASE_URL"),
+        "kv-enc inspect output should list the entry key. Output: {output:?}",
     );
 }
 
@@ -245,14 +235,12 @@ fn test_inspect_kv_enc_shows_wrap() {
     let (_temp_dir, content) = create_kv_enc_content(CAROL_MEMBER_ID);
 
     let encrypted = EncryptedContent::detect(content).unwrap();
-    let output = inspect_document_with_verification(&encrypted, "default.kvenc", None, false)
-        .unwrap()
-        .formatted;
+    let output =
+        inspect_document_with_verification(&encrypted, "default.kvenc", None, false).unwrap();
 
     assert!(
-        output.contains("WRAP Data"),
-        "kv-enc inspect output should contain 'WRAP Data' section. Output:\n{}",
-        output
+        inspect_contains(&output, "WRAP Data"),
+        "kv-enc inspect output should contain 'WRAP Data' section. Output: {output:?}",
     );
 }
 
@@ -360,31 +348,24 @@ fn test_inspect_kv_enc_with_verification() {
         Some(&workspace_dir),
         false,
     )
-    .unwrap()
-    .formatted;
+    .unwrap();
 
     // Check that verification result is included
     assert!(
-        output.contains("Signature Verification:"),
-        "Output should contain signature verification section"
+        output.signature_report.verified,
+        "signature report should indicate verification success"
     );
     assert!(
-        output.contains("  Status:   OK"),
-        "Output should show verification success"
+        output.signature_report.signer_member_id.as_deref() == Some(ALICE_MEMBER_ID),
+        "signature report should include signer member_id"
     );
     assert!(
-        output.contains(ALICE_MEMBER_ID),
-        "Output should show signer member_id"
+        inspect_contains(&output, "Attestation Method:"),
+        "Output should include embedded signer attestation method. Output: {output:?}",
     );
     assert!(
-        output.contains("Attestation Method:"),
-        "Output should include embedded signer attestation method. Output:\n{}",
-        output
-    );
-    assert!(
-        output.contains("Attestation Pubkey:"),
-        "Output should include embedded signer attestation pubkey. Output:\n{}",
-        output
+        inspect_contains(&output, "Attestation Pubkey:"),
+        "Output should include embedded signer attestation pubkey. Output: {output:?}",
     );
 }
 
@@ -441,11 +422,10 @@ fn test_inspect_kv_enc_with_verification_failure_no_keystore() {
         result.is_ok(),
         "Inspect should succeed even when keystore does not contain the signing key"
     );
-    let output = result.unwrap().formatted;
+    let output = result.unwrap();
     assert!(
-        output.contains("Status:   FAILED"),
-        "Output should show FAILED verification status: {}",
-        output
+        !output.signature_report.verified,
+        "Output should show FAILED verification status: {output:?}",
     );
 }
 

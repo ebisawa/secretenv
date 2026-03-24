@@ -3,9 +3,9 @@
 
 //! Common utilities for key operations.
 
-use crate::app::context::CommonCommandOptions;
-use crate::config::resolution::member_id::resolve_member_id;
-use crate::io::verify_online::VerificationStatus;
+use crate::app::context::member::resolve_member_context;
+use crate::app::context::options::CommonCommandOptions;
+use crate::app::verification::OnlineVerificationStatus;
 use crate::model::ssh::SshDeterminismStatus;
 use crate::support::fs::lock;
 use crate::{Error, Result};
@@ -22,13 +22,11 @@ pub fn setup_key_operation_context(
     options: &CommonCommandOptions,
     member_id_opt: Option<String>,
 ) -> Result<KeyOperationContext> {
-    let base_dir = options.resolve_base_dir()?;
-    let member_id = resolve_member_id(member_id_opt, Some(base_dir.as_path()))?;
-    let keystore_root = options.resolve_keystore_root()?;
+    let resolved = resolve_member_context(options, member_id_opt)?;
 
     Ok(KeyOperationContext {
-        member_id,
-        keystore_root,
+        member_id: resolved.member_id,
+        keystore_root: resolved.paths.keystore_root,
     })
 }
 
@@ -44,7 +42,7 @@ where
 pub(crate) fn print_key_generation_binding_info(
     ssh_fingerprint: &str,
     ssh_determinism: &SshDeterminismStatus,
-    github_verification: VerificationStatus,
+    github_verification: OnlineVerificationStatus,
 ) -> Result<()> {
     eprintln!();
     eprintln!("Using SSH key: {}", ssh_fingerprint);
@@ -57,7 +55,7 @@ pub(crate) fn print_key_generation_binding_info(
         });
     }
 
-    if github_verification == VerificationStatus::Verified {
+    if github_verification.is_verified() {
         eprintln!("GitHub verification: OK");
     }
 

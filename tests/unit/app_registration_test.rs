@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::test_utils::setup_test_keystore_from_fixtures;
-use secretenv::app::context::CommonCommandOptions;
+use secretenv::app::context::options::CommonCommandOptions;
 use secretenv::app::registration::{
     build_join_registration, resolve_registration_key_plan, RegistrationKeyPlan, RegistrationMode,
 };
@@ -65,4 +65,31 @@ fn test_build_join_registration_reuses_existing_key_without_github_user() {
     assert_eq!(prepared.mode, RegistrationMode::Join);
     assert!(!prepared.setup.key_result.created);
     assert_eq!(prepared.setup.member_id, "alice@example.com");
+}
+
+#[test]
+fn test_build_join_registration_requires_ssh_context_for_generated_key() {
+    let home_dir = TempDir::new().unwrap();
+    std::fs::create_dir_all(home_dir.path().join("keys")).unwrap();
+    let workspace_dir = TempDir::new().unwrap();
+    std::fs::create_dir_all(workspace_dir.path().join("members/active")).unwrap();
+    std::fs::create_dir_all(workspace_dir.path().join("members/incoming")).unwrap();
+    std::fs::create_dir_all(workspace_dir.path().join("secrets")).unwrap();
+    let common = build_common_options(&home_dir, &workspace_dir);
+
+    let error = build_join_registration(
+        &common,
+        "alice@example.com".to_string(),
+        None,
+        RegistrationKeyPlan::GenerateNew,
+        None,
+    )
+    .unwrap_err();
+
+    assert!(
+        error
+            .to_string()
+            .contains("SSH signing context is required for key generation"),
+        "unexpected error: {error}"
+    );
 }

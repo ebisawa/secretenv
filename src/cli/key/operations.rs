@@ -3,8 +3,11 @@
 
 //! Key operations (activate, remove, export) implementation
 
-use crate::app::context::CommonCommandOptions;
-use crate::app::key::{activate_key_command, export_key_command, remove_key_command};
+use crate::app::context::options::CommonCommandOptions;
+use crate::app::key::manage::{
+    activate_key_command, export_key_command, export_private_key_command, remove_key_command,
+    save_exported_private_key,
+};
 use crate::cli::common::ssh::resolve_ssh_context_for_active_key;
 use crate::cli::identity_prompt;
 use crate::support::path::display_path_relative_to_cwd;
@@ -89,7 +92,7 @@ pub fn run_export_private(args: ExportArgs) -> Result<()> {
 
     let ssh_ctx = resolve_ssh_context_for_active_key(&options)?;
 
-    let result = crate::app::key::export_private_key_command(
+    let result = export_private_key_command(
         &options,
         Some(member_id),
         args.kid.clone(),
@@ -98,7 +101,7 @@ pub fn run_export_private(args: ExportArgs) -> Result<()> {
     )?;
 
     if let Some(out) = args.out.as_ref() {
-        crate::support::fs::atomic::save_text(out, &result.encoded_key)?;
+        save_exported_private_key(out, &result.encoded_key)?;
         eprintln!("Exported private key for '{}':", result.member_id);
         eprintln!("  Kid:    {}", result.kid);
         eprintln!("  Output: {}", display_path_relative_to_cwd(out));

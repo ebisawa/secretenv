@@ -3,7 +3,8 @@
 
 //! Application-layer orchestration for member verification and promotion.
 
-use crate::app::context::{require_workspace, CommonCommandOptions};
+use crate::app::context::options::CommonCommandOptions;
+use crate::app::context::paths::require_workspace;
 use crate::app::errors::serialize_to_json_value;
 use crate::feature::member::add::add_member_from_file;
 use crate::feature::member::promotion::{

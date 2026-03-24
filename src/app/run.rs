@@ -3,8 +3,9 @@
 
 //! Application-layer orchestration for `run` command execution.
 
-use crate::app::context::{CommonCommandOptions, SshSigningContext};
+use crate::app::context::options::CommonCommandOptions;
 use crate::app::kv::build_run_env_command;
+use crate::feature::context::ssh::SshSigningContext;
 use crate::io::process::execute_command_with_env;
 use crate::{Error, Result};
 

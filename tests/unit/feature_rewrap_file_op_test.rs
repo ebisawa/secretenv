@@ -3,18 +3,17 @@
 
 //! Unit tests for feature/rewrap/file_op module (file-enc rewrap operations).
 //!
-//! Tests rotate, add-recipient, and remove-recipient via the public
-//! `rewrap_file_document` API since `file_op` is `pub(crate)`.
+//! Tests rotate, add-recipient, and remove-recipient via the app-level
+//! rewrap API since `file_op` is `pub(crate)`.
 
 use crate::cli_common::{ALICE_MEMBER_ID, BOB_MEMBER_ID};
 use crate::keygen_helpers::make_verified_members;
 use crate::test_utils::{setup_member_key_context, setup_test_keystore_from_fixtures};
+use secretenv::app::rewrap::{rewrap_file_content_with_request, SingleRewrapRequest};
 use secretenv::feature::context::crypto::CryptoContext;
 use secretenv::feature::decrypt::file::decrypt_file_document;
 use secretenv::feature::encrypt::file::encrypt_file_document;
 use secretenv::feature::encrypt::SigningContext;
-use secretenv::feature::rewrap::file::rewrap_file_document;
-use secretenv::feature::rewrap::RewrapOptions;
 use secretenv::feature::verify::file::verify_file_document;
 use secretenv::format::content::FileEncContent;
 use secretenv::io::keystore::storage::save_key_pair_atomic;
@@ -42,12 +41,19 @@ fn setup_workspace_members(temp_dir: &TempDir, member_id: &str, kid: &str) {
     .unwrap();
 }
 
-/// Build default RewrapOptions.
-fn rewrap_options_default(debug: bool) -> RewrapOptions {
-    RewrapOptions {
-        rotate_key: false,
-        clear_disclosure_history: false,
-        token_codec: None,
+fn single_rewrap_request<'a>(
+    key_ctx: &'a CryptoContext,
+    workspace_root: Option<&'a std::path::Path>,
+    rotate_key: bool,
+    clear_disclosure_history: bool,
+    debug: bool,
+) -> SingleRewrapRequest<'a> {
+    SingleRewrapRequest {
+        member_id: ALICE_MEMBER_ID,
+        key_ctx,
+        workspace_root,
+        rotate_key,
+        clear_disclosure_history,
         no_signer_pub: false,
         debug,
     }
@@ -163,19 +169,10 @@ fn test_rotate_file_key_changes_content() {
     let doc = encrypt_file_for_alice(&temp_dir, kid, &key_ctx);
     let original_json = serde_json::to_string_pretty(&doc).unwrap();
 
-    let options = RewrapOptions {
-        rotate_key: true,
-        clear_disclosure_history: false,
-        token_codec: None,
-        no_signer_pub: false,
-        debug: false,
-    };
-    let rewrapped_json = rewrap_file_document(
-        &options,
+    let request = single_rewrap_request(&key_ctx, Some(temp_dir.path()), true, false, false);
+    let rewrapped_json = rewrap_file_content_with_request(
         &FileEncContent::new_unchecked(original_json.clone()),
-        ALICE_MEMBER_ID,
-        &key_ctx,
-        Some(temp_dir.path()),
+        &request,
     )
     .unwrap();
 
@@ -203,19 +200,10 @@ fn test_rotate_file_key_preserves_decryptability() {
     let original_json = serde_json::to_string_pretty(&doc).unwrap();
 
     // Rewrap with rotation
-    let options = RewrapOptions {
-        rotate_key: true,
-        clear_disclosure_history: false,
-        token_codec: None,
-        no_signer_pub: false,
-        debug: false,
-    };
-    let rewrapped_json = rewrap_file_document(
-        &options,
+    let request = single_rewrap_request(&key_ctx, Some(temp_dir.path()), true, false, false);
+    let rewrapped_json = rewrap_file_content_with_request(
         &FileEncContent::new_unchecked(original_json.clone()),
-        ALICE_MEMBER_ID,
-        &key_ctx,
-        Some(temp_dir.path()),
+        &request,
     )
     .unwrap();
 
@@ -246,19 +234,10 @@ fn test_rotate_file_key_updates_wrap() {
     let doc = encrypt_file_for_alice(&temp_dir, kid, &key_ctx);
     let original_json = serde_json::to_string_pretty(&doc).unwrap();
 
-    let options = RewrapOptions {
-        rotate_key: true,
-        clear_disclosure_history: false,
-        token_codec: None,
-        no_signer_pub: false,
-        debug: false,
-    };
-    let rewrapped_json = rewrap_file_document(
-        &options,
+    let request = single_rewrap_request(&key_ctx, Some(temp_dir.path()), true, false, false);
+    let rewrapped_json = rewrap_file_content_with_request(
         &FileEncContent::new_unchecked(original_json.clone()),
-        ALICE_MEMBER_ID,
-        &key_ctx,
-        Some(temp_dir.path()),
+        &request,
     )
     .unwrap();
 
@@ -291,15 +270,9 @@ fn test_add_file_recipient_via_rewrap() {
     setup_workspace_members(&temp_dir, ALICE_MEMBER_ID, &alice_kid);
     setup_workspace_members(&temp_dir, BOB_MEMBER_ID, &bob_kid);
 
-    let options = rewrap_options_default(false);
-    let rewrapped_json = rewrap_file_document(
-        &options,
-        &FileEncContent::new_unchecked(json),
-        ALICE_MEMBER_ID,
-        &key_ctx,
-        Some(temp_dir.path()),
-    )
-    .unwrap();
+    let request = single_rewrap_request(&key_ctx, Some(temp_dir.path()), false, false, false);
+    let rewrapped_json =
+        rewrap_file_content_with_request(&FileEncContent::new_unchecked(json), &request).unwrap();
 
     let rewrapped_doc: FileEncDocument = serde_json::from_str(&rewrapped_json).unwrap();
     let recipient_ids: Vec<&str> = rewrapped_doc
@@ -335,14 +308,8 @@ fn test_add_file_recipient_already_exists_noop() {
     let json = serde_json::to_string_pretty(&doc).unwrap();
 
     // Rewrap when all recipients already present (alice is both in doc and workspace)
-    let options = rewrap_options_default(false);
-    let result = rewrap_file_document(
-        &options,
-        &FileEncContent::new_unchecked(json),
-        ALICE_MEMBER_ID,
-        &key_ctx,
-        Some(temp_dir.path()),
-    );
+    let request = single_rewrap_request(&key_ctx, Some(temp_dir.path()), false, false, false);
+    let result = rewrap_file_content_with_request(&FileEncContent::new_unchecked(json), &request);
 
     assert!(
         result.is_ok(),
@@ -370,15 +337,9 @@ fn test_remove_file_recipient_via_rewrap() {
     // Setup workspace with only alice (bob removed from workspace)
     setup_workspace_members(&temp_dir, ALICE_MEMBER_ID, &alice_kid);
 
-    let options = rewrap_options_default(false);
-    let rewrapped_json = rewrap_file_document(
-        &options,
-        &FileEncContent::new_unchecked(json),
-        ALICE_MEMBER_ID,
-        &key_ctx,
-        Some(temp_dir.path()),
-    )
-    .unwrap();
+    let request = single_rewrap_request(&key_ctx, Some(temp_dir.path()), false, false, false);
+    let rewrapped_json =
+        rewrap_file_content_with_request(&FileEncContent::new_unchecked(json), &request).unwrap();
 
     let rewrapped_doc: FileEncDocument = serde_json::from_str(&rewrapped_json).unwrap();
     let recipient_ids: Vec<&str> = rewrapped_doc
@@ -412,15 +373,9 @@ fn test_remove_file_recipient_adds_disclosure() {
     // Setup workspace with only alice (bob removed)
     setup_workspace_members(&temp_dir, ALICE_MEMBER_ID, &alice_kid);
 
-    let options = rewrap_options_default(false);
-    let rewrapped_json = rewrap_file_document(
-        &options,
-        &FileEncContent::new_unchecked(json),
-        ALICE_MEMBER_ID,
-        &key_ctx,
-        Some(temp_dir.path()),
-    )
-    .unwrap();
+    let request = single_rewrap_request(&key_ctx, Some(temp_dir.path()), false, false, false);
+    let rewrapped_json =
+        rewrap_file_content_with_request(&FileEncContent::new_unchecked(json), &request).unwrap();
 
     // The output JSON must contain removed_recipients disclosure history
     assert!(
@@ -459,21 +414,10 @@ fn test_rewrap_file_roundtrip_with_rotation() {
     let original_json = serde_json::to_string_pretty(&doc).unwrap();
 
     // Rewrap with rotation
-    let options = RewrapOptions {
-        rotate_key: true,
-        clear_disclosure_history: false,
-        token_codec: None,
-        no_signer_pub: false,
-        debug: false,
-    };
-    let rewrapped_json = rewrap_file_document(
-        &options,
-        &FileEncContent::new_unchecked(original_json),
-        ALICE_MEMBER_ID,
-        &key_ctx,
-        Some(temp_dir.path()),
-    )
-    .unwrap();
+    let request = single_rewrap_request(&key_ctx, Some(temp_dir.path()), true, false, false);
+    let rewrapped_json =
+        rewrap_file_content_with_request(&FileEncContent::new_unchecked(original_json), &request)
+            .unwrap();
 
     // Output must be valid JSON parseable as FileEncDocument
     let parsed: Result<FileEncDocument, _> = serde_json::from_str(&rewrapped_json);

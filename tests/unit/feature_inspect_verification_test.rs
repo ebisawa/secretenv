@@ -4,7 +4,7 @@
 //! Unit tests for inspect/verification online verification display.
 
 use secretenv::feature::inspect::verification::{
-    build_online_verification_display, OnlineVerificationDisplay,
+    build_online_verification_section, OnlineVerificationDisplay,
 };
 use secretenv::io::verify_online::{VerificationResult, VerificationStatus};
 
@@ -34,36 +34,51 @@ fn make_failed_result() -> VerificationResult {
 fn test_online_verification_display_github_verified() {
     let result = make_verified_result();
     let display = OnlineVerificationDisplay::GithubResult(result);
-    let mut out = String::new();
-    build_online_verification_display(&display, Some("alice"), Some(12345), &mut out);
+    let section = build_online_verification_section(&display, Some("alice"), Some(12345));
 
-    assert!(out.contains("Online Verification (GitHub):"));
-    assert!(out.contains("Status:   OK"));
-    assert!(out.contains("Account:  alice (id: 12345)"));
-    assert!(out.contains("SSH key fingerprint: SHA256:abcdef1234567890"));
-    assert!(out.contains("Matched key ID: 67890"));
+    assert_eq!(section.title, "Online Verification (GitHub)");
+    assert!(section.lines.iter().any(|line| line == "Status:   OK"));
+    assert!(section
+        .lines
+        .iter()
+        .any(|line| line == "Account:  alice (id: 12345)"));
+    assert!(section
+        .lines
+        .iter()
+        .any(|line| line == "SSH key fingerprint: SHA256:abcdef1234567890"));
+    assert!(section
+        .lines
+        .iter()
+        .any(|line| line == "Matched key ID: 67890"));
 }
 
 #[test]
 fn test_online_verification_display_github_failed() {
     let result = make_failed_result();
     let display = OnlineVerificationDisplay::GithubResult(result);
-    let mut out = String::new();
-    build_online_verification_display(&display, Some("bob"), Some(54321), &mut out);
+    let section = build_online_verification_section(&display, Some("bob"), Some(54321));
 
-    assert!(out.contains("Online Verification (GitHub):"));
-    assert!(out.contains("Status:   FAILED"));
-    assert!(out.contains("Reason:   SSH key not found in GitHub account keys"));
-    assert!(!out.contains("Account:"));
+    assert_eq!(section.title, "Online Verification (GitHub)");
+    assert!(section.lines.iter().any(|line| line == "Status:   FAILED"));
+    assert!(section
+        .lines
+        .iter()
+        .any(|line| line == "Reason:   SSH key not found in GitHub account keys"));
+    assert!(!section
+        .lines
+        .iter()
+        .any(|line| line.starts_with("Account:")));
 }
 
 #[test]
 fn test_online_verification_display_no_supported_binding() {
     let display = OnlineVerificationDisplay::NoSupportedBinding;
-    let mut out = String::new();
-    build_online_verification_display(&display, None, None, &mut out);
+    let section = build_online_verification_section(&display, None, None);
 
-    assert!(out.contains("Online Verification:"));
-    assert!(!out.contains("(GitHub)"));
-    assert!(out.contains("Not available (no supported binding configured)"));
+    assert_eq!(section.title, "Online Verification");
+    assert!(!section.title.contains("(GitHub)"));
+    assert!(section
+        .lines
+        .iter()
+        .any(|line| line == "Status:   Not available (no supported binding configured)"));
 }

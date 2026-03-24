@@ -11,14 +11,15 @@ use crate::feature::kv::builder::UnsignedKvDocument;
 use crate::feature::kv::encrypt::{build_kv_encryption, encrypt_kv_entries};
 use crate::feature::verify::kv::verify_kv_content;
 use crate::format::content::KvEncContent;
-use crate::format::kv::detect_token_codec_from_kv_content;
-use crate::format::kv::enc::{parse_kv_wrap, KvEncLine};
+use crate::format::kv::enc::parse_kv_wrap;
 use crate::format::token::TokenCodec;
-use crate::model::kv_enc::{KvEntryValue, KvHeader, KvWrap, VerifiedKvEncDocument};
+use crate::model::kv_enc::{KvHeader, KvWrap, VerifiedKvEncDocument};
 use crate::model::public_key::VerifiedPublicKeyAttested;
 use crate::Result;
 use std::collections::HashMap;
 use uuid::Uuid;
+
+use super::entry_codec::{detect_token_codec, encode_kv_entries_to_tokens};
 
 pub(crate) struct VerifiedKvRewriteSession<'a> {
     verified: VerifiedKvEncDocument,
@@ -94,40 +95,6 @@ impl<'a> VerifiedKvRewriteSession<'a> {
     pub(crate) fn unwrap_master_key(&self) -> Result<MasterKey> {
         unwrap_master_key_from_verified(&self.verified, self.member_id, self.key_ctx, self.debug)
     }
-}
-
-/// Encode encrypted KV entries to token strings.
-pub(crate) fn encode_kv_entries_to_tokens(
-    entries: &[(String, KvEntryValue)],
-    token_codec: TokenCodec,
-    debug: bool,
-    caller: &'static str,
-) -> Result<Vec<(String, String)>> {
-    entries
-        .iter()
-        .map(|(key, entry)| {
-            let token =
-                TokenCodec::encode_debug(token_codec, entry, debug, Some(&entry.k), Some(caller))?;
-            Ok((key.clone(), token))
-        })
-        .collect()
-}
-
-/// Detect the token codec for a verified or parsed KV document.
-pub(crate) fn detect_token_codec(
-    content: &str,
-    lines: &[KvEncLine],
-    override_codec: Option<TokenCodec>,
-) -> TokenCodec {
-    override_codec.unwrap_or_else(|| {
-        lines
-            .iter()
-            .find_map(|line| match line {
-                KvEncLine::Wrap { token } => Some(TokenCodec::detect(token)),
-                _ => None,
-            })
-            .unwrap_or_else(|| detect_token_codec_from_kv_content(content))
-    })
 }
 
 /// Build an unsigned KV document from a verified document and replacement head.

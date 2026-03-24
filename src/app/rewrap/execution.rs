@@ -1,8 +1,9 @@
 // Copyright 2026 Satoshi Ebisawa
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::app::context::{ExecutionContext, SshSigningContext};
+use crate::app::context::execution::ExecutionContext;
 use crate::app::member::promote_members;
+use crate::feature::context::ssh::SshSigningContext;
 use crate::feature::rewrap::file::rewrap_file_document;
 use crate::feature::rewrap::kv::rewrap_kv_document;
 use crate::feature::rewrap::RewrapOptions;
@@ -14,6 +15,7 @@ use std::path::Path;
 
 use super::types::{
     RewrapBatchOutcome, RewrapBatchPlan, RewrapBatchRequest, RewrapFileFailure, RewrapFileSuccess,
+    SingleRewrapRequest,
 };
 
 /// Execute a batch rewrap over already planned files.
@@ -77,14 +79,16 @@ fn rewrap_file_content(
     execution: &ExecutionContext,
     request: &RewrapBatchRequest,
 ) -> Result<String> {
-    let options = build_rewrap_options(request, None);
-    rewrap_file_document(
-        &options,
-        content,
-        &execution.member_id,
-        &execution.key_ctx,
-        Some(plan.workspace_root.as_path()),
-    )
+    let request = SingleRewrapRequest {
+        member_id: &execution.member_id,
+        key_ctx: &execution.key_ctx,
+        workspace_root: Some(plan.workspace_root.as_path()),
+        rotate_key: request.rotate_key,
+        clear_disclosure_history: request.clear_disclosure_history,
+        no_signer_pub: request.no_signer_pub,
+        debug: request.options.verbose,
+    };
+    rewrap_file_content_with_request(content, &request)
 }
 
 fn rewrap_kv_content(
@@ -93,18 +97,48 @@ fn rewrap_kv_content(
     execution: &ExecutionContext,
     request: &RewrapBatchRequest,
 ) -> Result<String> {
-    let options = build_rewrap_options(request, Some(TokenCodec::JsonJcs));
-    rewrap_kv_document(
+    let request = SingleRewrapRequest {
+        member_id: &execution.member_id,
+        key_ctx: &execution.key_ctx,
+        workspace_root: Some(plan.workspace_root.as_path()),
+        rotate_key: request.rotate_key,
+        clear_disclosure_history: request.clear_disclosure_history,
+        no_signer_pub: request.no_signer_pub,
+        debug: request.options.verbose,
+    };
+    rewrap_kv_content_with_request(content, &request)
+}
+
+pub fn rewrap_file_content_with_request(
+    content: &FileEncContent,
+    request: &SingleRewrapRequest<'_>,
+) -> Result<String> {
+    let options = build_single_rewrap_options(request, None);
+    rewrap_file_document(
         &options,
         content,
-        &execution.member_id,
-        &execution.key_ctx,
-        Some(plan.workspace_root.as_path()),
+        request.member_id,
+        request.key_ctx,
+        request.workspace_root,
     )
 }
 
-fn build_rewrap_options(
-    request: &RewrapBatchRequest,
+pub fn rewrap_kv_content_with_request(
+    content: &KvEncContent,
+    request: &SingleRewrapRequest<'_>,
+) -> Result<String> {
+    let options = build_single_rewrap_options(request, Some(TokenCodec::JsonJcs));
+    rewrap_kv_document(
+        &options,
+        content,
+        request.member_id,
+        request.key_ctx,
+        request.workspace_root,
+    )
+}
+
+fn build_single_rewrap_options(
+    request: &SingleRewrapRequest<'_>,
     token_codec: Option<TokenCodec>,
 ) -> RewrapOptions {
     RewrapOptions {
@@ -112,6 +146,6 @@ fn build_rewrap_options(
         clear_disclosure_history: request.clear_disclosure_history,
         token_codec,
         no_signer_pub: request.no_signer_pub,
-        debug: request.options.verbose,
+        debug: request.debug,
     }
 }

@@ -4,9 +4,9 @@
 //! Rewrap feature - re-encryption for kv-enc and file-enc formats.
 
 pub mod common;
-pub mod file;
+pub(crate) mod file;
 pub(crate) mod file_op;
-pub mod kv;
+pub(crate) mod kv;
 pub(crate) mod kv_op;
 
 use crate::feature::context::crypto::CryptoContext;
@@ -17,7 +17,7 @@ use crate::Result;
 
 /// Rewrap operation options.
 #[derive(Debug, Clone)]
-pub struct RewrapOptions {
+pub(crate) struct RewrapOptions {
     pub rotate_key: bool,
     pub clear_disclosure_history: bool,
     pub token_codec: Option<TokenCodec>,
