@@ -9,7 +9,8 @@ use secretenv::feature::key::protection::password_encryption::{
     decrypt_private_key_with_password, encrypt_private_key_with_password,
 };
 use secretenv::model::private_key::{
-    IdentityKeysPrivate, JwkOkpPrivateKey, PrivateKeyAlgorithm, PrivateKeyPlaintext,
+    EncryptedData, IdentityKeysPrivate, JwkOkpPrivateKey, PrivateKey, PrivateKeyAlgorithm,
+    PrivateKeyPlaintext, PrivateKeyProtected,
 };
 
 fn b64(data: &[u8]) -> String {
@@ -129,4 +130,72 @@ fn test_password_encrypt_preserves_metadata() {
     assert_eq!(encrypted.protected.created_at, created_at);
     assert_eq!(encrypted.protected.expires_at, expires_at);
     assert_eq!(encrypted.protected.format, "secretenv.private.key@3");
+}
+
+#[test]
+fn test_password_decrypt_rejects_sshsig_key() {
+    let private_key = PrivateKey {
+        protected: PrivateKeyProtected {
+            format: "secretenv.private.key@3".to_string(),
+            member_id: "alice@example.com".to_string(),
+            kid: "01HN8Z3Q4R5S6T7V8W9X0Y1Z2A".to_string(),
+            alg: PrivateKeyAlgorithm::SshSig {
+                fpr: "SHA256:dummy".to_string(),
+                salt: "AAAA".to_string(),
+                aead: "xchacha20-poly1305".to_string(),
+            },
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+            expires_at: "2027-01-01T00:00:00Z".to_string(),
+        },
+        encrypted: EncryptedData {
+            nonce: "AAAA".to_string(),
+            ct: "AAAA".to_string(),
+        },
+    };
+
+    let result = decrypt_private_key_with_password(&private_key, "test-password");
+    assert!(result.is_err(), "SshSig key should be rejected");
+    let err = result.unwrap_err().to_string();
+    assert!(
+        err.contains("Argon2id") || err.contains("SSH"),
+        "error should mention expected algorithm: {}",
+        err
+    );
+}
+
+#[test]
+fn test_password_decrypt_rejects_unsupported_aead() {
+    let plaintext = build_test_plaintext();
+    let password = "test-password-42";
+
+    let mut encrypted = encrypt_private_key_with_password(
+        &plaintext,
+        "alice@example.com",
+        "01HN8Z3Q4R5S6T7V8W9X0Y1Z2A",
+        "2026-01-01T00:00:00Z",
+        "2027-01-01T00:00:00Z",
+        password,
+    )
+    .expect("encryption should succeed");
+
+    // Tamper with the AEAD field
+    encrypted.protected.alg = match encrypted.protected.alg {
+        PrivateKeyAlgorithm::Argon2id { m, t, p, salt, .. } => PrivateKeyAlgorithm::Argon2id {
+            m,
+            t,
+            p,
+            salt,
+            aead: "aes-256-gcm".to_string(),
+        },
+        other => other,
+    };
+
+    let result = decrypt_private_key_with_password(&encrypted, password);
+    assert!(result.is_err(), "unsupported AEAD should be rejected");
+    let err = result.unwrap_err().to_string();
+    assert!(
+        err.contains("aes-256-gcm") && err.contains("xchacha20-poly1305"),
+        "error should mention both expected and actual AEAD: {}",
+        err
+    );
 }

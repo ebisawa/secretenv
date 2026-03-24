@@ -7,7 +7,10 @@ use ed25519_dalek::SigningKey;
 use rand::rngs::OsRng;
 use secretenv::feature::context::env_key::{is_env_key_mode, load_private_key_from_env};
 use secretenv::feature::key::portable_export::export_private_key_portable;
-use secretenv::model::private_key::{IdentityKeysPrivate, JwkOkpPrivateKey, PrivateKeyPlaintext};
+use secretenv::model::private_key::{
+    EncryptedData, IdentityKeysPrivate, JwkOkpPrivateKey, PrivateKey, PrivateKeyAlgorithm,
+    PrivateKeyPlaintext, PrivateKeyProtected,
+};
 
 use crate::test_utils::EnvGuard;
 
@@ -214,6 +217,100 @@ fn test_verify_own_public_key_mismatch_fails() {
     assert!(
         err.contains("mismatch") || err.contains("Mismatch"),
         "error should mention mismatch: {}",
+        err
+    );
+}
+
+#[test]
+fn test_env_key_rejects_sshsig_algorithm() {
+    let _guard = EnvGuard::new(&[ENV_PRIVATE_KEY, ENV_KEY_PASSWORD]);
+
+    // Build a PrivateKey with SshSig algorithm and encode it
+    let sshsig_key = PrivateKey {
+        protected: PrivateKeyProtected {
+            format: "secretenv.private.key@3".to_string(),
+            member_id: "alice@example.com".to_string(),
+            kid: "01HN8Z3Q4R5S6T7V8W9X0Y1Z2A".to_string(),
+            alg: PrivateKeyAlgorithm::SshSig {
+                fpr: "SHA256:dummy".to_string(),
+                salt: "AAAA".to_string(),
+                aead: "xchacha20-poly1305".to_string(),
+            },
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+            expires_at: "2027-01-01T00:00:00Z".to_string(),
+        },
+        encrypted: EncryptedData {
+            nonce: "AAAA".to_string(),
+            ct: "AAAA".to_string(),
+        },
+    };
+
+    let json = serde_json::to_vec(&sshsig_key).expect("serialize");
+    let encoded = URL_SAFE_NO_PAD.encode(&json);
+
+    std::env::set_var(ENV_PRIVATE_KEY, &encoded);
+    std::env::set_var(ENV_KEY_PASSWORD, "test-password");
+
+    let result = load_private_key_from_env();
+    assert!(result.is_err(), "SshSig key should be rejected");
+    let err = result.unwrap_err().to_string();
+    assert!(
+        err.contains("password-protected") || err.contains("argon2id"),
+        "error should mention password-protected requirement: {}",
+        err
+    );
+}
+
+#[test]
+fn test_verify_own_public_key_kem_mismatch_fails() {
+    use secretenv::feature::context::env_key::verify_own_public_key;
+    use secretenv::model::public_key::{
+        Attestation, Identity, IdentityKeys, JwkOkpPublicKey, PublicKey, PublicKeyProtected,
+    };
+
+    let plaintext = build_test_plaintext();
+
+    // Build a PublicKey with matching sig but DIFFERENT kem
+    let other_kem_sk = x25519_dalek::StaticSecret::random_from_rng(OsRng);
+    let other_kem_pk = x25519_dalek::PublicKey::from(&other_kem_sk);
+
+    let public_key = PublicKey {
+        protected: PublicKeyProtected {
+            format: "secretenv.public.key@3".to_string(),
+            member_id: "alice@example.com".to_string(),
+            kid: "01HN8Z3Q4R5S6T7V8W9X0Y1Z2A".to_string(),
+            identity: Identity {
+                keys: IdentityKeys {
+                    sig: JwkOkpPublicKey {
+                        kty: "OKP".to_string(),
+                        crv: "Ed25519".to_string(),
+                        x: plaintext.keys.sig.x.clone(),
+                    },
+                    kem: JwkOkpPublicKey {
+                        kty: "OKP".to_string(),
+                        crv: "X25519".to_string(),
+                        x: b64(other_kem_pk.as_bytes()),
+                    },
+                },
+                attestation: Attestation {
+                    method: "ssh".to_string(),
+                    pub_: "ssh-ed25519 AAAA test".to_string(),
+                    sig: "dummy".to_string(),
+                },
+            },
+            binding_claims: None,
+            expires_at: "2027-01-01T00:00:00Z".to_string(),
+            created_at: Some("2026-01-01T00:00:00Z".to_string()),
+        },
+        signature: "dummy".to_string(),
+    };
+
+    let result = verify_own_public_key(&plaintext, &public_key);
+    assert!(result.is_err(), "KEM mismatch should fail");
+    let err = result.unwrap_err().to_string();
+    assert!(
+        err.contains("KEM") && err.contains("mismatch"),
+        "error should mention KEM mismatch: {}",
         err
     );
 }

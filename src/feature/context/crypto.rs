@@ -255,7 +255,7 @@ pub fn validate_and_wrap_private_key_password(
 }
 
 /// Validate private key material (OKP structure and Ed25519 consistency)
-fn validate_private_key_material(plaintext: &PrivateKeyPlaintext) -> Result<()> {
+pub(crate) fn validate_private_key_material(plaintext: &PrivateKeyPlaintext) -> Result<()> {
     let kem = &plaintext.keys.kem;
     validate_okp_key(&kem.kty, &kem.crv, jwk::CRV_X25519, &kem.d, &kem.x, "KEM")?;
 

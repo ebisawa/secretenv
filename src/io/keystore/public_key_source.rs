@@ -59,7 +59,13 @@ impl WorkspacePublicKeySource {
 
 impl PublicKeySource for WorkspacePublicKeySource {
     fn load_public_key(&self, member_id: &str) -> Result<PublicKey> {
-        let (public_key, _status) = load_member_file(&self.workspace_path, member_id)?;
+        let (public_key, status) = load_member_file(&self.workspace_path, member_id)?;
+        if status != crate::io::workspace::members::MemberStatus::Active {
+            return Err(crate::Error::Verify {
+                rule: "member-status".to_string(),
+                message: format!("Member '{}' is not active in workspace", member_id),
+            });
+        }
         Ok(public_key)
     }
 

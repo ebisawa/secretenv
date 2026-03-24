@@ -21,7 +21,7 @@ const ENV_KEY_PASSWORD: &str = "SECRETENV_KEY_PASSWORD";
 
 /// Check if environment variable key mode is active
 pub fn is_env_key_mode() -> bool {
-    std::env::var(ENV_PRIVATE_KEY).is_ok()
+    std::env::var_os(ENV_PRIVATE_KEY).is_some()
 }
 
 /// Load private key from environment variables
@@ -31,15 +31,31 @@ pub fn is_env_key_mode() -> bool {
 ///
 /// Returns the verified private key and the member_id from the protected header.
 pub fn load_private_key_from_env() -> Result<(crate::model::verified::VerifiedPrivateKey, String)> {
-    let encoded = std::env::var(ENV_PRIVATE_KEY).map_err(|_| Error::Config {
-        message: format!("{} environment variable is not set", ENV_PRIVATE_KEY),
+    let encoded = std::env::var(ENV_PRIVATE_KEY).map_err(|e| match e {
+        std::env::VarError::NotPresent => Error::Config {
+            message: format!("{} environment variable is not set", ENV_PRIVATE_KEY),
+        },
+        std::env::VarError::NotUnicode(_) => Error::Config {
+            message: format!(
+                "{} environment variable contains invalid UTF-8",
+                ENV_PRIVATE_KEY
+            ),
+        },
     })?;
 
-    let password = Zeroizing::new(std::env::var(ENV_KEY_PASSWORD).map_err(|_| Error::Config {
-        message: format!(
-            "{} environment variable is required when {} is set",
-            ENV_KEY_PASSWORD, ENV_PRIVATE_KEY
-        ),
+    let password = Zeroizing::new(std::env::var(ENV_KEY_PASSWORD).map_err(|e| match e {
+        std::env::VarError::NotPresent => Error::Config {
+            message: format!(
+                "{} environment variable is required when {} is set",
+                ENV_KEY_PASSWORD, ENV_PRIVATE_KEY
+            ),
+        },
+        std::env::VarError::NotUnicode(_) => Error::Config {
+            message: format!(
+                "{} environment variable contains invalid UTF-8",
+                ENV_KEY_PASSWORD
+            ),
+        },
     })?);
 
     let json_bytes =
@@ -56,6 +72,18 @@ pub fn load_private_key_from_env() -> Result<(crate::model::verified::VerifiedPr
             ),
             source: Some(Box::new(e)),
         })?;
+
+    // Validate format field
+    if private_key.protected.format != crate::model::identifiers::format::PRIVATE_KEY_V3 {
+        return Err(Error::Parse {
+            message: format!(
+                "Unsupported PrivateKey format: expected '{}', got '{}'",
+                crate::model::identifiers::format::PRIVATE_KEY_V3,
+                private_key.protected.format
+            ),
+            source: None,
+        });
+    }
 
     // Verify algorithm is Argon2id (password-based)
     match &private_key.protected.alg {

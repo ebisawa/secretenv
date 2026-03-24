@@ -4,6 +4,7 @@
 //! Key management operations (list, activate, remove, export).
 
 use super::{KeyActivateResult, KeyExportResult, KeyInfo, KeyListResult, KeyRemoveResult};
+use crate::feature::context::crypto::validate_private_key_material;
 use crate::feature::key::protection::decrypt_private_key;
 use crate::io::keystore::active::{clear_active_kid, load_active_kid, set_active_kid};
 use crate::io::keystore::member::{remove_key_directory, select_latest_valid_kid};
@@ -164,6 +165,7 @@ pub fn load_and_decrypt_private_key(
 
     let encrypted = load_private_key(&keystore_root, &member_id, &kid)?;
     let plaintext = decrypt_private_key(&encrypted, backend, ssh_pubkey, debug)?;
+    validate_private_key_material(&plaintext)?;
 
     Ok(LoadedPrivateKey {
         plaintext,

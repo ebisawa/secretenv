@@ -84,11 +84,23 @@ pub fn decrypt_private_key_with_password(
     password: &str,
 ) -> Result<PrivateKeyPlaintext> {
     let params = match &private_key.protected.alg {
-        PrivateKeyAlgorithm::Argon2id { m, t, p, .. } => Argon2Params {
-            m: *m,
-            t: *t,
-            p: *p,
-        },
+        PrivateKeyAlgorithm::Argon2id { m, t, p, aead, .. } => {
+            if aead != alg::AEAD_XCHACHA20_POLY1305 {
+                return Err(Error::Crypto {
+                    message: format!(
+                        "Unsupported AEAD algorithm '{}', expected '{}'",
+                        aead,
+                        alg::AEAD_XCHACHA20_POLY1305
+                    ),
+                    source: None,
+                });
+            }
+            Argon2Params {
+                m: *m,
+                t: *t,
+                p: *p,
+            }
+        }
         _ => {
             return Err(Error::Crypto {
                 message: "Expected Argon2id algorithm, got SSH-based".to_string(),
