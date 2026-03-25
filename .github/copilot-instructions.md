@@ -78,8 +78,8 @@ Use repository documentation when needed to judge correctness:
 - `README.md`
 - `README_ja.md`
 - `CLAUDE.md`
-- `guides/product_brief_v3_en.md`
-- `guides/security_design_v3_en.md`
+- `guides/product_brief_en.md`
+- `guides/security_design_en.md`
 - `guides/user_guide_en.md`
 - `schemas/secretenv_schema_v3.json`
 

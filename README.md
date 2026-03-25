@@ -86,8 +86,8 @@ For detailed setup and operational guidance, see the [User Guide](guides/user_gu
 
 If you want the high-level overview first:
 
-- [Product Brief (English)](guides/product_brief_v3_en.md)
-- [Product Brief (Japanese)](guides/product_brief_v3_ja.md)
+- [Product Brief (English)](guides/product_brief_en.md)
+- [Product Brief (Japanese)](guides/product_brief_ja.md)
 
 If you want setup and operational guidance:
 
@@ -96,8 +96,8 @@ If you want setup and operational guidance:
 
 If you want the security model and design details:
 
-- [Security Design (English)](guides/security_design_v3_en.md)
-- [Security Design (Japanese)](guides/security_design_v3_ja.md)
+- [Security Design (English)](guides/security_design_en.md)
+- [Security Design (Japanese)](guides/security_design_ja.md)
 
 ## Status
 

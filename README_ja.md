@@ -86,8 +86,8 @@ secretenv run -- ./my-app
 
 まず全体像を知りたい場合:
 
-- [Product Brief (English)](guides/product_brief_v3_en.md)
-- [Product Brief (Japanese)](guides/product_brief_v3_ja.md)
+- [Product Brief (English)](guides/product_brief_en.md)
+- [Product Brief (Japanese)](guides/product_brief_ja.md)
 
 実際の導入や運用手順を知りたい場合:
 
@@ -96,8 +96,8 @@ secretenv run -- ./my-app
 
 暗号設計やセキュリティモデルを詳しく確認したい場合:
 
-- [Security Design (English)](guides/security_design_v3_en.md)
-- [Security Design (Japanese)](guides/security_design_v3_ja.md)
+- [Security Design (English)](guides/security_design_en.md)
+- [Security Design (Japanese)](guides/security_design_ja.md)
 
 ## Status
 
