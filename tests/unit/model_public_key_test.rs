@@ -200,7 +200,7 @@ fn test_public_key_new_preserves_binding_claims() {
 }
 
 #[test]
-fn test_ulid_format_validation() {
+fn test_canonical_kid_format_validation() {
     // Valid canonical kid (32 chars, Crockford Base32)
     let valid_kids = vec![
         "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD",
