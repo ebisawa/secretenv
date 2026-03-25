@@ -116,7 +116,7 @@ SecretEnv focuses on the following properties.
 | Confidentiality | HPKE + AEAD | Only the current authorized members can decrypt |
 | Tamper detection | Ed25519 signatures | Detects modification of encrypted files and metadata |
 | Context binding | The design ties encrypted data to the file and key names | Prevents swapping content across different secrets or entries |
-| Key rotation consistency | The design distinguishes key generations | Prevents mix-ups during key rotation |
+| Key rotation consistency | The design binds encrypted data to specific key statements | Prevents mix-ups during key rotation and key replacement |
 | Stronger key identity checks | SSH-key binding plus GitHub verification | Reduces the risk of public key substitution |
 
 Core operations are offline-first. Encryption, decryption, signature verification, and `rewrap` work locally. GitHub integration is optional and mainly helps when you want an additional identity check between a public key and an account.

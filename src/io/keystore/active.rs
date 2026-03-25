@@ -4,13 +4,14 @@
 //! Active key management
 
 use crate::support::fs::{atomic, check_permission, load_text};
+use crate::support::kid::normalize_kid;
 use crate::Error;
 use std::fs;
 use std::path::Path;
 
-/// Load the active kid for a member (v3: ULID format)
+/// Load the active kid for a member.
 ///
-/// Returns the kid (26-character ULID) of the active key, or None if no active key is set
+/// Returns the canonical serialized `kid`, or None if no active key is set.
 pub fn load_active_kid(member_id: &str, keystore_root: &Path) -> Result<Option<String>, Error> {
     let active_path = keystore_root.join(member_id).join("active");
 
@@ -25,43 +26,24 @@ pub fn load_active_kid(member_id: &str, keystore_root: &Path) -> Result<Option<S
     let content = load_text(&active_path)?;
 
     // Trim whitespace and newlines
-    let kid = content.trim().to_string();
+    let kid = content.trim();
 
     if kid.is_empty() {
         return Ok(None);
     }
 
-    // Validate ULID format (26 characters, Base32)
-    if kid.len() != 26 {
-        return Err(Error::InvalidArgument {
-            message: format!(
-                "Invalid active kid format: expected 26 characters (ULID), got {}",
-                kid.len()
-            ),
-        });
-    }
-
-    Ok(Some(kid))
+    Ok(Some(normalize_kid(kid)?))
 }
 
-/// Set the active kid for a member (v3: ULID format)
+/// Set the active kid for a member.
 ///
-/// Creates or updates the active file with the specified kid (26-character ULID)
+/// Creates or updates the active file with the canonical serialized `kid`.
 pub fn set_active_kid(member_id: &str, kid: &str, keystore_root: &Path) -> Result<(), Error> {
-    // Validate ULID format (26 characters, Base32)
-    if kid.len() != 26 {
-        return Err(Error::InvalidArgument {
-            message: format!(
-                "Invalid kid format: expected 26 characters (ULID), got {}",
-                kid.len()
-            ),
-        });
-    }
-
+    let canonical_kid = normalize_kid(kid)?;
     let active_path = keystore_root.join(member_id).join("active");
 
     // Write kid to active file atomically (with trailing newline)
-    atomic::save_text_restricted(&active_path, &format!("{}\n", kid))
+    atomic::save_text_restricted(&active_path, &format!("{}\n", canonical_kid))
 }
 
 /// Clear the active kid for a member

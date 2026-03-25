@@ -16,6 +16,7 @@ use crate::test_utils::EnvGuard;
 
 const ENV_PRIVATE_KEY: &str = "SECRETENV_PRIVATE_KEY";
 const ENV_KEY_PASSWORD: &str = "SECRETENV_KEY_PASSWORD";
+const TEST_KID: &str = "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD";
 
 fn b64(data: &[u8]) -> String {
     URL_SAFE_NO_PAD.encode(data)
@@ -50,7 +51,7 @@ fn build_exported_key(plaintext: &PrivateKeyPlaintext, password: &str) -> String
     export_private_key_portable(
         plaintext,
         "alice@example.com",
-        "01HN8Z3Q4R5S6T7V8W9X0Y1Z2A",
+        TEST_KID,
         "2026-01-01T00:00:00Z",
         "2027-01-01T00:00:00Z",
         password,
@@ -98,10 +99,7 @@ fn test_decode_env_private_key() {
 
     let result = load_private_key_from_env(false).expect("should succeed");
     assert_eq!(result.member_id, "alice@example.com");
-    assert_eq!(
-        result.verified_key.proof().kid,
-        "01HN8Z3Q4R5S6T7V8W9X0Y1Z2A"
-    );
+    assert_eq!(result.verified_key.proof().kid, TEST_KID);
     assert_eq!(result.verified_key.proof().ssh_fpr, None);
     assert_eq!(
         result.verified_key.document().keys.sig.x,
@@ -167,7 +165,7 @@ fn test_env_key_rejects_invalid_format() {
         protected: PrivateKeyProtected {
             format: "secretenv.private.key@2".to_string(),
             member_id: "alice@example.com".to_string(),
-            kid: "01HN8Z3Q4R5S6T7V8W9X0Y1Z2A".to_string(),
+            kid: TEST_KID.to_string(),
             alg: PrivateKeyAlgorithm::Argon2id {
                 salt: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
                 aead: "xchacha20-poly1305".to_string(),
@@ -205,9 +203,9 @@ fn test_env_key_rejects_sshsig_algorithm() {
     // Build a PrivateKey with SshSig algorithm and encode it
     let sshsig_key = PrivateKey {
         protected: PrivateKeyProtected {
-            format: "secretenv.private.key@3".to_string(),
+            format: "secretenv.private.key@4".to_string(),
             member_id: "alice@example.com".to_string(),
-            kid: "01HN8Z3Q4R5S6T7V8W9X0Y1Z2A".to_string(),
+            kid: TEST_KID.to_string(),
             alg: PrivateKeyAlgorithm::SshSig {
                 fpr: "SHA256:dummy".to_string(),
                 salt: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),

@@ -4,7 +4,10 @@
 //! Helper functions for keystore operations
 
 use crate::io::keystore::active::load_active_kid;
+use crate::io::keystore::member::select_most_recent_kid;
 use crate::io::keystore::storage::list_kids;
+use crate::support::kid::kid_display_lossy;
+use crate::support::kid::normalize_kid;
 use crate::{Error, Result};
 use std::path::Path;
 
@@ -33,16 +36,18 @@ pub fn resolve_kid(
 ) -> Result<String> {
     // If explicit kid provided, validate and use it
     if let Some(kid) = kid_override {
+        let normalized_kid = normalize_kid(kid)?;
         let kids = list_kids(keystore_root, member_id)?;
-        if !kids.contains(&kid.to_string()) {
+        if !kids.contains(&normalized_kid) {
             return Err(Error::NotFound {
                 message: format!(
                     "Specified kid '{}' not found for member '{}'",
-                    kid, member_id
+                    kid_display_lossy(kid),
+                    member_id
                 ),
             });
         }
-        return Ok(kid.to_string());
+        return Ok(normalized_kid);
     }
 
     // Try to get active kid
@@ -50,17 +55,6 @@ pub fn resolve_kid(
         return Ok(active_kid);
     }
 
-    // Fall back to latest kid
-    let kids = list_kids(keystore_root, member_id)?;
-    if kids.is_empty() {
-        return Err(Error::NotFound {
-            message: format!("No keys found for member: {}", member_id),
-        });
-    }
-
-    // ULIDs sort chronologically, so the last one is the latest
-    // We've checked that kids is not empty above, so last() will return Some
-    kids.into_iter().last().ok_or_else(|| Error::Config {
-        message: "Internal error: kids list became empty after validation".to_string(),
-    })
+    // Fall back to the most recent key by created_at desc, then kid asc.
+    select_most_recent_kid(keystore_root, member_id)
 }

@@ -20,10 +20,11 @@ fn test_decrypt_file_roundtrip() {
         &base64::engine::general_purpose::URL_SAFE_NO_PAD,
         pk.as_bytes(),
     );
-    let alice = create_test_public_key(ALICE_MEMBER_ID, "01HY0G8N3P5X7QRSTV0WXYZ123", &pk_b64);
+    let alice =
+        create_test_public_key(ALICE_MEMBER_ID, "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD", &pk_b64);
     let alice_priv = create_test_private_key(&sk, &pk);
     let (recipient_ids, members) = recipients_and_members(&[(ALICE_MEMBER_ID.to_string(), alice)]);
-    let signer_kid = "01HY0G8N3P5X7QRSTV0WXYZ123";
+    let signer_kid = "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD";
 
     let file_enc_doc = file_enc::encrypt_file_document(
         b"Hello, World!",
@@ -63,15 +64,19 @@ fn test_decrypt_file_multiple_recipients() {
     let recipients_with_keys = vec![
         (
             ALICE_MEMBER_ID.to_string(),
-            create_test_public_key(ALICE_MEMBER_ID, "01HY0G8N3P5X7QRSTV0WXYZ123", &pk1_b64),
+            create_test_public_key(
+                ALICE_MEMBER_ID,
+                "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD",
+                &pk1_b64,
+            ),
         ),
         (
             BOB_MEMBER_ID.to_string(),
-            create_test_public_key(BOB_MEMBER_ID, "01HY0G8N3P5X7QRSTV0WXYZ456", &pk2_b64),
+            create_test_public_key(BOB_MEMBER_ID, "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GH", &pk2_b64),
         ),
     ];
     let (recipient_ids, members) = recipients_and_members(&recipients_with_keys);
-    let signer_kid = "01HY0G8N3P5X7QRSTV0WXYZ123";
+    let signer_kid = "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD";
     let file_enc_doc = file_enc::encrypt_file_document(
         b"Secret data for both",
         &recipient_ids,
@@ -88,14 +93,14 @@ fn test_decrypt_file_multiple_recipients() {
     let decrypted_alice = decrypt_file_document_for_test(
         &file_enc_doc,
         ALICE_MEMBER_ID,
-        "01HY0G8N3P5X7QRSTV0WXYZ123",
+        "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD",
         &create_test_private_key(&sk1, &pk1),
         signer_kid,
     );
     let decrypted_bob = decrypt_file_document_for_test(
         &file_enc_doc,
         BOB_MEMBER_ID,
-        "01HY0G8N3P5X7QRSTV0WXYZ456",
+        "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GH",
         &create_test_private_key(&sk2, &pk2),
         signer_kid,
     );
@@ -113,10 +118,10 @@ fn test_decrypt_file_empty_content() {
     );
     let recipients_with_keys = vec![(
         ALICE_MEMBER_ID.to_string(),
-        create_test_public_key(ALICE_MEMBER_ID, "01HY0G8N3P5X7QRSTV0WXYZ123", &pk_b64),
+        create_test_public_key(ALICE_MEMBER_ID, "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD", &pk_b64),
     )];
     let (recipient_ids, members) = recipients_and_members(&recipients_with_keys);
-    let signer_kid = "01HY0G8N3P5X7QRSTV0WXYZ123";
+    let signer_kid = "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD";
     let file_enc_doc = file_enc::encrypt_file_document(
         b"",
         &recipient_ids,
@@ -150,10 +155,10 @@ fn test_decrypt_file_large_content() {
     );
     let recipients_with_keys = vec![(
         ALICE_MEMBER_ID.to_string(),
-        create_test_public_key(ALICE_MEMBER_ID, "01HY0G8N3P5X7QRSTV0WXYZ123", &pk_b64),
+        create_test_public_key(ALICE_MEMBER_ID, "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD", &pk_b64),
     )];
     let (recipient_ids, members) = recipients_and_members(&recipients_with_keys);
-    let signer_kid = "01HY0G8N3P5X7QRSTV0WXYZ123";
+    let signer_kid = "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD";
     let file_enc_doc = file_enc::encrypt_file_document(
         &content,
         &recipient_ids,
@@ -186,10 +191,10 @@ fn test_decrypt_file_wrong_member_id() {
     );
     let recipients_with_keys = vec![(
         ALICE_MEMBER_ID.to_string(),
-        create_test_public_key(ALICE_MEMBER_ID, "01HY0G8N3P5X7QRSTV0WXYZ123", &pk_b64),
+        create_test_public_key(ALICE_MEMBER_ID, "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD", &pk_b64),
     )];
     let (recipient_ids, members) = recipients_and_members(&recipients_with_keys);
-    let signer_kid = "01HY0G8N3P5X7QRSTV0WXYZ123";
+    let signer_kid = "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD";
     let file_enc_doc = file_enc::encrypt_file_document(
         b"test",
         &recipient_ids,
@@ -215,14 +220,14 @@ fn test_decrypt_file_wrong_member_id() {
     let decrypted_key = make_decrypted_private_key_plaintext(
         create_test_private_key(&sk, &pk),
         BOB_MEMBER_ID,
-        "01HY0G8N3P5X7QRSTV0WXYZ999",
+        "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GJ",
         "sha256:test",
     );
 
     let result = decrypt_file_document(
         &verified_doc,
         BOB_MEMBER_ID,
-        "01HY0G8N3P5X7QRSTV0WXYZ999",
+        "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GJ",
         &decrypted_key,
         false,
     );
@@ -239,10 +244,14 @@ fn test_decrypt_file_wrong_key() {
     );
     let recipients_with_keys = vec![(
         ALICE_MEMBER_ID.to_string(),
-        create_test_public_key(ALICE_MEMBER_ID, "01HY0G8N3P5X7QRSTV0WXYZ123", &pk1_b64),
+        create_test_public_key(
+            ALICE_MEMBER_ID,
+            "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD",
+            &pk1_b64,
+        ),
     )];
     let (recipient_ids, members) = recipients_and_members(&recipients_with_keys);
-    let signer_kid = "01HY0G8N3P5X7QRSTV0WXYZ123";
+    let signer_kid = "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD";
     let file_enc_doc = file_enc::encrypt_file_document(
         b"test",
         &recipient_ids,
@@ -267,14 +276,14 @@ fn test_decrypt_file_wrong_key() {
     let wrong_key = make_decrypted_private_key_plaintext(
         create_test_private_key(&sk2, &pk2),
         ALICE_MEMBER_ID,
-        "01HY0G8N3P5X7QRSTV0WXYZ123",
+        "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD",
         "sha256:test",
     );
 
     let result = decrypt_file_document(
         &verified_doc,
         ALICE_MEMBER_ID,
-        "01HY0G8N3P5X7QRSTV0WXYZ123",
+        "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD",
         &wrong_key,
         false,
     );

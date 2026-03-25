@@ -11,7 +11,7 @@ fn test_set_and_load_active_kid() {
     let temp = TempDir::new().unwrap();
     let keystore_root = temp.path();
     let member_id = "alice@example.com";
-    let test_kid = "01HY0G8N3P5X7QRSTV0WXYZ123";
+    let test_kid = "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD";
 
     set_active_kid(member_id, test_kid, keystore_root).unwrap();
     let active = load_active_kid(member_id, keystore_root).unwrap();
@@ -24,7 +24,7 @@ fn test_clear_active_kid() {
     let temp = TempDir::new().unwrap();
     let keystore_root = temp.path();
     let member_id = "alice@example.com";
-    let test_kid = "01HY0G8N3P5X7QRSTV0WXYZ123";
+    let test_kid = "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD";
 
     set_active_kid(member_id, test_kid, keystore_root).unwrap();
     clear_active_kid(member_id, keystore_root).unwrap();
@@ -41,7 +41,7 @@ fn test_set_active_kid_invalid_length() {
     let invalid_kid = "too-short";
 
     let err = set_active_kid(member_id, invalid_kid, keystore_root).unwrap_err();
-    assert!(err.to_string().contains("Invalid kid format"));
+    assert!(err.to_string().contains("32 Crockford Base32 characters"));
 }
 
 #[test]
@@ -56,5 +56,22 @@ fn test_load_active_kid_invalid_format() {
     std::fs::write(&active_path, invalid_kid).unwrap();
 
     let err = load_active_kid(member_id, keystore_root).unwrap_err();
-    assert!(err.to_string().contains("Invalid active kid format"));
+    assert!(err.to_string().contains("Crockford Base32"));
+}
+
+#[test]
+fn test_set_active_kid_normalizes_display_form() {
+    let temp = TempDir::new().unwrap();
+    let keystore_root = temp.path();
+    let member_id = "alice@example.com";
+
+    set_active_kid(
+        member_id,
+        "7m2q-9d4r-1h8v-w6pk-t3xn-c5jy-2f9a-r8gd",
+        keystore_root,
+    )
+    .unwrap();
+
+    let active = load_active_kid(member_id, keystore_root).unwrap();
+    assert_eq!(active.as_deref(), Some("7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD"));
 }

@@ -32,7 +32,7 @@ fn test_init_registers_member() {
     assert_eq!(public_key.protected.member_id, TEST_MEMBER_ID);
     assert_eq!(
         public_key.protected.format,
-        secretenv::model::identifiers::format::PUBLIC_KEY_V3
+        secretenv::model::identifiers::format::PUBLIC_KEY_V4
     );
 }
 

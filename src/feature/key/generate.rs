@@ -11,10 +11,12 @@ use crate::feature::key::types::KeyNewResult;
 use crate::feature::key::{material, public_key_document};
 use crate::io::keystore::active::set_active_kid;
 use crate::io::keystore::resolver::KeystoreResolver;
-use crate::io::keystore::storage::save_key_pair_atomic;
+use crate::io::keystore::storage::{find_member_by_kid, save_key_pair_atomic};
 use crate::model::private_key::PrivateKey;
 use crate::model::public_key::{GithubAccount, Identity, PublicKey};
 use crate::model::ssh::SshDeterminismStatus;
+use crate::support::kid::kid_display_lossy;
+use crate::Error;
 use crate::Result;
 use ed25519_dalek::{SigningKey, VerifyingKey};
 use std::path::{Path, PathBuf};
@@ -35,7 +37,6 @@ pub struct KeyGenerationOptions {
 }
 
 struct GeneratedKeyMaterial {
-    kid: String,
     kem_sk: X25519SecretKey,
     kem_pk: X25519PublicKey,
     sig_sk: SigningKey,
@@ -75,20 +76,23 @@ pub fn generate_key(opts: KeyGenerationOptions) -> Result<KeyNewResult> {
         debug,
     };
     let public_key = build_public_key_document(&request, &key_material, &ssh_binding)?;
-    let private_key = encrypt_private_key_document(&request, &key_material, &ssh_binding)?;
+    let derived_kid = public_key.protected.kid.clone();
+    ensure_kid_not_in_keystore(&keystore_root, &derived_kid)?;
+    let private_key =
+        encrypt_private_key_document(&request, &key_material, &derived_kid, &ssh_binding)?;
     save_generated_key(
         &keystore_root,
         &member_id,
-        &key_material.kid,
+        &derived_kid,
         &private_key,
         &public_key,
         no_activate,
     )?;
 
-    let key_dir = keystore_root.join(&member_id).join(&key_material.kid);
+    let key_dir = keystore_root.join(&member_id).join(&derived_kid);
     Ok(KeyNewResult {
         member_id,
-        kid: key_material.kid,
+        kid: derived_kid,
         created_at,
         expires_at,
         keystore_root,
@@ -100,10 +104,55 @@ pub fn generate_key(opts: KeyGenerationOptions) -> Result<KeyNewResult> {
     })
 }
 
+fn ensure_kid_not_in_keystore(keystore_root: &Path, kid: &str) -> Result<()> {
+    match find_member_by_kid(keystore_root, kid) {
+        Ok(owner_member_id) => Err(Error::Crypto {
+            message: format!(
+                "kid '{}' already exists in keystore (member_id: '{}')",
+                kid_display_lossy(kid),
+                owner_member_id
+            ),
+            source: None,
+        }),
+        Err(Error::NotFound { .. }) => Ok(()),
+        Err(e) => Err(e),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ensure_kid_not_in_keystore;
+
+    #[test]
+    fn test_ensure_kid_not_in_keystore_passes_when_absent() {
+        let dir = tempfile::tempdir().unwrap();
+        // keystore root directory exists but has no members
+        let result = ensure_kid_not_in_keystore(dir.path(), "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_ensure_kid_not_in_keystore_fails_when_present_any_member() {
+        let dir = tempfile::tempdir().unwrap();
+        let keystore_root = dir.path();
+        std::fs::create_dir_all(
+            keystore_root
+                .join("alice@example.com")
+                .join("7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD"),
+        )
+        .unwrap();
+
+        let err = ensure_kid_not_in_keystore(keystore_root, "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD")
+            .unwrap_err();
+        let msg = format!("{err}");
+        assert!(msg.contains("already exists in keystore"));
+        assert!(msg.contains("alice@example.com"));
+    }
+}
+
 fn generate_key_material() -> Result<GeneratedKeyMaterial> {
-    let (kid, kem_sk, kem_pk, sig_sk, sig_pk) = material::generate_keypairs()?;
+    let (kem_sk, kem_pk, sig_sk, sig_pk) = material::generate_keypairs()?;
     Ok(GeneratedKeyMaterial {
-        kid,
         kem_sk,
         kem_pk,
         sig_sk,
@@ -138,7 +187,6 @@ fn build_public_key_document(
     };
     public_key_document::build_public_key(&public_key_document::PublicKeyBuildParams {
         member_id: request.member_id,
-        kid: &key_material.kid,
         identity,
         created_at: request.created_at,
         expires_at: request.expires_at,
@@ -151,6 +199,7 @@ fn build_public_key_document(
 fn encrypt_private_key_document(
     request: &KeyDocumentBuildRequest<'_>,
     key_material: &GeneratedKeyMaterial,
+    derived_kid: &str,
     ssh_binding: &SshBindingContext,
 ) -> Result<PrivateKey> {
     let plaintext = material::build_private_key_plaintext(
@@ -162,7 +211,7 @@ fn encrypt_private_key_document(
     encrypt_private_key(&PrivateKeyEncryptionParams {
         plaintext: &plaintext,
         member_id: request.member_id.to_string(),
-        kid: key_material.kid.clone(),
+        kid: derived_kid.to_string(),
         backend: ssh_binding.backend.as_ref(),
         ssh_pubkey: &ssh_binding.public_key,
         ssh_fpr: ssh_binding.fingerprint.clone(),

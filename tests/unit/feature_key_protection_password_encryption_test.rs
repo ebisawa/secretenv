@@ -13,6 +13,8 @@ use secretenv::model::private_key::{
     PrivateKeyPlaintext, PrivateKeyProtected,
 };
 
+const TEST_KID: &str = "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD";
+
 fn b64(data: &[u8]) -> String {
     URL_SAFE_NO_PAD.encode(data)
 }
@@ -50,7 +52,7 @@ fn test_password_encrypt_decrypt_roundtrip() {
     let encrypted = encrypt_private_key_with_password(
         &plaintext,
         "alice@example.com",
-        "01HN8Z3Q4R5S6T7V8W9X0Y1Z2A",
+        TEST_KID,
         "2026-01-01T00:00:00Z",
         "2027-01-01T00:00:00Z",
         password,
@@ -71,7 +73,7 @@ fn test_password_encrypt_wrong_password_fails() {
     let encrypted = encrypt_private_key_with_password(
         &plaintext,
         "alice@example.com",
-        "01HN8Z3Q4R5S6T7V8W9X0Y1Z2A",
+        TEST_KID,
         "2026-01-01T00:00:00Z",
         "2027-01-01T00:00:00Z",
         "correct-password",
@@ -93,7 +95,7 @@ fn test_password_encrypt_alg_kdf_is_argon2id() {
     let encrypted = encrypt_private_key_with_password(
         &plaintext,
         "alice@example.com",
-        "01HN8Z3Q4R5S6T7V8W9X0Y1Z2A",
+        TEST_KID,
         "2026-01-01T00:00:00Z",
         "2027-01-01T00:00:00Z",
         "test-password",
@@ -117,7 +119,7 @@ fn test_password_encrypt_alg_kdf_is_argon2id() {
 fn test_password_encrypt_preserves_metadata() {
     let plaintext = build_test_plaintext();
     let member_id = "bob@example.com";
-    let kid = "01HN8Z3Q4R5S6T7V8W9X0Y1Z2A";
+    let kid = TEST_KID;
     let created_at = "2026-03-01T12:00:00Z";
     let expires_at = "2027-03-01T12:00:00Z";
 
@@ -130,16 +132,16 @@ fn test_password_encrypt_preserves_metadata() {
     assert_eq!(encrypted.protected.kid, kid);
     assert_eq!(encrypted.protected.created_at, created_at);
     assert_eq!(encrypted.protected.expires_at, expires_at);
-    assert_eq!(encrypted.protected.format, "secretenv.private.key@3");
+    assert_eq!(encrypted.protected.format, "secretenv.private.key@4");
 }
 
 #[test]
 fn test_password_decrypt_rejects_sshsig_key() {
     let private_key = PrivateKey {
         protected: PrivateKeyProtected {
-            format: "secretenv.private.key@3".to_string(),
+            format: "secretenv.private.key@4".to_string(),
             member_id: "alice@example.com".to_string(),
-            kid: "01HN8Z3Q4R5S6T7V8W9X0Y1Z2A".to_string(),
+            kid: TEST_KID.to_string(),
             alg: PrivateKeyAlgorithm::SshSig {
                 fpr: "SHA256:dummy".to_string(),
                 salt: "AAAA".to_string(),
@@ -172,7 +174,7 @@ fn test_password_decrypt_rejects_unsupported_aead() {
     let mut encrypted = encrypt_private_key_with_password(
         &plaintext,
         "alice@example.com",
-        "01HN8Z3Q4R5S6T7V8W9X0Y1Z2A",
+        TEST_KID,
         "2026-01-01T00:00:00Z",
         "2027-01-01T00:00:00Z",
         password,

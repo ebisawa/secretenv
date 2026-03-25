@@ -70,7 +70,7 @@ fn test_encrypt_and_decrypt_kv() {
     let recipients = vec![ALICE_MEMBER_ID.to_string(), BOB_MEMBER_ID.to_string()];
     let members: Vec<PublicKey> = vec![public1.clone(), public2.clone()];
     let verified_members = make_verified_members(&members);
-    let signer_kid = "01HY0G8N3P5X7QRSTV0WXYZ123";
+    let signer_kid = "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD";
 
     let kv_map = parse_dotenv(input).unwrap();
     let encrypted = encrypt_kv_document(
@@ -137,7 +137,7 @@ fn test_encrypt_empty_input() {
     let recipients = vec![TEST_MEMBER_ID.to_string()];
     let members = vec![public];
     let verified_members = make_verified_members(&members);
-    let signer_kid = "01HY0G8N3P5X7QRSTV0WXYZ123";
+    let signer_kid = "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD";
 
     let kv_map = parse_dotenv(input).unwrap();
     let encrypted = encrypt_kv_document(
@@ -186,7 +186,7 @@ API_KEY=secret123
     let recipients = vec![TEST_MEMBER_ID.to_string()];
     let members = vec![public];
     let verified_members = make_verified_members(&members);
-    let signer_kid = "01HY0G8N3P5X7QRSTV0WXYZ123";
+    let signer_kid = "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD";
 
     let kv_map = parse_dotenv(input).unwrap();
     let encrypted = encrypt_kv_document(
@@ -237,7 +237,7 @@ fn test_large_value_in_kv_enc() {
     let recipients = vec![TEST_MEMBER_ID.to_string()];
     let members = vec![public];
     let verified_members = make_verified_members(&members);
-    let signer_kid = "01HY0G8N3P5X7QRSTV0WXYZ123";
+    let signer_kid = "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD";
 
     let kv_map = parse_dotenv(&input).unwrap();
     let encrypted = encrypt_kv_document(
@@ -282,7 +282,7 @@ fn test_wrap_line_with_many_recipients() {
 
     let input = "KEY=value\n";
     let recipients: Vec<String> = (0..10).map(|i| format!("user{}@example.com", i)).collect();
-    let signer_kid = "01HY0G8N3P5X7QRSTV0WXYZ123";
+    let signer_kid = "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD";
 
     let kv_map = parse_dotenv(input).unwrap();
     let encrypted = encrypt_kv_document(

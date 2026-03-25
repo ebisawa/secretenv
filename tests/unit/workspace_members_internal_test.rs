@@ -61,12 +61,12 @@ fn test_promote_specified_rejects_kid_conflict_with_active_member() {
     fs::create_dir_all(&incoming_dir).unwrap();
     fs::write(
         active_dir.join("alice.json"),
-        build_public_key_json("alice", "01HY0G8N3P5X7QRSTV0WXYZ123"),
+        build_public_key_json("alice", "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD"),
     )
     .unwrap();
     fs::write(
         incoming_dir.join("bob.json"),
-        build_public_key_json("bob", "01HY0G8N3P5X7QRSTV0WXYZ123"),
+        build_public_key_json("bob", "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD"),
     )
     .unwrap();
 
@@ -87,12 +87,12 @@ fn test_promote_specified_rejects_duplicate_kids_within_batch() {
     fs::create_dir_all(&incoming_dir).unwrap();
     fs::write(
         incoming_dir.join("alice.json"),
-        build_public_key_json("alice", "01HY0G8N3P5X7QRSTV0WXYZ123"),
+        build_public_key_json("alice", "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD"),
     )
     .unwrap();
     fs::write(
         incoming_dir.join("bob.json"),
-        build_public_key_json("bob", "01HY0G8N3P5X7QRSTV0WXYZ123"),
+        build_public_key_json("bob", "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD"),
     )
     .unwrap();
 
@@ -137,7 +137,7 @@ fn test_save_member_content_incoming_new() {
         tmp.path(),
         MemberStatus::Incoming,
         "alice",
-        &build_public_key_json("alice", "01HY0G8N3P5X7QRSTV0WXYZ123"),
+        &build_public_key_json("alice", "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD"),
         false,
     )
     .unwrap();
@@ -155,7 +155,7 @@ fn test_save_member_content_creates_directory_if_missing() {
         tmp.path(),
         MemberStatus::Incoming,
         "alice",
-        &build_public_key_json("alice", "01HY0G8N3P5X7QRSTV0WXYZ123"),
+        &build_public_key_json("alice", "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD"),
         false,
     )
     .unwrap();
@@ -171,7 +171,7 @@ fn test_save_member_content_incoming_already_exists_no_force() {
     fs::create_dir_all(&incoming_dir).unwrap();
     fs::write(
         incoming_dir.join("alice.json"),
-        build_public_key_json("alice", "01HY0G8N3P5X7QRSTV0WXYZ123"),
+        build_public_key_json("alice", "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD"),
     )
     .unwrap();
 
@@ -179,12 +179,12 @@ fn test_save_member_content_incoming_already_exists_no_force() {
         tmp.path(),
         MemberStatus::Incoming,
         "alice",
-        &build_public_key_json("alice", "01HY0G8N3P5X7QRSTV0WXYZ124"),
+        &build_public_key_json("alice", "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GE"),
         false,
     );
     assert!(result.is_err());
     let content = fs::read_to_string(incoming_dir.join("alice.json")).unwrap();
-    assert!(content.contains("01HY0G8N3P5X7QRSTV0WXYZ123"));
+    assert!(content.contains("7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD"));
 }
 
 #[test]
@@ -194,7 +194,7 @@ fn test_save_member_content_force_overwrite() {
     fs::create_dir_all(&incoming_dir).unwrap();
     fs::write(
         incoming_dir.join("alice.json"),
-        build_public_key_json("alice", "01HY0G8N3P5X7QRSTV0WXYZ123"),
+        build_public_key_json("alice", "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD"),
     )
     .unwrap();
 
@@ -202,13 +202,13 @@ fn test_save_member_content_force_overwrite() {
         tmp.path(),
         MemberStatus::Incoming,
         "alice",
-        &build_public_key_json("alice", "01HY0G8N3P5X7QRSTV0WXYZ124"),
+        &build_public_key_json("alice", "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GE"),
         true,
     )
     .unwrap();
 
     let content = fs::read_to_string(incoming_dir.join("alice.json")).unwrap();
-    assert!(content.contains("01HY0G8N3P5X7QRSTV0WXYZ124"));
+    assert!(content.contains("7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GE"));
 }
 
 #[test]
@@ -218,7 +218,7 @@ fn test_save_member_content_rejects_kid_conflict_with_active_member() {
     fs::create_dir_all(&active_dir).unwrap();
     fs::write(
         active_dir.join("alice.json"),
-        build_public_key_json("alice", "01HY0G8N3P5X7QRSTV0WXYZ123"),
+        build_public_key_json("alice", "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD"),
     )
     .unwrap();
 
@@ -226,7 +226,7 @@ fn test_save_member_content_rejects_kid_conflict_with_active_member() {
         tmp.path(),
         MemberStatus::Incoming,
         "bob",
-        &build_public_key_json("bob", "01HY0G8N3P5X7QRSTV0WXYZ123"),
+        &build_public_key_json("bob", "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD"),
         false,
     );
 
@@ -241,7 +241,7 @@ fn test_save_member_content_rejects_kid_conflict_with_incoming_member() {
     fs::create_dir_all(&incoming_dir).unwrap();
     fs::write(
         incoming_dir.join("alice.json"),
-        build_public_key_json("alice", "01HY0G8N3P5X7QRSTV0WXYZ123"),
+        build_public_key_json("alice", "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD"),
     )
     .unwrap();
 
@@ -249,7 +249,7 @@ fn test_save_member_content_rejects_kid_conflict_with_incoming_member() {
         tmp.path(),
         MemberStatus::Incoming,
         "bob",
-        &build_public_key_json("bob", "01HY0G8N3P5X7QRSTV0WXYZ123"),
+        &build_public_key_json("bob", "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD"),
         false,
     );
 
@@ -264,7 +264,7 @@ fn test_save_member_content_active_error_uses_active_directory_name() {
     fs::create_dir_all(&active_dir).unwrap();
     fs::write(
         active_dir.join("alice.json"),
-        build_public_key_json("alice", "01HY0G8N3P5X7QRSTV0WXYZ123"),
+        build_public_key_json("alice", "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD"),
     )
     .unwrap();
 
@@ -272,7 +272,7 @@ fn test_save_member_content_active_error_uses_active_directory_name() {
         tmp.path(),
         MemberStatus::Active,
         "alice",
-        &build_public_key_json("alice", "01HY0G8N3P5X7QRSTV0WXYZ124"),
+        &build_public_key_json("alice", "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GE"),
         false,
     );
     let err = result.unwrap_err().to_string();
@@ -287,16 +287,16 @@ fn test_find_active_member_by_kid_returns_matching_member() {
     fs::create_dir_all(&active_dir).unwrap();
     fs::write(
         active_dir.join("alice.json"),
-        build_public_key_json("alice", "01HY0G8N3P5X7QRSTV0WXYZ123"),
+        build_public_key_json("alice", "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD"),
     )
     .unwrap();
     fs::write(
         active_dir.join("bob.json"),
-        build_public_key_json("bob", "01HY0G8N3P5X7QRSTV0WXYZ124"),
+        build_public_key_json("bob", "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GE"),
     )
     .unwrap();
 
-    let found = find_active_member_by_kid(tmp.path(), "01HY0G8N3P5X7QRSTV0WXYZ124")
+    let found = find_active_member_by_kid(tmp.path(), "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GE")
         .unwrap()
         .unwrap();
 
@@ -307,7 +307,7 @@ fn build_public_key_json(member_id: &str, kid: &str) -> String {
     format!(
         r#"{{
   "protected": {{
-    "format": "secretenv.public.key@3",
+    "format": "secretenv.public.key@4",
     "member_id": "{member_id}",
     "kid": "{kid}",
     "identity": {{
@@ -330,5 +330,5 @@ fn build_public_key_json(member_id: &str, kid: &str) -> String {
 }
 
 fn test_kid(index: usize) -> String {
-    format!("01HY0G8N3P5X7QRSTV0WXYZ{:03}", index)
+    format!("7M2Q9D4R1H8VW6PKT3XNC5JY2F9A{:04X}", index)
 }

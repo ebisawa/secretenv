@@ -13,7 +13,9 @@ use rand::rngs::OsRng;
 use secretenv::feature::key::protection::encryption::{
     encrypt_private_key, PrivateKeyEncryptionParams,
 };
-use secretenv::feature::key::public_key_document::build_attestation;
+use secretenv::feature::key::public_key_document::{
+    build_attestation, build_public_key, PublicKeyBuildParams,
+};
 use secretenv::feature::key::ssh_binding::SshBindingContext;
 use secretenv::io::ssh::backend::ssh_keygen::SshKeygenBackend;
 use secretenv::io::ssh::backend::SignatureBackend;
@@ -23,7 +25,7 @@ use secretenv::model::{
     private_key::{IdentityKeysPrivate, JwkOkpPrivateKey, PrivateKey, PrivateKeyPlaintext},
     public_key::{
         AttestationProof, AttestedIdentity, Identity, IdentityKeys, JwkOkpPublicKey, PublicKey,
-        PublicKeyProtected, VerifiedPublicKeyAttested,
+        VerifiedPublicKeyAttested,
     },
     ssh::SshDeterminismStatus,
     verification::SelfSignatureProof,
@@ -32,13 +34,6 @@ use secretenv::model::{
 use secretenv::{Error, Result};
 use std::path::Path;
 use time::OffsetDateTime;
-use ulid::Ulid;
-
-// ============================================================================
-// Constants
-// ============================================================================
-
-const PUBLIC_KEY_FORMAT: &str = secretenv::model::identifiers::format::PUBLIC_KEY_V3;
 
 // ============================================================================
 // SSH context helpers
@@ -120,8 +115,6 @@ pub fn keygen_test(
     let (kem_keypair, kem_pub) = generate_kem_keypair();
     let (sig_keypair, sig_pub) = generate_sig_keypair();
 
-    let kid = Ulid::new().to_string();
-
     let now = OffsetDateTime::now_utc();
     let created_at = secretenv::support::time::build_timestamp_display(now)?;
     let expires_at =
@@ -166,37 +159,19 @@ pub fn keygen_test(
     let ssh_context = build_test_ssh_context(ssh_key_path, ssh_pubkey)?;
     let attestation = build_attestation(&ssh_context, &identity_keys)?;
 
-    let protected = PublicKeyProtected {
-        format: PUBLIC_KEY_FORMAT.to_string(),
-        member_id: member_id.to_string(),
-        kid: kid.clone(),
-        identity: Identity {
-            keys: identity_keys,
-            attestation,
-        },
-        binding_claims: None,
-        expires_at,
-        created_at: Some(created_at),
+    let identity = Identity {
+        keys: identity_keys,
+        attestation,
     };
-
-    // Generate actual self-signature for PublicKey
-    let protected_jcs =
-        secretenv::format::jcs::normalize(&protected).map_err(|e| Error::Crypto {
-            message: format!("Failed to normalize PublicKey protected: {}", e),
-            source: Some(Box::new(e)),
-        })?;
-    let signature_obj = secretenv::crypto::sign::sign_bytes(
-        &protected_jcs,
-        &signing_key,
-        &kid,
-        None,
-        secretenv::model::identifiers::alg::SIGNATURE_ED25519,
-    )?;
-
-    let public_key = PublicKey {
-        protected,
-        signature: signature_obj.sig,
-    };
+    let public_key = build_public_key(&PublicKeyBuildParams {
+        member_id,
+        identity,
+        created_at: &created_at,
+        expires_at: &expires_at,
+        sig_sk: &signing_key,
+        debug: false,
+        github_account: None,
+    })?;
 
     Ok((private_key, public_key))
 }

@@ -392,7 +392,7 @@ fn test_inspect_kv_enc_with_verification_failure_no_keystore() {
     // Replace the SIG line with an invalid signature
     let invalid_signature = Signature {
         alg: "eddsa-ed25519".to_string(),
-        kid: "01HY0G8N3P5X7QRSTV0WXYZ123".to_string(),
+        kid: "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD".to_string(),
         signer_pub: None,
         sig:
             "QUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQQ"
@@ -547,7 +547,7 @@ fn test_verify_kv_document_report_failure_wrong_key() {
     let mut new_lines = Vec::new();
     let wrong_kid_signature = Signature {
         alg: "eddsa-ed25519".to_string(),
-        kid: "01HY0G8N3P5X7QRSTV0WXYZ126".to_string(),
+        kid: "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GG".to_string(),
         signer_pub: None,
         sig:
             "QUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQQ"

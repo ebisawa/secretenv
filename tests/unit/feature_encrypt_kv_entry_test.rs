@@ -19,7 +19,7 @@ use std::collections::HashMap;
 fn make_signing_ctx_for_test() -> (SigningKey, String) {
     (
         SigningKey::generate(&mut OsRng),
-        "01TESTK0D00000000000000000".to_string(),
+        "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD".to_string(),
     )
 }
 
@@ -39,7 +39,7 @@ fn make_verified_member_for_test(signing_key: &SigningKey, kid: &str) -> Verifie
 
     let test_pk = PublicKey {
         protected: PublicKeyProtected {
-            format: "secretenv.public.key@3".to_string(),
+            format: "secretenv.public.key@4".to_string(),
             member_id: "test@example.com".to_string(),
             kid: kid.to_string(),
             identity: Identity {

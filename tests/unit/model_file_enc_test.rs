@@ -37,7 +37,7 @@ fn test_file_enc_document_basic() {
             sid,
             wrap: vec![secretenv::model::common::WrapItem {
                 rid: "alice@example.com".to_string(),
-                kid: "01HY0G8N3P5X7QRSTV0WXYZ123".to_string(),
+                kid: "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD".to_string(),
                 alg: hpke::ALG_HPKE_32_1_3.to_string(),
                 enc: "enc_base64url".to_string(),
                 ct: "ct_base64url".to_string(),
@@ -49,7 +49,7 @@ fn test_file_enc_document_basic() {
         },
         signature: Signature {
             alg: secretenv::model::identifiers::alg::SIGNATURE_ED25519.to_string(),
-            kid: "01HY0G8N3P5X7QRSTV0WXYZ123".to_string(),
+            kid: "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD".to_string(),
             signer_pub: None,
             sig: "signature_base64url".to_string(),
         },
@@ -70,14 +70,14 @@ fn test_recipients_derived_from_wrap() {
             wrap: vec![
                 secretenv::model::common::WrapItem {
                     rid: "alice@example.com".to_string(),
-                    kid: "01HY0G8N3P5X7QRSTV0WXYZ123".to_string(),
+                    kid: "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD".to_string(),
                     alg: hpke::ALG_HPKE_32_1_3.to_string(),
                     enc: "enc1".to_string(),
                     ct: "ct1".to_string(),
                 },
                 secretenv::model::common::WrapItem {
                     rid: "bob@example.com".to_string(),
-                    kid: "01HY0G8N3P5X7QRSTV0WXYZ456".to_string(),
+                    kid: "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GH".to_string(),
                     alg: hpke::ALG_HPKE_32_1_3.to_string(),
                     enc: "enc2".to_string(),
                     ct: "ct2".to_string(),
@@ -90,7 +90,7 @@ fn test_recipients_derived_from_wrap() {
         },
         signature: Signature {
             alg: secretenv::model::identifiers::alg::SIGNATURE_ED25519.to_string(),
-            kid: "01HY0G8N3P5X7QRSTV0WXYZ123".to_string(),
+            kid: "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD".to_string(),
             signer_pub: None,
             sig: "sig".to_string(),
         },
@@ -118,7 +118,7 @@ fn test_payload_serialization() {
         },
         signature: Signature {
             alg: secretenv::model::identifiers::alg::SIGNATURE_ED25519.to_string(),
-            kid: "01HY0G8N3P5X7QRSTV0WXYZ123".to_string(),
+            kid: "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD".to_string(),
             signer_pub: None,
             sig: "sig".to_string(),
         },

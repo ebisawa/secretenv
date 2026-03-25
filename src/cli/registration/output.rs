@@ -8,6 +8,7 @@ use crate::app::registration::types::{
     RegistrationTarget,
 };
 use crate::cli::key::common::print_key_generation_binding_info;
+use crate::support::kid::build_kid_display;
 use crate::support::path::display_path_relative_to_cwd;
 use crate::Error;
 
@@ -58,9 +59,11 @@ fn print_next_steps(mode: RegistrationMode, is_new_workspace: bool) {
 fn print_existing_member_message(outcome: &RegistrationOutcome) {
     eprintln!();
     eprintln!("Already a member of this workspace.");
+    let kid_display = build_kid_display(&outcome.key_result.kid)
+        .unwrap_or_else(|_| outcome.key_result.kid.clone());
     eprintln!(
         "Current key: {} (active, expires {})",
-        outcome.key_result.kid,
+        kid_display,
         build_expiry_date_display(&outcome.key_result.expires_at)
     );
 }
@@ -83,11 +86,12 @@ fn print_new_workspace_created(workspace_path: &Path) {
 }
 
 fn print_key_info(member_id: &str, key_result: &MemberKeySetupResult) -> Result<(), Error> {
+    let kid_display = build_kid_display(&key_result.kid).unwrap_or_else(|_| key_result.kid.clone());
     if key_result.created {
         print_generated_key_binding_info(key_result)?;
         eprintln!();
         eprintln!("Generated key for '{}':", member_id);
-        eprintln!("  Key ID:  {}", key_result.kid);
+        eprintln!("  Key ID:  {}", kid_display);
         eprintln!(
             "  Expires: {}",
             build_expiry_date_display(&key_result.expires_at)
@@ -95,10 +99,7 @@ fn print_key_info(member_id: &str, key_result: &MemberKeySetupResult) -> Result<
         return Ok(());
     }
 
-    eprintln!(
-        "Using existing key for '{}' ({})",
-        member_id, key_result.kid
-    );
+    eprintln!("Using existing key for '{}' ({})", member_id, kid_display);
     Ok(())
 }
 

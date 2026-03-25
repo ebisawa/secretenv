@@ -13,17 +13,20 @@ use secretenv::model::public_key::{
 use std::fs;
 use tempfile::TempDir;
 
+const TEST_KID: &str = "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD";
+const TEST_KID_2: &str = "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GE";
+
 #[test]
 fn test_save_and_load_private_key() {
     let temp_dir = TempDir::new().unwrap();
     let keystore_root = temp_dir.path();
 
     let member_id = TEST_MEMBER_ID;
-    let kid = "01HN8Z3Q4R5S6T7V8W9X0Y1Z2A";
+    let kid = TEST_KID;
 
     let private_key = PrivateKey {
         protected: PrivateKeyProtected {
-            format: secretenv::model::identifiers::format::PRIVATE_KEY_V3.to_string(),
+            format: secretenv::model::identifiers::format::PRIVATE_KEY_V4.to_string(),
             member_id: member_id.to_string(),
             kid: kid.to_string(),
             alg: PrivateKeyAlgorithm::SshSig {
@@ -42,7 +45,7 @@ fn test_save_and_load_private_key() {
 
     let public_key = PublicKey {
         protected: PublicKeyProtected {
-            format: secretenv::model::identifiers::format::PUBLIC_KEY_V3.to_string(),
+            format: secretenv::model::identifiers::format::PUBLIC_KEY_V4.to_string(),
             member_id: member_id.to_string(),
             kid: kid.to_string(),
             identity: Identity {
@@ -93,11 +96,11 @@ fn test_save_and_load_public_key() {
     let keystore_root = temp_dir.path();
 
     let member_id = TEST_MEMBER_ID;
-    let kid = "01HN8Z3Q4R5S6T7V8W9X0Y1Z2A";
+    let kid = TEST_KID;
 
     let public_key = PublicKey {
         protected: PublicKeyProtected {
-            format: secretenv::model::identifiers::format::PUBLIC_KEY_V3.to_string(),
+            format: secretenv::model::identifiers::format::PUBLIC_KEY_V4.to_string(),
             member_id: member_id.to_string(),
             kid: kid.to_string(),
             identity: Identity {
@@ -148,8 +151,8 @@ fn test_list_kids() {
     let keystore_root = temp_dir.path();
 
     let member_id = TEST_MEMBER_ID;
-    let kid1 = "01HN8Z3Q4R5S6T7V8W9X0Y1Z2A";
-    let kid2 = "01HN8Z3Q4R5S6T7V8W9X0Y1Z2B";
+    let kid1 = TEST_KID;
+    let kid2 = TEST_KID_2;
 
     // Create key directories
     let member_path = keystore_root.join(member_id);

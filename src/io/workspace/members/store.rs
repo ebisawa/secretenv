@@ -8,6 +8,7 @@ use super::paths::{
 use crate::format::schema::document::{parse_public_key_file, parse_public_key_str};
 use crate::model::public_key::PublicKey;
 use crate::support::fs::list_dir;
+use crate::support::kid::kid_display_lossy;
 use crate::support::path::display_path_relative_to_cwd;
 use crate::{Error, Result};
 use std::collections::BTreeMap;
@@ -226,7 +227,10 @@ pub fn load_active_member_index_by_kid(
         let kid = member.protected.kid.clone();
         if index.insert(kid.clone(), member).is_some() {
             return Err(Error::Config {
-                message: format!("Ambiguous key: kid '{}' found in multiple members", kid),
+                message: format!(
+                    "Ambiguous key: kid '{}' found in multiple members",
+                    kid_display_lossy(&kid)
+                ),
             });
         }
     }
@@ -335,7 +339,7 @@ fn duplicate_kid_error(existing: &MemberKidCandidate, candidate: &MemberKidCandi
     Error::Config {
         message: format!(
             "Duplicate kid '{}' in workspace members: {}/'{}' conflicts with {}/'{}'",
-            candidate.kid,
+            kid_display_lossy(&candidate.kid),
             member_status_dir_name(existing.status),
             existing.member_id,
             member_status_dir_name(candidate.status),

@@ -67,7 +67,7 @@ fn test_key_export_explicit_kid() {
     );
     assert_eq!(
         exported.protected.format,
-        format::PUBLIC_KEY_V3,
+        format::PUBLIC_KEY_V4,
         "Exported format should be v3"
     );
 
@@ -117,7 +117,7 @@ fn test_key_export_active() {
 
     assert_eq!(
         exported.protected.format,
-        format::PUBLIC_KEY_V3,
+        format::PUBLIC_KEY_V4,
         "Exported format should be v3"
     );
 
@@ -166,7 +166,7 @@ fn test_key_export_private_writes_password_protected_key_file() {
         serde_json::from_slice(&json).expect("Should deserialize as PrivateKey");
 
     assert_eq!(private_key.protected.member_id, member_id);
-    assert_eq!(private_key.protected.format, format::PRIVATE_KEY_V3);
+    assert_eq!(private_key.protected.format, format::PRIVATE_KEY_V4);
 
     drop(ssh_temp);
 }
@@ -215,7 +215,7 @@ fn test_key_export_private_writes_base64url_to_stdout_with_stdout_flag() {
         serde_json::from_slice(&json).expect("Should deserialize stdout as PrivateKey");
 
     assert_eq!(private_key.protected.member_id, member_id);
-    assert_eq!(private_key.protected.format, format::PRIVATE_KEY_V3);
+    assert_eq!(private_key.protected.format, format::PRIVATE_KEY_V4);
 
     drop(ssh_temp);
 }

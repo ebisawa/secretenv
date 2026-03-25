@@ -9,7 +9,7 @@ use secretenv::model::signature::Signature;
 fn test_signature_serialization() {
     let sig = Signature {
         alg: secretenv::model::identifiers::alg::SIGNATURE_ED25519.to_string(),
-        kid: "01HY0G8N3P5X7QRSTV0WXYZ123".to_string(),
+        kid: "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD".to_string(),
         signer_pub: None,
         sig: "SGVsbG8gV29ybGQ".to_string(),
     };
@@ -20,7 +20,7 @@ fn test_signature_serialization() {
         secretenv::model::identifiers::alg::SIGNATURE_ED25519
     )));
     assert!(!json.contains("\"signer\""));
-    assert!(json.contains("\"kid\":\"01HY0G8N3P5X7QRSTV0WXYZ123\""));
+    assert!(json.contains("\"kid\":\"7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD\""));
     assert!(json.contains("\"sig\":\"SGVsbG8gV29ybGQ\""));
 }
 
@@ -28,7 +28,7 @@ fn test_signature_serialization() {
 fn test_signature_deserialization() {
     let json = r#"{
         "alg": "eddsa-ed25519",
-        "kid": "01HXYZ1234ABCDEFGHJKMNPQRS",
+        "kid": "4Z8N6K1W3Q7RT5YH9M2PC4XV8D1B6FJA",
         "sig": "YWJjZGVmZ2hp"
     }"#;
 
@@ -37,7 +37,7 @@ fn test_signature_deserialization() {
         sig.alg,
         secretenv::model::identifiers::alg::SIGNATURE_ED25519
     );
-    assert_eq!(sig.kid, "01HXYZ1234ABCDEFGHJKMNPQRS");
+    assert_eq!(sig.kid, "4Z8N6K1W3Q7RT5YH9M2PC4XV8D1B6FJA");
     assert_eq!(sig.sig, "YWJjZGVmZ2hp");
     assert!(sig.signer_pub.is_none());
 }
@@ -46,7 +46,7 @@ fn test_signature_deserialization() {
 fn test_signature_roundtrip() {
     let original = Signature {
         alg: secretenv::model::identifiers::alg::SIGNATURE_ED25519.to_string(),
-        kid: "01HTEST123456789ABCDEFGHIJK".to_string(),
+        kid: "RDKJ8YHMPPJHW7QC3446GPNXHNRTX61N".to_string(),
         signer_pub: None,
         sig: "dGVzdHNpZ25hdHVyZQ".to_string(),
     };

@@ -8,9 +8,9 @@ use secretenv::model::public_key::*;
 fn test_public_key_deserialization() {
     let json_str = r#"{
         "protected": {
-            "format": "secretenv.public.key@3",
+            "format": "secretenv.public.key@4",
             "member_id": "alice@example.com",
-            "kid": "01HN8Z3Q4R5S6T7V8W9X0Y1Z2A",
+            "kid": "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD",
             "identity": {
                 "keys": {
                     "kem": {
@@ -40,10 +40,10 @@ fn test_public_key_deserialization() {
 
     assert_eq!(
         pk.protected.format,
-        secretenv::model::identifiers::format::PUBLIC_KEY_V3
+        secretenv::model::identifiers::format::PUBLIC_KEY_V4
     );
     assert_eq!(pk.protected.member_id, ALICE_MEMBER_ID);
-    assert_eq!(pk.protected.kid, "01HN8Z3Q4R5S6T7V8W9X0Y1Z2A");
+    assert_eq!(pk.protected.kid, "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD");
     assert_eq!(pk.protected.identity.keys.kem.kty, "OKP");
     assert_eq!(
         pk.protected.identity.keys.kem.crv,
@@ -59,9 +59,9 @@ fn test_public_key_deserialization() {
 fn test_public_key_serialization() {
     let pk = PublicKey {
         protected: PublicKeyProtected {
-            format: secretenv::model::identifiers::format::PUBLIC_KEY_V3.to_string(),
+            format: secretenv::model::identifiers::format::PUBLIC_KEY_V4.to_string(),
             member_id: BOB_MEMBER_ID.to_string(),
-            kid: "01HN8Z3Q4R5S6T7V8W9X0Y1Z2B".to_string(),
+            kid: "4Z8N6K1W3Q7RT5YH9M2PC4XV8D1B6FJA".to_string(),
             identity: Identity {
                 keys: IdentityKeys {
                     kem: JwkOkpPublicKey {
@@ -93,19 +93,22 @@ fn test_public_key_serialization() {
 
     assert_eq!(
         json_value["protected"]["format"],
-        secretenv::model::identifiers::format::PUBLIC_KEY_V3
+        secretenv::model::identifiers::format::PUBLIC_KEY_V4
     );
     assert_eq!(json_value["protected"]["member_id"], BOB_MEMBER_ID);
-    assert_eq!(json_value["protected"]["kid"], "01HN8Z3Q4R5S6T7V8W9X0Y1Z2B");
+    assert_eq!(
+        json_value["protected"]["kid"],
+        "4Z8N6K1W3Q7RT5YH9M2PC4XV8D1B6FJA"
+    );
 }
 
 #[test]
 fn test_public_key_roundtrip() {
     let original = PublicKey {
         protected: PublicKeyProtected {
-            format: secretenv::model::identifiers::format::PUBLIC_KEY_V3.to_string(),
+            format: secretenv::model::identifiers::format::PUBLIC_KEY_V4.to_string(),
             member_id: TEST_MEMBER_ID.to_string(),
-            kid: "01HN8Z3Q4R5S6T7V8W9X0Y1Z2C".to_string(),
+            kid: "2C7R5M9K8D1XV4PH6T3NB2QJ9F7AK5WE".to_string(),
             identity: Identity {
                 keys: IdentityKeys {
                     kem: JwkOkpPublicKey {
@@ -157,7 +160,7 @@ fn test_public_key_new_preserves_binding_claims() {
     };
     let public_key = PublicKey::new(
         TEST_MEMBER_ID.to_string(),
-        "01HN8Z3Q4R5S6T7V8W9X0Y1Z2D".to_string(),
+        "6Q4T8N1R5K3VM7PH2C9XD4BJ8F6AW2YE".to_string(),
         Identity {
             keys: IdentityKeys {
                 kem: JwkOkpPublicKey {
@@ -198,16 +201,16 @@ fn test_public_key_new_preserves_binding_claims() {
 
 #[test]
 fn test_ulid_format_validation() {
-    // Valid ULID (26 chars, Crockford's Base32)
-    let valid_ulids = vec![
-        "01HN8Z3Q4R5S6T7V8W9X0Y1Z2A",
-        "01ARZ3NDEKTSV4RRFFQ69G5FAV",
-        "7ZZZZZZZZZZZZZZZZZZZZZZZZZ",
+    // Valid canonical kid (32 chars, Crockford Base32)
+    let valid_kids = vec![
+        "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD",
+        "RDKJ8YHMPPJHW7QC3446GPNXHNRTX61N",
+        "ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ",
     ];
 
-    for ulid in valid_ulids {
-        assert_eq!(ulid.len(), 26);
-        assert!(ulid
+    for kid in valid_kids {
+        assert_eq!(kid.len(), 32);
+        assert!(kid
             .chars()
             .all(|c| "0123456789ABCDEFGHJKMNPQRSTVWXYZ".contains(c)));
     }

@@ -4,12 +4,14 @@
 //! Public key verification.
 
 use crate::format::jcs;
+use crate::format::kid::derive_public_key_kid;
 use crate::io::ssh::verify::verify_attestation;
 use crate::model::public_key::{
     AttestationProof, AttestedIdentity, PublicKey, VerifiedPublicKey, VerifiedPublicKeyAttested,
 };
 use crate::model::verification::SelfSignatureProof;
 use crate::support::base64url::{b64_decode, b64_decode_array};
+use crate::support::kid::kid_display_lossy;
 use crate::{Error, Result};
 use ed25519_dalek::{Verifier, VerifyingKey};
 use tracing::debug;
@@ -29,6 +31,8 @@ pub struct VerifiedPublicKeyForVerification {
 /// # Returns
 /// `VerifiedPublicKey` if self-signature is valid, error otherwise
 pub fn verify_public_key(public_key: &PublicKey, debug: bool) -> Result<VerifiedPublicKey> {
+    validate_derived_kid(public_key)?;
+
     let protected_jcs = jcs::normalize(&public_key.protected).map_err(|e| Error::Crypto {
         message: format!("Failed to normalize PublicKey protected: {}", e),
         source: Some(Box::new(e)),
@@ -134,6 +138,28 @@ fn collect_public_key_verification_warnings(doc: &PublicKey) -> Result<Vec<Strin
         warnings.push(warning);
     }
     Ok(warnings)
+}
+
+fn validate_derived_kid(public_key: &PublicKey) -> Result<()> {
+    let mut protected_without_kid = serde_json::to_value(&public_key.protected)?;
+    let object = protected_without_kid.as_object_mut().ok_or_else(|| {
+        Error::verify("V-KID-DERIVED", "PublicKey protected must be a JSON object")
+    })?;
+    object.remove("kid");
+
+    let derived_kid = derive_public_key_kid(&protected_without_kid)?;
+    if public_key.protected.kid != derived_kid {
+        return Err(Error::verify(
+            "V-KID-DERIVED",
+            format!(
+                "PublicKey protected.kid '{}' does not match derived kid '{}'",
+                kid_display_lossy(&public_key.protected.kid),
+                kid_display_lossy(&derived_kid)
+            ),
+        ));
+    }
+
+    Ok(())
 }
 
 pub(crate) fn public_key_expiry_warning(doc: &PublicKey) -> Result<Option<String>> {

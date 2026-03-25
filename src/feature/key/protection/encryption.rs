@@ -1,9 +1,9 @@
 // Copyright 2026 Satoshi Ebisawa
 // SPDX-License-Identifier: Apache-2.0
 
-//! SSH Key Protection for PrivateKey v3
+//! SSH Key Protection for PrivateKey v4
 //!
-//! PrivateKey v3 must be encrypted with an SSH Ed25519 key.
+//! PrivateKey v4 must be encrypted with an SSH Ed25519 key.
 //! This module implements the encryption and decryption process.
 
 use super::key_derivation;
@@ -18,6 +18,7 @@ use crate::model::private_key::{
     EncryptedData, PrivateKey, PrivateKeyAlgorithm, PrivateKeyPlaintext, PrivateKeyProtected,
 };
 use crate::support::base64url::{b64_decode_array, b64_decode_ciphertext, b64_encode};
+use crate::support::kid::kid_display_lossy;
 use crate::{Error, Result};
 use tracing::debug;
 
@@ -31,7 +32,7 @@ fn build_protected_header(
     expires_at: String,
 ) -> PrivateKeyProtected {
     PrivateKeyProtected {
-        format: format::PRIVATE_KEY_V3.to_string(),
+        format: format::PRIVATE_KEY_V4.to_string(),
         member_id: member_id.clone(),
         kid: kid.clone(),
         alg: PrivateKeyAlgorithm::SshSig {
@@ -64,7 +65,8 @@ pub(super) fn serialize_and_encrypt(
     if debug {
         debug!(
             "[CRYPTO] XChaCha20-Poly1305: {}: encrypt (kid: {})",
-            caller, protected.kid
+            caller,
+            kid_display_lossy(&protected.kid)
         );
     }
     let (ct, nonce) = xchacha::encrypt_with_nonce(enc_key, &plaintext, &aad)?;
@@ -107,7 +109,8 @@ pub(super) fn decrypt_and_deserialize(
     if debug {
         debug!(
             "[CRYPTO] XChaCha20-Poly1305: {}: decrypt (kid: {})",
-            caller, kid
+            caller,
+            kid_display_lossy(kid)
         );
     }
     let plaintext_json = xchacha::decrypt(enc_key, nonce, aad, ct)?;

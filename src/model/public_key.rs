@@ -5,6 +5,7 @@
 //!
 //! Includes attested identity and verified public key types for functional domain modeling.
 
+use crate::model::identifiers::format::PUBLIC_KEY_V4;
 use serde::{Deserialize, Serialize};
 
 pub use super::public_key_verified::{
@@ -12,7 +13,7 @@ pub use super::public_key_verified::{
     VerifiedPublicKeyAttested,
 };
 
-/// PublicKey v3 document (Signed container)
+/// PublicKey v4 document (signed container)
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct PublicKey {
@@ -27,13 +28,13 @@ pub struct PublicKey {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct PublicKeyProtected {
-    /// Format identifier: "secretenv.public.key@3"
+    /// Format identifier: "secretenv.public.key@4"
     pub format: String,
 
     /// Member ID (RFC 5322 email format)
     pub member_id: String,
 
-    /// Key ID (ULID, 26 characters)
+    /// Statement ID (canonical Crockford Base32, 32 characters)
     pub kid: String,
 
     /// Identity (Keys + Attestation)
@@ -126,7 +127,7 @@ impl PublicKey {
         signature: String,
     ) -> Self {
         let protected = PublicKeyProtected {
-            format: "secretenv.public.key@3".to_string(),
+            format: PUBLIC_KEY_V4.to_string(),
             member_id,
             kid,
             identity,

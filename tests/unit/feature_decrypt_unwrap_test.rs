@@ -514,14 +514,14 @@ fn test_unwrap_master_key_for_file_wrong_member() {
             },
         },
         "bob@example.com",
-        "01HY0G8N3P5X7QRSTV0WXYZ999",
+        "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GJ",
         "sha256:test",
     );
 
     let result = unwrap_master_key_for_file(
         &verified,
         "bob@example.com",
-        "01HY0G8N3P5X7QRSTV0WXYZ999", // Different kid (should fail)
+        "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GJ", // Different kid (should fail)
         &dummy_private_key,
         false,
     );

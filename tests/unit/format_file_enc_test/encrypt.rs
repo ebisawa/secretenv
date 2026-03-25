@@ -18,7 +18,8 @@ fn test_encrypt_file_basic() {
         &base64::engine::general_purpose::URL_SAFE_NO_PAD,
         pk.as_bytes(),
     );
-    let alice = create_test_public_key(ALICE_MEMBER_ID, "01HY0G8N3P5X7QRSTV0WXYZ123", &pk_b64);
+    let alice =
+        create_test_public_key(ALICE_MEMBER_ID, "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD", &pk_b64);
     let recipients_with_keys = [(ALICE_MEMBER_ID.to_string(), alice)];
     let recipient_ids: Vec<String> = recipients_with_keys
         .iter()
@@ -29,7 +30,7 @@ fn test_encrypt_file_basic() {
         .map(|(_, pk)| make_attested_public_key(pk.clone()))
         .collect();
 
-    let signer_kid = "01HY0G8N3P5X7QRSTV0WXYZ123";
+    let signer_kid = "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD";
     let file_enc_doc = file_enc::encrypt_file_document(
         b"Hello, World!",
         &recipient_ids,
@@ -86,11 +87,15 @@ fn test_encrypt_file_multiple_recipients() {
     let recipients_with_keys = [
         (
             ALICE_MEMBER_ID.to_string(),
-            create_test_public_key(ALICE_MEMBER_ID, "01HY0G8N3P5X7QRSTV0WXYZ123", &pk1_b64),
+            create_test_public_key(
+                ALICE_MEMBER_ID,
+                "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD",
+                &pk1_b64,
+            ),
         ),
         (
             BOB_MEMBER_ID.to_string(),
-            create_test_public_key(BOB_MEMBER_ID, "01HY0G8N3P5X7QRSTV0WXYZ456", &pk2_b64),
+            create_test_public_key(BOB_MEMBER_ID, "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GH", &pk2_b64),
         ),
     ];
     let recipient_ids: Vec<String> = recipients_with_keys
@@ -108,7 +113,7 @@ fn test_encrypt_file_multiple_recipients() {
         &members,
         &SigningContext {
             signing_key: &generate_ed25519_keypair([2u8; 32]),
-            signer_kid: "01HY0G8N3P5X7QRSTV0WXYZ123",
+            signer_kid: "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD",
             signer_pub: None,
             debug: false,
         },
@@ -128,13 +133,13 @@ fn test_encrypt_file_multiple_recipients() {
         wrap.iter()
             .find(|item| item["rid"] == ALICE_MEMBER_ID)
             .unwrap()["kid"],
-        "01HY0G8N3P5X7QRSTV0WXYZ123"
+        "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD"
     );
     assert_eq!(
         wrap.iter()
             .find(|item| item["rid"] == BOB_MEMBER_ID)
             .unwrap()["kid"],
-        "01HY0G8N3P5X7QRSTV0WXYZ456"
+        "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GH"
     );
 }
 
@@ -147,7 +152,7 @@ fn test_encrypt_file_empty_content() {
     );
     let recipients_with_keys = [(
         ALICE_MEMBER_ID.to_string(),
-        create_test_public_key(ALICE_MEMBER_ID, "01HY0G8N3P5X7QRSTV0WXYZ123", &pk_b64),
+        create_test_public_key(ALICE_MEMBER_ID, "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD", &pk_b64),
     )];
     let recipient_ids: Vec<String> = recipients_with_keys
         .iter()
@@ -164,7 +169,7 @@ fn test_encrypt_file_empty_content() {
         &members,
         &SigningContext {
             signing_key: &generate_ed25519_keypair([2u8; 32]),
-            signer_kid: "01HY0G8N3P5X7QRSTV0WXYZ123",
+            signer_kid: "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD",
             signer_pub: None,
             debug: false,
         },
@@ -181,7 +186,7 @@ fn test_encrypt_file_large_content() {
     );
     let recipients_with_keys = [(
         ALICE_MEMBER_ID.to_string(),
-        create_test_public_key(ALICE_MEMBER_ID, "01HY0G8N3P5X7QRSTV0WXYZ123", &pk_b64),
+        create_test_public_key(ALICE_MEMBER_ID, "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD", &pk_b64),
     )];
     let recipient_ids: Vec<String> = recipients_with_keys
         .iter()
@@ -198,7 +203,7 @@ fn test_encrypt_file_large_content() {
         &members,
         &SigningContext {
             signing_key: &generate_ed25519_keypair([2u8; 32]),
-            signer_kid: "01HY0G8N3P5X7QRSTV0WXYZ123",
+            signer_kid: "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD",
             signer_pub: None,
             debug: false,
         },
@@ -215,7 +220,7 @@ fn test_encrypt_file_name_is_set() {
     );
     let recipients_with_keys = [(
         ALICE_MEMBER_ID.to_string(),
-        create_test_public_key(ALICE_MEMBER_ID, "01HY0G8N3P5X7QRSTV0WXYZ123", &pk_b64),
+        create_test_public_key(ALICE_MEMBER_ID, "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD", &pk_b64),
     )];
     let recipient_ids: Vec<String> = recipients_with_keys
         .iter()
@@ -232,7 +237,7 @@ fn test_encrypt_file_name_is_set() {
         &members,
         &SigningContext {
             signing_key: &generate_ed25519_keypair([2u8; 32]),
-            signer_kid: "01HY0G8N3P5X7QRSTV0WXYZ123",
+            signer_kid: "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD",
             signer_pub: None,
             debug: false,
         },
@@ -249,7 +254,7 @@ fn test_encrypt_file_sid_is_uuid() {
     );
     let recipients_with_keys = vec![(
         ALICE_MEMBER_ID.to_string(),
-        create_test_public_key(ALICE_MEMBER_ID, "01HY0G8N3P5X7QRSTV0WXYZ123", &pk_b64),
+        create_test_public_key(ALICE_MEMBER_ID, "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD", &pk_b64),
     )];
     let (recipient_ids, members) = recipients_and_members(&recipients_with_keys);
 
@@ -259,7 +264,7 @@ fn test_encrypt_file_sid_is_uuid() {
         &members,
         &SigningContext {
             signing_key: &generate_ed25519_keypair([2u8; 32]),
-            signer_kid: "01HY0G8N3P5X7QRSTV0WXYZ123",
+            signer_kid: "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD",
             signer_pub: None,
             debug: false,
         },
@@ -278,14 +283,15 @@ fn test_encrypt_file_deterministic_structure() {
         &base64::engine::general_purpose::URL_SAFE_NO_PAD,
         pk.as_bytes(),
     );
-    let alice = create_test_public_key(ALICE_MEMBER_ID, "01HY0G8N3P5X7QRSTV0WXYZ123", &pk_b64);
+    let alice =
+        create_test_public_key(ALICE_MEMBER_ID, "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD", &pk_b64);
     let (recipient_ids1, members1) =
         recipients_and_members(&[(ALICE_MEMBER_ID.to_string(), alice.clone())]);
     let (recipient_ids2, members2) =
         recipients_and_members(&[(ALICE_MEMBER_ID.to_string(), alice)]);
 
     let signing_key = generate_ed25519_keypair([2u8; 32]);
-    let signer_kid = "01HY0G8N3P5X7QRSTV0WXYZ123";
+    let signer_kid = "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD";
     let result1 = file_enc::encrypt_file_document(
         b"deterministic",
         &recipient_ids1,
@@ -335,7 +341,7 @@ fn test_encrypt_file_no_recipient_found() {
         &members,
         &SigningContext {
             signing_key: &generate_ed25519_keypair([2u8; 32]),
-            signer_kid: "01HY0G8N3P5X7QRSTV0WXYZ123",
+            signer_kid: "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD",
             signer_pub: None,
             debug: false,
         },
@@ -356,7 +362,7 @@ fn test_encrypt_file_signature_included() {
     );
     let recipients_with_keys = vec![(
         ALICE_MEMBER_ID.to_string(),
-        create_test_public_key(ALICE_MEMBER_ID, "01HY0G8N3P5X7QRSTV0WXYZ123", &pk_b64),
+        create_test_public_key(ALICE_MEMBER_ID, "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD", &pk_b64),
     )];
     let (recipient_ids, members) = recipients_and_members(&recipients_with_keys);
 
@@ -366,7 +372,7 @@ fn test_encrypt_file_signature_included() {
         &members,
         &SigningContext {
             signing_key: &generate_ed25519_keypair([2u8; 32]),
-            signer_kid: "01HY0G8N3P5X7QRSTV0WXYZ123",
+            signer_kid: "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD",
             signer_pub: None,
             debug: false,
         },
@@ -381,6 +387,6 @@ fn test_encrypt_file_signature_included() {
         signature["alg"],
         secretenv::model::identifiers::alg::SIGNATURE_ED25519
     );
-    assert_eq!(signature["kid"], "01HY0G8N3P5X7QRSTV0WXYZ123");
+    assert_eq!(signature["kid"], "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD");
     assert!(!signature["sig"].as_str().unwrap().is_empty());
 }

@@ -14,7 +14,7 @@ use super::private_key::PrivateKeyPlaintext;
 pub struct DecryptionProof {
     /// Member ID from the encrypted document
     pub member_id: String,
-    /// Key ID (ULID) from the encrypted document
+    /// Key statement ID from the encrypted document
     pub kid: String,
     /// SSH fingerprint used for decryption (None for non-SSH key protection)
     pub ssh_fpr: Option<String>,

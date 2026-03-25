@@ -5,6 +5,7 @@
 
 use crate::model::common::{RemovedRecipient, WrapItem};
 use crate::model::file_enc::FilePayload;
+use crate::support::kid::build_kid_display;
 
 /// Append file payload information.
 pub(crate) fn append_file_payload_info(payload: &FilePayload, out: &mut String) {
@@ -28,8 +29,9 @@ pub(crate) fn append_file_payload_info(payload: &FilePayload, out: &mut String) 
 
 /// Append wrap item information.
 pub(crate) fn append_wrap_item(index: usize, wrap: &WrapItem, out: &mut String) {
+    let kid_display = build_kid_display(&wrap.kid).unwrap_or_else(|_| wrap.kid.clone());
     push_line(out, format!("  [{}] rid:  {}", index, wrap.rid));
-    push_line(out, format!("      kid:  {}", wrap.kid));
+    push_line(out, format!("      kid:  {}", kid_display));
     push_line(out, format!("      alg:  {}", wrap.alg));
     push_line(
         out,
@@ -51,11 +53,12 @@ pub(crate) fn append_removed_recipients(removed: Option<&Vec<RemovedRecipient>>,
                 format!("Removed Recipients History ({}):", removed.len()),
             );
             for r in removed {
+                let kid_display = build_kid_display(&r.kid).unwrap_or_else(|_| r.kid.clone());
                 push_line(
                     out,
                     format!(
                         "  - {} (kid: {}, removed at {})",
-                        r.rid, r.kid, r.removed_at
+                        r.rid, kid_display, r.removed_at
                     ),
                 );
             }

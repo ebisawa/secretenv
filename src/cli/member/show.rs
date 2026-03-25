@@ -3,6 +3,7 @@
 
 use crate::app::context::options::CommonCommandOptions;
 use crate::app::member::query::show_member;
+use crate::support::kid::build_kid_display;
 use crate::Error;
 
 use super::ShowArgs;
@@ -17,9 +18,10 @@ pub(crate) fn run(args: ShowArgs) -> Result<(), Error> {
         println!("{}", serde_json::to_string_pretty(&member.document)?);
     } else {
         let membership_str = status.as_str();
+        let kid_display = build_kid_display(&member.kid).unwrap_or_else(|_| member.kid.clone());
         println!("Member: {}", member.member_id);
         println!("Membership:   {}", membership_str);
-        println!("Key ID: {}", member.kid);
+        println!("Key ID: {}", kid_display);
         println!("Format: {}", member.format);
         println!("Expires: {}", member.expires_at);
         println!("Status: {}", member.verification_status.as_str());

@@ -18,6 +18,7 @@ use secretenv::feature::key::generate::KeyGenerationOptions;
 use secretenv::feature::key::material::{build_identity_keys, generate_keypairs};
 use secretenv::feature::key::public_key_document::{build_public_key, PublicKeyBuildParams};
 use secretenv::feature::key::ssh_binding::SshBindingContext;
+use secretenv::format::kid::derive_public_key_kid;
 use secretenv::io::keystore::active::load_active_kid;
 use secretenv::io::keystore::resolver::KeystoreResolver;
 use secretenv::io::keystore::signer::load_signer_public_key_if_needed;
@@ -107,8 +108,19 @@ fn test_build_private_key_plaintext_key_consistency() {
 // build_public_key with/without github_account
 // ============================================================================
 
-fn make_test_identity() -> (Identity, ed25519_dalek::SigningKey, String) {
-    let (kid, _kem_sk, kem_pk, sig_sk, sig_pk) = generate_keypairs().unwrap();
+fn build_protected_without_kid_value(
+    public_key: &secretenv::model::public_key::PublicKey,
+) -> serde_json::Value {
+    let mut value = serde_json::to_value(&public_key.protected).unwrap();
+    value
+        .as_object_mut()
+        .expect("public key protected must be a JSON object")
+        .remove("kid");
+    value
+}
+
+fn make_test_identity() -> (Identity, ed25519_dalek::SigningKey) {
+    let (_kem_sk, kem_pk, sig_sk, sig_pk) = generate_keypairs().unwrap();
     let identity_keys = build_identity_keys(&kem_pk, &sig_pk).unwrap();
     let identity = Identity {
         keys: identity_keys,
@@ -118,12 +130,12 @@ fn make_test_identity() -> (Identity, ed25519_dalek::SigningKey, String) {
             sig: "dummy".to_string(),
         },
     };
-    (identity, sig_sk, kid)
+    (identity, sig_sk)
 }
 
 #[test]
 fn test_build_public_key_with_github_account() {
-    let (identity, sig_sk, kid) = make_test_identity();
+    let (identity, sig_sk) = make_test_identity();
 
     let github_account = GithubAccount {
         id: 12345,
@@ -132,7 +144,6 @@ fn test_build_public_key_with_github_account() {
 
     let public_key = build_public_key(&PublicKeyBuildParams {
         member_id: ALICE_MEMBER_ID,
-        kid: &kid,
         identity,
         created_at: "2024-01-01T00:00:00Z",
         expires_at: "2025-01-01T00:00:00Z",
@@ -149,15 +160,18 @@ fn test_build_public_key_with_github_account() {
     assert!(github.is_some(), "github_account must be present");
     assert_eq!(github.unwrap().id, 12345);
     assert_eq!(github.unwrap().login, "testuser");
+    assert_eq!(
+        public_key.protected.kid,
+        derive_public_key_kid(&build_protected_without_kid_value(&public_key)).unwrap()
+    );
 }
 
 #[test]
 fn test_build_public_key_without_github_account() {
-    let (identity, sig_sk, kid) = make_test_identity();
+    let (identity, sig_sk) = make_test_identity();
 
     let public_key = build_public_key(&PublicKeyBuildParams {
         member_id: ALICE_MEMBER_ID,
-        kid: &kid,
         identity,
         created_at: "2024-01-01T00:00:00Z",
         expires_at: "2025-01-01T00:00:00Z",
@@ -171,15 +185,18 @@ fn test_build_public_key_without_github_account() {
         public_key.protected.binding_claims.is_none(),
         "binding_claims must be None when no github_account"
     );
+    assert_eq!(
+        public_key.protected.kid,
+        derive_public_key_kid(&build_protected_without_kid_value(&public_key)).unwrap()
+    );
 }
 
 #[test]
 fn test_build_public_key_self_signature_valid_base64url() {
-    let (identity, sig_sk, kid) = make_test_identity();
+    let (identity, sig_sk) = make_test_identity();
 
     let public_key = build_public_key(&PublicKeyBuildParams {
         member_id: ALICE_MEMBER_ID,
-        kid: &kid,
         identity,
         created_at: "2024-01-01T00:00:00Z",
         expires_at: "2025-01-01T00:00:00Z",
@@ -203,6 +220,37 @@ fn test_build_public_key_self_signature_valid_base64url() {
 }
 
 #[test]
+fn test_build_public_key_changes_kid_when_github_account_changes() {
+    let (identity_with_claim, sig_sk_with_claim) = make_test_identity();
+    let with_claim = build_public_key(&PublicKeyBuildParams {
+        member_id: ALICE_MEMBER_ID,
+        identity: identity_with_claim,
+        created_at: "2024-01-01T00:00:00Z",
+        expires_at: "2025-01-01T00:00:00Z",
+        sig_sk: &sig_sk_with_claim,
+        debug: false,
+        github_account: Some(GithubAccount {
+            id: 12345,
+            login: "testuser".to_string(),
+        }),
+    })
+    .unwrap();
+    let (identity_without_claim, sig_sk_without_claim) = make_test_identity();
+    let without_claim = build_public_key(&PublicKeyBuildParams {
+        member_id: ALICE_MEMBER_ID,
+        identity: identity_without_claim,
+        created_at: "2024-01-01T00:00:00Z",
+        expires_at: "2025-01-01T00:00:00Z",
+        sig_sk: &sig_sk_without_claim,
+        debug: false,
+        github_account: None,
+    })
+    .unwrap();
+
+    assert_ne!(with_claim.protected.kid, without_claim.protected.kid);
+}
+
+#[test]
 fn test_derive_key_from_ssh_preserves_ssh_backend_errors() {
     struct FailingBackend;
 
@@ -221,7 +269,7 @@ fn test_derive_key_from_ssh_preserves_ssh_backend_errors() {
 
     let salt = secretenv::crypto::types::primitives::Salt::new([7u8; 16]);
     let result = secretenv::feature::key::protection::key_derivation::derive_key_from_ssh(
-        "01TESTKID000000000000000000",
+        "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD",
         &salt,
         &FailingBackend,
         "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestKey test@example.com",
@@ -268,7 +316,7 @@ fn test_derive_key_from_ssh_maps_non_deterministic_error() {
 
     let salt = secretenv::crypto::types::primitives::Salt::new([9u8; 16]);
     let result = secretenv::feature::key::protection::key_derivation::derive_key_from_ssh(
-        "01TESTKID000000000000000000",
+        "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD",
         &salt,
         &NonDeterministicBackend {
             counter: Cell::new(0),
@@ -425,9 +473,7 @@ fn test_ensure_keystore_dir_idempotent() {
 
 #[test]
 fn test_generate_keypairs() {
-    let (kid, _kem_sk, kem_pk, _sig_sk, sig_pk) = generate_keypairs().unwrap();
-
-    assert!(!kid.is_empty());
+    let (_kem_sk, kem_pk, _sig_sk, sig_pk) = generate_keypairs().unwrap();
     assert_eq!(kem_pk.as_bytes().len(), 32);
     assert_eq!(sig_pk.as_bytes().len(), 32);
 }
@@ -447,10 +493,10 @@ fn test_build_identity_keys() {
 
 #[test]
 fn test_build_public_key() {
-    let (_temp_dir, _kid, _kem_sk, kem_pk, _sig_sk, sig_pk) = {
+    let (_temp_dir, _kem_sk, kem_pk, _sig_sk, sig_pk) = {
         let temp_dir = setup_test_keystore_from_fixtures(ALICE_MEMBER_ID);
-        let (kid, kem_sk, kem_pk, sig_sk, sig_pk) = generate_keypairs().unwrap();
-        (temp_dir, kid, kem_sk, kem_pk, sig_sk, sig_pk)
+        let (kem_sk, kem_pk, sig_sk, sig_pk) = generate_keypairs().unwrap();
+        (temp_dir, kem_sk, kem_pk, sig_sk, sig_pk)
     };
     let identity_keys = build_identity_keys(&kem_pk, &sig_pk).unwrap();
 
@@ -465,7 +511,6 @@ fn test_build_public_key() {
 
     let public_key = build_public_key(&PublicKeyBuildParams {
         member_id: ALICE_MEMBER_ID,
-        kid: &_kid,
         identity,
         created_at: "2024-01-01T00:00:00Z",
         expires_at: "2025-01-01T00:00:00Z",
@@ -476,7 +521,10 @@ fn test_build_public_key() {
     .unwrap();
 
     assert_eq!(public_key.protected.member_id, ALICE_MEMBER_ID);
-    assert_eq!(public_key.protected.kid, _kid);
+    assert_eq!(
+        public_key.protected.kid,
+        derive_public_key_kid(&build_protected_without_kid_value(&public_key)).unwrap()
+    );
     assert!(!public_key.signature.is_empty());
 }
 

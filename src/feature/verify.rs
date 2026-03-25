@@ -5,6 +5,7 @@
 
 pub mod file;
 pub mod kv;
+pub mod private_key;
 pub mod public_key;
 pub mod recipients;
 

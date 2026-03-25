@@ -17,7 +17,7 @@ fn test_keystore_paths_structure() {
     assert_eq!(keystore_root, PathBuf::from("/tmp/test/keys"));
 
     let member_id = "alice";
-    let kid = "01HY0G8N3P5X7QRSTV0WXYZ123";
+    let kid = "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD";
 
     // Test member path
     let member_path = get_member_keystore_path_from_root(&keystore_root, member_id);
@@ -27,21 +27,21 @@ fn test_keystore_paths_structure() {
     let key_path = get_key_path_from_root(&keystore_root, member_id, kid);
     assert_eq!(
         key_path,
-        PathBuf::from("/tmp/test/keys/alice/01HY0G8N3P5X7QRSTV0WXYZ123")
+        PathBuf::from("/tmp/test/keys/alice/7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD")
     );
 
     // Test private key file path
     let private_path = get_private_key_file_path_from_root(&keystore_root, member_id, kid);
     assert_eq!(
         private_path,
-        PathBuf::from("/tmp/test/keys/alice/01HY0G8N3P5X7QRSTV0WXYZ123/private.json")
+        PathBuf::from("/tmp/test/keys/alice/7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD/private.json")
     );
 
     // Test public key file path
     let public_path = get_public_key_file_path_from_root(&keystore_root, member_id, kid);
     assert_eq!(
         public_path,
-        PathBuf::from("/tmp/test/keys/alice/01HY0G8N3P5X7QRSTV0WXYZ123/public.json")
+        PathBuf::from("/tmp/test/keys/alice/7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD/public.json")
     );
 
     // Test active file path

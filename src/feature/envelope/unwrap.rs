@@ -12,6 +12,7 @@ use crate::model::common::WrapItem;
 use crate::model::file_enc::VerifiedFileEncDocument;
 use crate::model::verified::VerifiedPrivateKey;
 use crate::support::base64url::{b64_decode, b64_decode_ciphertext};
+use crate::support::kid::kid_display_lossy;
 use crate::{Error, Result};
 use tracing::{debug, warn};
 use uuid::Uuid;
@@ -40,11 +41,11 @@ pub(crate) fn find_wrap_item_by_kid<'a>(
         .ok_or_else(|| Error::Crypto {
             message: format!(
                 "No wrap found for kid '{}' (member: {}). Available kids: {}",
-                kid,
+                kid_display_lossy(kid),
                 member_id,
                 wrap_items
                     .iter()
-                    .map(|w| w.kid.as_str())
+                    .map(|w| kid_display_lossy(&w.kid))
                     .collect::<Vec<_>>()
                     .join(", ")
             ),
@@ -55,7 +56,9 @@ pub(crate) fn find_wrap_item_by_kid<'a>(
     if wrap_item.rid != member_id {
         warn!(
             "[CRYPTO] Warning: wrap_item.rid '{}' does not match member_id '{}' (using kid '{}' for unwrap)",
-            wrap_item.rid, member_id, kid
+            wrap_item.rid,
+            member_id,
+            kid_display_lossy(kid)
         );
     }
 
@@ -126,7 +129,8 @@ pub fn unwrap_master_key(
     if debug {
         debug!(
             "[CRYPTO] HPKE: {}: open_base (kid: {})",
-            caller, wrap_item.kid
+            caller,
+            kid_display_lossy(&wrap_item.kid)
         );
     }
 

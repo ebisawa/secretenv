@@ -52,7 +52,7 @@ pub fn run(args: GetArgs) -> Result<()> {
     }
 
     let options = CommonCommandOptions::from(&args.common);
-    let ssh_ctx = resolve_ssh_context_optional(&options)?;
+    let ssh_ctx = resolve_ssh_context_optional(&options, args.member_id.clone())?;
     let kv_map = get_kv_command(
         &options,
         args.member_id.clone(),

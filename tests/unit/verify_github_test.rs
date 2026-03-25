@@ -59,9 +59,9 @@ impl GitHubApi for FakeGitHubApi {
 fn sample_public_key() -> PublicKey {
     PublicKey {
         protected: PublicKeyProtected {
-            format: "secretenv.public.key@3".to_string(),
+            format: "secretenv.public.key@4".to_string(),
             member_id: "alice@example.com".to_string(),
-            kid: "01ARZ3NDEKTSV4RRFFQ69G5FAV".to_string(),
+            kid: "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD".to_string(),
             identity: Identity {
                 keys: IdentityKeys {
                     kem: JwkOkpPublicKey {

@@ -9,6 +9,7 @@ use secretenv::feature::key::manage::export::export_key;
 use secretenv::feature::key::manage::mutation::{activate_key, remove_key};
 use secretenv::feature::key::manage::query::list_keys;
 use secretenv::io::keystore::storage::save_key_pair_atomic;
+use secretenv::support::kid::build_kid_display;
 
 /// Helper: generate a second key pair, save it to the keystore, and return its kid.
 fn add_second_key(temp_dir: &tempfile::TempDir, member_id: &str) -> String {
@@ -112,7 +113,12 @@ fn test_activate_key_explicit_kid() {
 
     let home = Some(temp_dir.path().to_path_buf());
 
-    let result = activate_key(home, ALICE_MEMBER_ID.to_string(), Some(second_kid.clone())).unwrap();
+    let result = activate_key(
+        home,
+        ALICE_MEMBER_ID.to_string(),
+        Some(build_kid_display(&second_kid).unwrap().to_lowercase()),
+    )
+    .unwrap();
 
     assert_eq!(result.member_id, ALICE_MEMBER_ID);
     assert_eq!(result.kid, second_kid);
@@ -127,12 +133,11 @@ fn test_activate_key_auto_select_latest() {
 
     let home = Some(temp_dir.path().to_path_buf());
 
-    // kid=None should auto-select the latest valid key (last in sorted order)
+    // kid=None should auto-select the latest valid key by created_at.
     let result = activate_key(home, ALICE_MEMBER_ID.to_string(), None).unwrap();
 
     assert_eq!(result.member_id, ALICE_MEMBER_ID);
-    // The auto-selected key should be the second (latest) one since kids are ULID-based
-    // and list_kids returns them sorted; select_latest_valid_key iterates in reverse.
+    // The auto-selected key should be the second (latest) one.
     assert_eq!(result.kid, second_kid);
 }
 
@@ -144,7 +149,7 @@ fn test_activate_key_not_found() {
     let result = activate_key(
         home,
         ALICE_MEMBER_ID.to_string(),
-        Some("nonexistent-kid".to_string()),
+        Some("00000000000000000000000000000001".to_string()),
     );
 
     assert!(result.is_err());
@@ -168,7 +173,13 @@ fn test_remove_key_non_active() {
 
     let home = Some(temp_dir.path().to_path_buf());
 
-    let result = remove_key(home, ALICE_MEMBER_ID.to_string(), second_kid.clone(), false).unwrap();
+    let result = remove_key(
+        home,
+        ALICE_MEMBER_ID.to_string(),
+        build_kid_display(&second_kid).unwrap().to_lowercase(),
+        false,
+    )
+    .unwrap();
 
     assert_eq!(result.kid, second_kid);
     assert!(!result.was_active);
@@ -235,4 +246,24 @@ fn test_export_key_active() {
     assert_eq!(result.member_id, ALICE_MEMBER_ID);
     assert_eq!(result.public_key.protected.member_id, ALICE_MEMBER_ID);
     assert!(!result.kid.is_empty());
+}
+
+#[test]
+fn test_export_key_explicit_display_kid() {
+    let temp_dir = setup_test_keystore_from_fixtures(ALICE_MEMBER_ID);
+    let keystore_root = temp_dir.path().join("keys");
+    let active_kid =
+        secretenv::io::keystore::active::load_active_kid(ALICE_MEMBER_ID, &keystore_root)
+            .unwrap()
+            .unwrap();
+    let home = Some(temp_dir.path().to_path_buf());
+
+    let result = export_key(
+        home,
+        ALICE_MEMBER_ID.to_string(),
+        Some(build_kid_display(&active_kid).unwrap().to_lowercase()),
+    )
+    .unwrap();
+
+    assert_eq!(result.kid, active_kid);
 }

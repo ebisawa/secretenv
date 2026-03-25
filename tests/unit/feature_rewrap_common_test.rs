@@ -52,7 +52,7 @@ fn test_add_to_removed_history() {
     add_to_removed_history(
         &mut removed,
         "alice@example.com",
-        "01HY0G8N3P5X7QRSTV0WXYZ123",
+        "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD",
     )
     .unwrap();
 
@@ -61,7 +61,7 @@ fn test_add_to_removed_history() {
     assert_eq!(removed.as_ref().unwrap()[0].rid, "alice@example.com");
     assert_eq!(
         removed.as_ref().unwrap()[0].kid,
-        "01HY0G8N3P5X7QRSTV0WXYZ123"
+        "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD"
     );
 }
 
@@ -72,13 +72,13 @@ fn test_add_to_removed_history_multiple() {
     add_to_removed_history(
         &mut removed,
         "alice@example.com",
-        "01HY0G8N3P5X7QRSTV0WXYZ123",
+        "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD",
     )
     .unwrap();
     add_to_removed_history(
         &mut removed,
         "bob@example.com",
-        "01HXYZ1234ABCDEFGHJKMNPQRS",
+        "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GE",
     )
     .unwrap();
 
@@ -91,12 +91,12 @@ fn test_merge_removed_history() {
     let source = Some(vec![
         RemovedRecipient {
             rid: "alice@example.com".to_string(),
-            kid: "01HY0G8N3P5X7QRSTV0WXYZ123".to_string(),
+            kid: "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD".to_string(),
             removed_at: "2024-01-01T00:00:00Z".to_string(),
         },
         RemovedRecipient {
             rid: "bob@example.com".to_string(),
-            kid: "01HXYZ1234ABCDEFGHJKMNPQRS".to_string(),
+            kid: "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GE".to_string(),
             removed_at: "2024-01-02T00:00:00Z".to_string(),
         },
     ]);
@@ -116,7 +116,7 @@ fn test_merge_removed_history_into_existing() {
     }]);
     let source = Some(vec![RemovedRecipient {
         rid: "alice@example.com".to_string(),
-        kid: "01HY0G8N3P5X7QRSTV0WXYZ123".to_string(),
+        kid: "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD".to_string(),
         removed_at: "2024-01-01T00:00:00Z".to_string(),
     }]);
 

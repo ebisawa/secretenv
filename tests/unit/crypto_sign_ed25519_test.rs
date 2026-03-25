@@ -18,14 +18,14 @@ fn test_sign_bytes_returns_valid_structure() {
     let sig = sign_bytes(
         canonical_bytes,
         &sk,
-        "01HY0G8N3P5X7QRSTV0WXYZ123",
+        "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD",
         None,
         SIGNATURE_ED25519,
     )
     .unwrap();
 
     assert_eq!(sig.alg, SIGNATURE_ED25519);
-    assert_eq!(sig.kid, "01HY0G8N3P5X7QRSTV0WXYZ123");
+    assert_eq!(sig.kid, "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD");
     assert!(sig.signer_pub.is_none());
     assert!(!sig.sig.is_empty());
 }
@@ -41,7 +41,7 @@ fn test_verify_bytes_accepts_valid_signature() {
     let sig = sign_bytes(
         canonical_bytes,
         &sk,
-        "01HY0G8N3P5X7QRSTV0WXYZ123",
+        "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD",
         None,
         SIGNATURE_ED25519,
     )
@@ -59,7 +59,7 @@ fn test_verify_bytes_rejects_wrong_algorithm() {
 
     let bad_sig = Signature {
         alg: "rsa-2048".to_string(),
-        kid: "01HY0G8N3P5X7QRSTV0WXYZ123".to_string(),
+        kid: "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD".to_string(),
         signer_pub: None,
         sig: "AAAA".to_string(),
     };
@@ -84,7 +84,7 @@ fn test_verify_bytes_rejects_tampered_bytes() {
     let sig = sign_bytes(
         original,
         &sk,
-        "01HY0G8N3P5X7QRSTV0WXYZ123",
+        "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD",
         None,
         SIGNATURE_ED25519,
     )
@@ -108,7 +108,7 @@ fn test_sign_bytes_deterministic() {
     let sig1 = sign_bytes(
         canonical_bytes,
         &sk,
-        "01HY0G8N3P5X7QRSTV0WXYZ123",
+        "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD",
         None,
         SIGNATURE_ED25519,
     )
@@ -116,7 +116,7 @@ fn test_sign_bytes_deterministic() {
     let sig2 = sign_bytes(
         canonical_bytes,
         &sk,
-        "01HY0G8N3P5X7QRSTV0WXYZ123",
+        "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD",
         None,
         SIGNATURE_ED25519,
     )
@@ -136,14 +136,14 @@ fn test_sign_kv_returns_valid_structure() {
     let sig = sign_bytes(
         canonical_bytes,
         &sk,
-        "01HY0G8N3P5X7QRSTV0WXYZ123",
+        "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD",
         None,
         SIGNATURE_ED25519,
     )
     .unwrap();
 
     assert_eq!(sig.alg, SIGNATURE_ED25519);
-    assert_eq!(sig.kid, "01HY0G8N3P5X7QRSTV0WXYZ123");
+    assert_eq!(sig.kid, "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD");
     assert!(sig.signer_pub.is_none());
     assert!(!sig.sig.is_empty());
 }
@@ -159,7 +159,7 @@ fn test_verify_kv_accepts_valid_signature() {
     let sig = sign_bytes(
         canonical_bytes,
         &sk,
-        "01HY0G8N3P5X7QRSTV0WXYZ123",
+        "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD",
         None,
         SIGNATURE_ED25519,
     )
@@ -179,7 +179,7 @@ fn test_verify_kv_rejects_tampered_content() {
     let sig = sign_bytes(
         original,
         &sk,
-        "01HY0G8N3P5X7QRSTV0WXYZ123",
+        "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD",
         None,
         SIGNATURE_ED25519,
     )
@@ -201,7 +201,7 @@ fn test_verify_bytes_invalid_base64_error_message_sanitized() {
 
     let bad_sig = Signature {
         alg: SIGNATURE_ED25519.to_string(),
-        kid: "01HY0G8N3P5X7QRSTV0WXYZ123".to_string(),
+        kid: "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD".to_string(),
         signer_pub: None,
         sig: "*not-base64*".to_string(),
     };
@@ -228,7 +228,7 @@ fn test_kv_lf_normalization_matters() {
     let sig = sign_bytes(
         lf_version,
         &sk,
-        "01HY0G8N3P5X7QRSTV0WXYZ123",
+        "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD",
         None,
         SIGNATURE_ED25519,
     )

@@ -1,7 +1,7 @@
 // Copyright 2026 Satoshi Ebisawa
 // SPDX-License-Identifier: Apache-2.0
 
-//! Keystore storage operations for v3
+//! Keystore storage operations for key documents
 //!
 //! Save and load PrivateKey and PublicKey.
 
@@ -9,6 +9,7 @@ use crate::format::schema::document::{parse_private_key_file, parse_public_key_f
 use crate::model::private_key::PrivateKey;
 use crate::model::public_key::PublicKey;
 use crate::support::fs::{atomic, check_permission, ensure_dir_restricted, list_dir};
+use crate::support::kid::kid_display_lossy;
 use crate::support::path::display_path_relative_to_cwd;
 use crate::{Error, Result};
 use std::fs;
@@ -130,7 +131,7 @@ fn list_directories(path: &Path, filter: impl Fn(&str) -> bool) -> Result<Vec<St
 
 /// List all key IDs for a member
 ///
-/// Returns key IDs sorted lexicographically (chronologically for ULIDs).
+/// Returns canonical key IDs sorted lexicographically.
 pub fn list_kids(keystore_root: &Path, member_id: &str) -> Result<Vec<String>> {
     let member_path = keystore_root.join(member_id);
     list_directories(
@@ -149,17 +150,18 @@ pub fn list_member_ids(keystore_root: &Path) -> Result<Vec<String>> {
 /// Find member_id by kid (scanning all members in keystore)
 ///
 /// Scans all members in the keystore and returns the member_id that owns
-/// the given kid directory. Since kid is a ULID (globally unique), at most
+/// the given kid directory. Since key directory names use canonical `kid`, at most
 /// one member will match.
 pub fn find_member_by_kid(keystore_root: &Path, kid: &str) -> Result<String> {
+    let kid = crate::support::kid::normalize_kid(kid)?;
     let member_ids = list_member_ids(keystore_root)?;
     for member_id in member_ids {
-        let kid_dir = keystore_root.join(&member_id).join(kid);
+        let kid_dir = keystore_root.join(&member_id).join(&kid);
         if kid_dir.is_dir() {
             return Ok(member_id);
         }
     }
     Err(Error::NotFound {
-        message: format!("kid '{}' not found in keystore", kid),
+        message: format!("kid '{}' not found in keystore", kid_display_lossy(&kid)),
     })
 }

@@ -21,9 +21,9 @@ fn test_validate_public_key_basic() {
     // v3 schema requires: protected (format, member_id, kid, identity, attestation, expires_at), signature
     let valid_public_key = serde_json::json!({
         "protected": {
-            "format": secretenv::model::identifiers::format::PUBLIC_KEY_V3,
+            "format": secretenv::model::identifiers::format::PUBLIC_KEY_V4,
             "member_id": "alice@example.com",
-            "kid": "01HY0G8N3P5X7QRSTV0WXYZ123",
+            "kid": "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD",
             "identity": {
                 "keys": {
                     "kem": {
@@ -62,9 +62,9 @@ fn test_validate_private_key_basic() {
     // v3 schema (Rev11): external format with protection and encrypted fields
     let valid_private_key = serde_json::json!({
         "protected": {
-            "format": secretenv::model::identifiers::format::PRIVATE_KEY_V3,
+            "format": secretenv::model::identifiers::format::PRIVATE_KEY_V4,
             "member_id": "alice@example.com",
-            "kid": "01HY0G8N3P5X7QRSTV0WXYZ123",
+            "kid": "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD",
             "alg": {
                 "kdf": secretenv::model::identifiers::private_key::PROTECTION_METHOD_SSHSIG_ED25519_HKDF_SHA256,
                 "fpr": "sha256:abcdef1234567890",
@@ -93,9 +93,9 @@ fn test_validate_private_key_argon2id_without_params() {
     let validator = Validator::new().unwrap();
     let valid_private_key = serde_json::json!({
         "protected": {
-            "format": secretenv::model::identifiers::format::PRIVATE_KEY_V3,
+            "format": secretenv::model::identifiers::format::PRIVATE_KEY_V4,
             "member_id": "alice@example.com",
-            "kid": "01HY0G8N3P5X7QRSTV0WXYZ123",
+            "kid": "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD",
             "alg": {
                 "kdf": secretenv::model::identifiers::private_key::PROTECTION_METHOD_ARGON2ID_HKDF_SHA256,
                 "salt": "AAAAAAAAAAAAAAAAAAAAAA",
@@ -123,9 +123,9 @@ fn test_validate_private_key_argon2id_rejects_legacy_params() {
     let validator = Validator::new().unwrap();
     let invalid_private_key = serde_json::json!({
         "protected": {
-            "format": secretenv::model::identifiers::format::PRIVATE_KEY_V3,
+            "format": secretenv::model::identifiers::format::PRIVATE_KEY_V4,
             "member_id": "alice@example.com",
-            "kid": "01HY0G8N3P5X7QRSTV0WXYZ123",
+            "kid": "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD",
             "alg": {
                 "kdf": secretenv::model::identifiers::private_key::PROTECTION_METHOD_ARGON2ID_HKDF_SHA256,
                 "m": 47104,
@@ -176,7 +176,7 @@ fn test_validate_file_enc_document_basic() {
             },
             "wrap": [{
                 "rid": "alice@example.com",
-                "kid": "01HY0G8N3P5X7QRSTV0WXYZ123",
+                "kid": "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD",
                 "alg": hpke::ALG_HPKE_32_1_3,
                 "enc": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
                 "ct": "AAAAAAAAAAAAAAAA"
@@ -186,7 +186,7 @@ fn test_validate_file_enc_document_basic() {
         },
         "signature": {
             "alg": secretenv::model::identifiers::alg::SIGNATURE_ED25519,
-            "kid": "01HY0G8N3P5X7QRSTV0WXYZ123",
+            "kid": "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD",
             "sig": "QUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQQ"
         }
     });
@@ -226,7 +226,7 @@ fn test_validator_allows_member_id_without_at_in_wrap_rid() {
             },
             "wrap": [{
                 "rid": "ebisawa",
-                "kid": "01HY0G8N3P5X7QRSTV0WXYZ123",
+                "kid": "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD",
                 "alg": hpke::ALG_HPKE_32_1_3,
                 "enc": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
                 "ct": "AAAAAAAAAAAAAAAA"
@@ -236,7 +236,7 @@ fn test_validator_allows_member_id_without_at_in_wrap_rid() {
         },
         "signature": {
             "alg": secretenv::model::identifiers::alg::SIGNATURE_ED25519,
-            "kid": "01HY0G8N3P5X7QRSTV0WXYZ123",
+            "kid": "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD",
             "sig": "QUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQQ"
         }
     });

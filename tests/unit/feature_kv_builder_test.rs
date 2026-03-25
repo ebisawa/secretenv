@@ -21,7 +21,7 @@ fn sample_wrap() -> KvWrap {
     KvWrap {
         wrap: vec![WrapItem {
             rid: "alice@example.com".to_string(),
-            kid: "01HY0G8N3P5X7QRSTV0WXYZ123".to_string(),
+            kid: "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD".to_string(),
             alg: "hpke-32-1-3".to_string(),
             enc: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".to_string(),
             ct: "AAAAAAAAAAAAAAAA".to_string(),

@@ -71,20 +71,19 @@ pub fn select_latest_valid_kid(keystore_root: &Path, member_id: &str) -> Result<
     }
 
     let now = time::OffsetDateTime::now_utc();
-    for kid in kids.iter().rev() {
-        let public_key = load_public_key(keystore_root, member_id, kid)?;
-        let expires_at = time::OffsetDateTime::parse(
-            &public_key.protected.expires_at,
-            &time::format_description::well_known::Rfc3339,
-        )
-        .map_err(|e| Error::Parse {
-            message: format!("Invalid expires_at format: {}", e),
-            source: Some(Box::new(e)),
-        })?;
+    let mut candidates = Vec::new();
+    for kid in kids {
+        let public_key = load_public_key(keystore_root, member_id, &kid)?;
+        let expires_at = parse_expires_at(&public_key)?;
+        let created_at = parse_created_at(&public_key)?;
 
         if now < expires_at {
-            return Ok(kid.clone());
+            candidates.push((kid, created_at));
         }
+    }
+
+    if let Some((kid, _)) = select_preferred_kid(candidates) {
+        return Ok(kid);
     }
 
     Err(Error::NotFound {
@@ -106,4 +105,75 @@ pub fn remove_key_directory(keystore_root: &Path, member_id: &str, kid: &str) ->
         ),
         source: Some(e),
     })
+}
+
+/// Select the most recent key for a member based on `created_at desc, kid asc`.
+pub fn select_most_recent_kid(keystore_root: &Path, member_id: &str) -> Result<String> {
+    let kids = list_kids(keystore_root, member_id)?;
+    if kids.is_empty() {
+        return Err(Error::NotFound {
+            message: format!("No keys found for member: {}", member_id),
+        });
+    }
+
+    let candidates = kids
+        .into_iter()
+        .map(|kid| {
+            let public_key = load_public_key(keystore_root, member_id, &kid)?;
+            let created_at = parse_created_at(&public_key)?;
+            Ok((kid, created_at))
+        })
+        .collect::<Result<Vec<_>>>()?;
+
+    select_preferred_kid(candidates)
+        .map(|(kid, _)| kid)
+        .ok_or_else(|| Error::Config {
+            message: "Internal error: key candidate list became empty after validation".to_string(),
+        })
+}
+
+fn parse_created_at(public_key: &PublicKey) -> Result<time::OffsetDateTime> {
+    let created_at = public_key
+        .protected
+        .created_at
+        .as_deref()
+        .ok_or_else(|| Error::Parse {
+            message: format!("Missing created_at for key: {}", public_key.protected.kid),
+            source: None,
+        })?;
+
+    time::OffsetDateTime::parse(created_at, &time::format_description::well_known::Rfc3339).map_err(
+        |e| Error::Parse {
+            message: format!(
+                "Invalid created_at format for key {}: {}",
+                public_key.protected.kid, e
+            ),
+            source: Some(Box::new(e)),
+        },
+    )
+}
+
+fn parse_expires_at(public_key: &PublicKey) -> Result<time::OffsetDateTime> {
+    time::OffsetDateTime::parse(
+        &public_key.protected.expires_at,
+        &time::format_description::well_known::Rfc3339,
+    )
+    .map_err(|e| Error::Parse {
+        message: format!(
+            "Invalid expires_at format for key {}: {}",
+            public_key.protected.kid, e
+        ),
+        source: Some(Box::new(e)),
+    })
+}
+
+fn select_preferred_kid(
+    mut candidates: Vec<(String, time::OffsetDateTime)>,
+) -> Option<(String, time::OffsetDateTime)> {
+    candidates.sort_by(|(kid_a, created_at_a), (kid_b, created_at_b)| {
+        created_at_b
+            .cmp(created_at_a)
+            .then_with(|| kid_a.cmp(kid_b))
+    });
+    candidates.into_iter().next()
 }

@@ -9,6 +9,7 @@ use crate::crypto::types::keys::XChaChaKey;
 use crate::crypto::types::primitives::Salt;
 use crate::io::ssh::backend::SignatureBackend;
 use crate::model::identifiers::context;
+use crate::support::kid::kid_display_lossy;
 use crate::Result;
 use rand::rngs::OsRng;
 use rand::RngCore;
@@ -21,14 +22,14 @@ const NON_DETERMINISTIC_SIGNATURE_MESSAGE: &str =
 ///
 /// Format:
 /// ```text
-/// secretenv:key-protection@3
+/// secretenv:key-protection@4
 /// {kid}
 /// {hex(salt)}
 /// ```
 pub fn build_sign_message(kid: &str, salt: &Salt) -> String {
     format!(
         "{}\n{}\n{}",
-        context::SSH_KEY_PROTECTION_SIGN_MESSAGE_PREFIX_V3,
+        context::SSH_KEY_PROTECTION_SIGN_MESSAGE_PREFIX_V4,
         kid,
         hex::encode(salt.as_bytes())
     )
@@ -53,7 +54,7 @@ pub fn derive_key_from_ssh(
     if debug {
         debug!(
             "[CRYPTO] SSH: sign_for_ikm x2 determinism check (kid: {})",
-            kid
+            kid_display_lossy(kid)
         );
     }
     let raw_sig = backend
@@ -62,13 +63,13 @@ pub fn derive_key_from_ssh(
     if debug {
         debug!(
             "[CRYPTO] HKDF-SHA256: private key enc key derivation (kid: {})",
-            kid
+            kid_display_lossy(kid)
         );
     }
     let ikm = Ikm::from(&raw_sig.as_bytes()[..]);
     let info = Info::from_string(&format!(
         "{}:{}",
-        context::SSH_PRIVATE_KEY_ENC_INFO_PREFIX_V3,
+        context::SSH_PRIVATE_KEY_ENC_INFO_PREFIX_V4,
         kid
     ));
     let cek = kdf::expand_to_array(&ikm, Some(salt), &info)?;

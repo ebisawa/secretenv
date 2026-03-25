@@ -11,7 +11,7 @@ use uuid::Uuid;
 #[test]
 fn test_hpke_info_kv_file() {
     let sid = Uuid::parse_str("11111111-2222-3333-4444-555555555555").unwrap();
-    let kid = "01HN8Z3Q4R5S6T7V8W9X0Y1Z2A";
+    let kid = "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD";
 
     let info = binding::build_kv_wrap_info(&sid, kid).unwrap();
 
@@ -33,7 +33,7 @@ fn test_hpke_info_kv_file() {
 #[test]
 fn test_hpke_info_file() {
     let sid = Uuid::parse_str("11111111-2222-3333-4444-555555555555").unwrap();
-    let kid = "01HXYZ1234ABCDEFGHJKMNPQRS";
+    let kid = "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GE";
 
     let info = binding::build_file_wrap_info(&sid, kid).unwrap();
 
@@ -113,9 +113,9 @@ fn test_aad_private_key() {
     use secretenv::model::private_key::{PrivateKeyAlgorithm, PrivateKeyProtected};
 
     let protected = PrivateKeyProtected {
-        format: format::PRIVATE_KEY_V3.to_string(),
+        format: format::PRIVATE_KEY_V4.to_string(),
         member_id: ALICE_MEMBER_ID.to_string(),
-        kid: "01HN8Z3Q4R5S6T7V8W9X0Y1Z2A".to_string(),
+        kid: "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD".to_string(),
         alg: PrivateKeyAlgorithm::SshSig {
             fpr: "sha256:ABCDEFGH123456789".to_string(),
             salt: "AAAAAAAAAAAAAAAA".to_string(),
@@ -134,9 +134,9 @@ fn test_aad_private_key() {
     let parsed: serde_json::Value = serde_json::from_str(aad_str).unwrap();
 
     // Should have required fields from protected
-    assert_eq!(parsed["format"], format::PRIVATE_KEY_V3);
+    assert_eq!(parsed["format"], format::PRIVATE_KEY_V4);
     assert_eq!(parsed["member_id"], ALICE_MEMBER_ID);
-    assert_eq!(parsed["kid"], "01HN8Z3Q4R5S6T7V8W9X0Y1Z2A");
+    assert_eq!(parsed["kid"], "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD");
     assert_eq!(parsed["alg"]["fpr"], "sha256:ABCDEFGH123456789");
     assert_eq!(parsed["expires_at"], "2027-01-15T00:00:00Z");
 }

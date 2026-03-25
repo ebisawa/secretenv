@@ -14,22 +14,14 @@ use rand::rngs::OsRng;
 use x25519_dalek::{PublicKey as X25519PublicKey, StaticSecret as X25519SecretKey};
 
 /// Generate a new key pair (KEM and signing keys).
-pub fn generate_keypairs() -> Result<(
-    String,
-    X25519SecretKey,
-    X25519PublicKey,
-    SigningKey,
-    VerifyingKey,
-)> {
-    let kid = ulid::Ulid::new().to_string();
-
+pub fn generate_keypairs() -> Result<(X25519SecretKey, X25519PublicKey, SigningKey, VerifyingKey)> {
     let kem_sk = X25519SecretKey::random_from_rng(OsRng);
     let kem_pk = X25519PublicKey::from(&kem_sk);
 
     let sig_sk = SigningKey::generate(&mut OsRng);
     let sig_pk: VerifyingKey = sig_sk.verifying_key();
 
-    Ok((kid, kem_sk, kem_pk, sig_sk, sig_pk))
+    Ok((kem_sk, kem_pk, sig_sk, sig_pk))
 }
 
 /// Build identity keys from KEM and signing public keys.

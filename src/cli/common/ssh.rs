@@ -27,8 +27,9 @@ pub fn resolve_ssh_context(options: &CommonCommandOptions) -> Result<ResolvedSsh
 /// No interactive selection; auto-matches against ssh-agent candidates.
 pub fn resolve_ssh_context_for_active_key(
     options: &CommonCommandOptions,
+    member_id: Option<String>,
 ) -> Result<ResolvedSshSigner> {
-    let ctx = resolve_ssh_context_by_active_key(options)?;
+    let ctx = resolve_ssh_context_by_active_key(options, member_id)?;
     debug!("[SSH] Using SSH key: {}", ctx.fingerprint);
     Ok(ctx)
 }
@@ -39,11 +40,14 @@ pub fn resolve_ssh_context_for_active_key(
 /// causing the app layer to use environment variable key loading.
 pub fn resolve_ssh_context_optional(
     options: &CommonCommandOptions,
+    member_id: Option<String>,
 ) -> Result<Option<ResolvedSshSigner>> {
     if is_env_key_mode() {
         debug!("[SSH] Environment variable key mode active, skipping SSH resolution");
         Ok(None)
     } else {
-        Ok(Some(resolve_ssh_context_for_active_key(options)?))
+        Ok(Some(resolve_ssh_context_for_active_key(
+            options, member_id,
+        )?))
     }
 }

@@ -125,10 +125,7 @@ fn prompt_tofu_confirmation(
 ) -> Result<bool> {
     eprintln!("Incoming member '{}':", result.member_id);
     if let Some(account) = &result.github_account {
-        eprintln!(
-            "  GitHub: {} (id: {}) [Verified]",
-            account.login, account.id
-        );
+        eprintln!("  GitHub: {} (id: {})", account.login, account.id);
     } else {
         eprintln!("  GitHub: no binding configured");
     }
