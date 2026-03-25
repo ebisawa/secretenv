@@ -14,9 +14,6 @@ use secretenv::model::file_enc::VerifiedFileEncDocument;
 use secretenv::model::verification::{SignatureVerificationProof, VerifyingKeySource};
 
 #[test]
-fn test_decrypt_file_invalid_format() {}
-
-#[test]
 fn test_encrypt_file() {
     let (sk, pk) = generate_x25519_keypair([1u8; 32]);
     let pk_b64 = base64::Engine::encode(
