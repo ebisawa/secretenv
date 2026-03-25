@@ -12,7 +12,7 @@ pub enum CryptoError {
     #[error("Invalid key: {message}")]
     InvalidKey { message: String },
 
-    /// Cryptographic operation failed (HPKE, AES-GCM, Ed25519, etc.).
+    /// Cryptographic operation failed (HPKE, XChaCha20-Poly1305, Ed25519, etc.).
     #[error("Operation failed: {message}")]
     OperationFailed {
         message: String,

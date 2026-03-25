@@ -72,7 +72,7 @@ config -> io | support
 
 ### 暗号化フロー
 
-ファイル暗号化: 平文 → CEK 生成 → AES-256-GCM 暗号化 → HPKE で CEK を各受信者に wrap → Ed25519 署名 → JSON エンコード
+ファイル暗号化: 平文 → CEK 生成 → XChaCha20-Poly1305 暗号化 → HPKE で CEK を各受信者に wrap → Ed25519 署名 → JSON エンコード
 
 KV 暗号化: KV マップ → エントリごとに CEK で暗号化 → トークンエンコード → KvDocumentBuilder で署名付きドキュメント構築
 
