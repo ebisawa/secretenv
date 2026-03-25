@@ -14,6 +14,7 @@ pub mod detection;
 pub mod error;
 pub mod file;
 pub mod jcs;
+pub mod kid;
 pub mod kv;
 pub mod schema;
 pub mod token;

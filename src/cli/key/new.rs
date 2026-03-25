@@ -6,6 +6,7 @@
 use crate::app::context::options::CommonCommandOptions;
 use crate::app::key::generate::generate_key_command;
 use crate::cli::common::ssh::resolve_ssh_context;
+use crate::support::kid::build_kid_display;
 use crate::Result;
 
 use super::common::print_key_generation_binding_info;
@@ -38,7 +39,8 @@ pub fn run(args: NewArgs) -> Result<()> {
     } else {
         eprintln!("Generated key for '{}':", result.member_id);
     }
-    eprintln!("  Key ID:  {}", result.kid);
+    let kid_display = build_kid_display(&result.kid).unwrap_or_else(|_| result.kid.clone());
+    eprintln!("  Key ID:  {}", kid_display);
     eprintln!("  Expires: {}", result.expires_at);
 
     Ok(())

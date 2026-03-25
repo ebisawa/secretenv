@@ -20,9 +20,3 @@ pub fn resolve_member_context(
     let member_id = resolve_member_id(member_id, Some(paths.base_dir.as_path()))?;
     Ok(ResolvedMemberContext { member_id, paths })
 }
-
-pub(crate) fn resolve_active_key_member_context(
-    options: &CommonCommandOptions,
-) -> Result<ResolvedMemberContext> {
-    resolve_member_context(options, None)
-}

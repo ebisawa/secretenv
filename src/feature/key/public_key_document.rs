@@ -6,22 +6,24 @@
 use crate::crypto::sign::sign_bytes;
 use crate::feature::key::ssh_binding::SshBindingContext;
 use crate::format::jcs;
+use crate::format::kid::derive_public_key_kid;
 use crate::io::ssh::protocol::constants as ssh;
 use crate::io::ssh::SshError;
 use crate::model::identifiers::alg;
 use crate::model::public_key::{
     Attestation, BindingClaims, GithubAccount, Identity, IdentityKeys, PublicKey,
 };
+use crate::support::kid::build_kid_display;
 use crate::Result;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
 use ed25519_dalek::SigningKey;
+use serde::Serialize;
 use tracing::debug;
 
 /// Parameters for building a public key.
 pub struct PublicKeyBuildParams<'a> {
     pub member_id: &'a str,
-    pub kid: &'a str,
     pub identity: Identity,
     pub created_at: &'a str,
     pub expires_at: &'a str,
@@ -30,15 +32,43 @@ pub struct PublicKeyBuildParams<'a> {
     pub github_account: Option<GithubAccount>,
 }
 
+#[derive(Serialize)]
+#[serde(deny_unknown_fields)]
+struct PublicKeyProtectedWithoutKid {
+    format: String,
+    member_id: String,
+    identity: Identity,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    binding_claims: Option<BindingClaims>,
+    expires_at: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    created_at: Option<String>,
+}
+
 /// Build public key with self-signature.
 pub fn build_public_key(params: &PublicKeyBuildParams<'_>) -> Result<PublicKey> {
+    let binding_claims = params
+        .github_account
+        .clone()
+        .map(|github_account| BindingClaims {
+            github_account: Some(github_account),
+        });
+    let protected_without_kid = PublicKeyProtectedWithoutKid {
+        format: crate::model::identifiers::format::PUBLIC_KEY_V4.to_string(),
+        member_id: params.member_id.to_string(),
+        identity: params.identity.clone(),
+        binding_claims: binding_claims.clone(),
+        expires_at: params.expires_at.to_string(),
+        created_at: Some(params.created_at.to_string()),
+    };
+    let derived_kid = derive_public_key_kid(
+        &serde_json::to_value(&protected_without_kid).map_err(crate::Error::from)?,
+    )?;
     let protected = PublicKey::new(
         params.member_id.to_string(),
-        params.kid.to_string(),
+        derived_kid.clone(),
         params.identity.clone(),
-        params.github_account.clone().map(|g| BindingClaims {
-            github_account: Some(g),
-        }),
+        binding_claims,
         params.expires_at.to_string(),
         Some(params.created_at.to_string()),
         String::new(),
@@ -47,12 +77,13 @@ pub fn build_public_key(params: &PublicKeyBuildParams<'_>) -> Result<PublicKey> 
 
     let protected_jcs = jcs::normalize(&protected)?;
     if params.debug {
-        debug!("[CRYPTO] Ed25519: sign_bytes (kid: {})", params.kid);
+        let kid_display = build_kid_display(&derived_kid).unwrap_or_else(|_| derived_kid.clone());
+        debug!("[CRYPTO] Ed25519: sign_bytes (kid: {})", kid_display);
     }
     let signature_obj = sign_bytes(
         &protected_jcs,
         params.sig_sk,
-        params.kid,
+        &derived_kid,
         None,
         alg::SIGNATURE_ED25519,
     )?;

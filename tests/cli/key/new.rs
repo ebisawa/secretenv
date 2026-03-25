@@ -61,8 +61,8 @@ fn test_key_new_generates_private_key() {
     // Verify fields
     assert_eq!(
         private_key.protected.format,
-        format::PRIVATE_KEY_V3,
-        "Format should be secretenv.private.key@3"
+        format::PRIVATE_KEY_V4,
+        "Format should be secretenv.private.key@4"
     );
     assert_eq!(
         private_key.protected.member_id, member_id,

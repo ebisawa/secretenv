@@ -45,7 +45,7 @@ pub enum VerifyingKeySource {
 pub struct SignatureVerificationProof {
     /// Signer's member ID (verified)
     pub member_id: String,
-    /// Key ID (ULID) of the signing key
+    /// Key statement ID of the signing key
     pub kid: String,
     /// Source of the verifying key
     pub verifying_key_source: VerifyingKeySource,

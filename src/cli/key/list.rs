@@ -9,6 +9,7 @@ use crate::app::context::options::CommonCommandOptions;
 use crate::app::key::manage::list_keys_command;
 use crate::app::key::types::{KeyInfo, KeyListResult};
 use crate::cli::common::output::json::print_json_output;
+use crate::support::kid::build_kid_display;
 use crate::Result;
 
 use super::ListArgs;
@@ -23,7 +24,9 @@ fn print_key_list(all_key_infos: &[(String, Vec<KeyInfoView>)], total_keys: usiz
         println!();
         for key_info in key_infos {
             let active_marker = if key_info.active { " (ACTIVE)" } else { "" };
-            println!("  Kid:        {}{}", key_info.kid, active_marker);
+            let kid_display =
+                build_kid_display(&key_info.kid).unwrap_or_else(|_| key_info.kid.clone());
+            println!("  Kid:        {}{}", kid_display, active_marker);
             if verbose {
                 println!("  Format:     {}", key_info.format);
                 println!("  Member ID:  {}", key_info.member_id);

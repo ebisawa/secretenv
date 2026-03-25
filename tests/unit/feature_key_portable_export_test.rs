@@ -46,7 +46,7 @@ fn test_export_produces_valid_base64url() {
     let result = export_private_key_portable(
         &plaintext,
         "alice@example.com",
-        "01HN8Z3Q4R5S6T7V8W9X0Y1Z2A",
+        "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD",
         "2026-01-01T00:00:00Z",
         "2027-01-01T00:00:00Z",
         "strong-password-42",
@@ -78,7 +78,7 @@ fn test_export_roundtrip() {
     let exported = export_private_key_portable(
         &plaintext,
         "alice@example.com",
-        "01HN8Z3Q4R5S6T7V8W9X0Y1Z2A",
+        "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD",
         "2026-01-01T00:00:00Z",
         "2027-01-01T00:00:00Z",
         password,
@@ -106,7 +106,7 @@ fn test_export_roundtrip() {
 fn test_export_preserves_metadata() {
     let plaintext = build_test_plaintext();
     let member_id = "bob@example.com";
-    let kid = "01HN8Z3Q4R5S6T7V8W9X0Y1Z2A";
+    let kid = "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD";
     let created_at = "2026-03-01T12:00:00Z";
     let expires_at = "2027-03-01T12:00:00Z";
 
@@ -140,7 +140,7 @@ fn test_export_uses_argon2id_kdf() {
     let exported = export_private_key_portable(
         &plaintext,
         "alice@example.com",
-        "01HN8Z3Q4R5S6T7V8W9X0Y1Z2A",
+        "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD",
         "2026-01-01T00:00:00Z",
         "2027-01-01T00:00:00Z",
         "strong-password-42",
@@ -183,7 +183,7 @@ fn test_export_password_too_short_fails() {
     let result = export_private_key_portable(
         &plaintext,
         "alice@example.com",
-        "01HN8Z3Q4R5S6T7V8W9X0Y1Z2A",
+        "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD",
         "2026-01-01T00:00:00Z",
         "2027-01-01T00:00:00Z",
         "short",
@@ -206,7 +206,7 @@ fn test_export_password_7_chars_fails() {
     let result = export_private_key_portable(
         &plaintext,
         "alice@example.com",
-        "01HN8Z3Q4R5S6T7V8W9X0Y1Z2A",
+        "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD",
         "2026-01-01T00:00:00Z",
         "2027-01-01T00:00:00Z",
         "1234567",
@@ -223,7 +223,7 @@ fn test_export_password_8_chars_succeeds() {
     let result = export_private_key_portable(
         &plaintext,
         "alice@example.com",
-        "01HN8Z3Q4R5S6T7V8W9X0Y1Z2A",
+        "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD",
         "2026-01-01T00:00:00Z",
         "2027-01-01T00:00:00Z",
         "12345678",

@@ -25,10 +25,10 @@ fn test_encrypt_file() {
     );
     let recipients_with_keys = vec![(
         ALICE_MEMBER_ID.to_string(),
-        create_test_public_key(ALICE_MEMBER_ID, "01HY0G8N3P5X7QRSTV0WXYZ123", &pk_b64),
+        create_test_public_key(ALICE_MEMBER_ID, "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD", &pk_b64),
     )];
     let (recipient_ids, members) = recipients_and_members(&recipients_with_keys);
-    let signer_kid = "01HY0G8N3P5X7QRSTV0WXYZ123";
+    let signer_kid = "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD";
     let content = b"Hello, World! ".repeat(100);
 
     let file_enc_doc = file_enc::encrypt_file_document(
@@ -84,10 +84,10 @@ fn test_defence_in_depth_sid_mismatch() {
     );
     let recipients_with_keys = vec![(
         ALICE_MEMBER_ID.to_string(),
-        create_test_public_key(ALICE_MEMBER_ID, "01HY0G8N3P5X7QRSTV0WXYZ123", &pk_b64),
+        create_test_public_key(ALICE_MEMBER_ID, "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD", &pk_b64),
     )];
     let (recipient_ids, members) = recipients_and_members(&recipients_with_keys);
-    let signer_kid = "01HY0G8N3P5X7QRSTV0WXYZ123";
+    let signer_kid = "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD";
 
     let mut file_enc_doc = file_enc::encrypt_file_document(
         b"Hello, World!",

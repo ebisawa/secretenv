@@ -62,7 +62,7 @@ fn resolve_value(value: Option<String>, from_stdin: bool) -> Result<String> {
 pub fn run(args: SetArgs) -> Result<()> {
     let value = resolve_value(args.value.clone(), args.stdin)?;
     let options = CommonCommandOptions::from(&args.common);
-    let ssh_ctx = resolve_ssh_context_optional(&options)?;
+    let ssh_ctx = resolve_ssh_context_optional(&options, args.member_id.clone())?;
     let outcome = set_kv_command(
         options,
         args.member_id.clone(),

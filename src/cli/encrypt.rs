@@ -40,7 +40,7 @@ pub struct EncryptArgs {
 
 pub fn run(args: EncryptArgs) -> Result<()> {
     let options = CommonCommandOptions::from(&args.common);
-    let ssh_ctx = resolve_ssh_context_optional(&options)?;
+    let ssh_ctx = resolve_ssh_context_optional(&options, args.member_id.clone())?;
     let encrypted = encrypt_file_command(
         &options,
         args.member_id.clone(),

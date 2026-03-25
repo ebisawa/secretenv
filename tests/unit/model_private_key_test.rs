@@ -9,9 +9,9 @@ use secretenv::model::private_key::*;
 fn test_private_key_deserialization() {
     let json_value = serde_json::json!({
         "protected": {
-            "format": secretenv::model::identifiers::format::PRIVATE_KEY_V3,
+            "format": secretenv::model::identifiers::format::PRIVATE_KEY_V4,
             "member_id": "alice@example.com",
-            "kid": "01HN8Z3Q4R5S6T7V8W9X0Y1Z2A",
+            "kid": "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD",
             "alg": {
                 "kdf": PROTECTION_METHOD_SSHSIG_ED25519_HKDF_SHA256,
                 "fpr": "sha256:ABCDEFGH123456789",
@@ -32,10 +32,10 @@ fn test_private_key_deserialization() {
 
     assert_eq!(
         pk.protected.format,
-        secretenv::model::identifiers::format::PRIVATE_KEY_V3
+        secretenv::model::identifiers::format::PRIVATE_KEY_V4
     );
     assert_eq!(pk.protected.member_id, ALICE_MEMBER_ID);
-    assert_eq!(pk.protected.kid, "01HN8Z3Q4R5S6T7V8W9X0Y1Z2A");
+    assert_eq!(pk.protected.kid, "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD");
     match &pk.protected.alg {
         PrivateKeyAlgorithm::SshSig { fpr, aead, .. } => {
             assert_eq!(fpr, "sha256:ABCDEFGH123456789");
@@ -52,9 +52,9 @@ fn test_private_key_deserialization() {
 fn test_private_key_serialization() {
     let pk = PrivateKey {
         protected: PrivateKeyProtected {
-            format: secretenv::model::identifiers::format::PRIVATE_KEY_V3.to_string(),
+            format: secretenv::model::identifiers::format::PRIVATE_KEY_V4.to_string(),
             member_id: BOB_MEMBER_ID.to_string(),
-            kid: "01HN8Z3Q4R5S6T7V8W9X0Y1Z2B".to_string(),
+            kid: "4Z8N6K1W3Q7RT5YH9M2PC4XV8D1B6FJA".to_string(),
             alg: PrivateKeyAlgorithm::SshSig {
                 fpr: "sha256:TESTFPR123".to_string(),
                 salt: "c2FsdA".to_string(),
@@ -73,7 +73,7 @@ fn test_private_key_serialization() {
 
     assert_eq!(
         json_value["protected"]["format"],
-        secretenv::model::identifiers::format::PRIVATE_KEY_V3
+        secretenv::model::identifiers::format::PRIVATE_KEY_V4
     );
     assert_eq!(json_value["protected"]["member_id"], BOB_MEMBER_ID);
     assert_eq!(
@@ -119,9 +119,9 @@ fn test_private_key_plaintext_serialization() {
 fn test_private_key_roundtrip() {
     let original = PrivateKey {
         protected: PrivateKeyProtected {
-            format: secretenv::model::identifiers::format::PRIVATE_KEY_V3.to_string(),
+            format: secretenv::model::identifiers::format::PRIVATE_KEY_V4.to_string(),
             member_id: TEST_MEMBER_ID.to_string(),
-            kid: "01HN8Z3Q4R5S6T7V8W9X0Y1Z2C".to_string(),
+            kid: "2C7R5M9K8D1XV4PH6T3NB2QJ9F7AK5WE".to_string(),
             alg: PrivateKeyAlgorithm::SshSig {
                 fpr: "sha256:FPR123456".to_string(),
                 salt: "c2FsdHNhbHQ".to_string(),

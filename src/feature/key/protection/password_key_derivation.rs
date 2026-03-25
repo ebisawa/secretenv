@@ -8,6 +8,7 @@ use crate::crypto::types::data::{Ikm, Info};
 use crate::crypto::types::keys::XChaChaKey;
 use crate::crypto::types::primitives::Salt;
 use crate::model::identifiers::context;
+use crate::support::kid::kid_display_lossy;
 use crate::Result;
 use argon2::Argon2;
 use rand::rngs::OsRng;
@@ -40,7 +41,10 @@ pub fn derive_key_from_password(
     if debug_enabled {
         debug!(
             "[CRYPTO] Argon2id: password hash (kid: {}, m: {}, t: {}, p: {})",
-            kid, ARGON2_MEMORY_COST_KIB, ARGON2_TIME_COST, ARGON2_PARALLELISM
+            kid_display_lossy(kid),
+            ARGON2_MEMORY_COST_KIB,
+            ARGON2_TIME_COST,
+            ARGON2_PARALLELISM
         );
     }
     let ikm = argon2id_hash(password, salt)?;
@@ -48,12 +52,12 @@ pub fn derive_key_from_password(
     if debug_enabled {
         debug!(
             "[CRYPTO] HKDF-SHA256: password key derivation (kid: {})",
-            kid
+            kid_display_lossy(kid)
         );
     }
     let info = Info::from_string(&format!(
         "{}:{}",
-        context::PASSWORD_PRIVATE_KEY_ENC_INFO_PREFIX_V3,
+        context::PASSWORD_PRIVATE_KEY_ENC_INFO_PREFIX_V4,
         kid
     ));
     let cek = kdf::expand_to_array(&Ikm::from(ikm.as_ref()), Some(salt), &info)?;

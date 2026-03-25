@@ -40,7 +40,7 @@ pub struct RunArgs {
 
 pub fn run(args: RunArgs) -> Result<()> {
     let options = CommonCommandOptions::from(&args.common);
-    let ssh_ctx = resolve_ssh_context_optional(&options)?;
+    let ssh_ctx = resolve_ssh_context_optional(&options, args.member_id.clone())?;
     let exit_code = execute_env_command(
         &options,
         args.member_id.clone(),

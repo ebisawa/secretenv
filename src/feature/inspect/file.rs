@@ -4,6 +4,7 @@
 //! File-enc inspection.
 
 use crate::model::file_enc::FileEncDocument;
+use crate::support::kid::build_kid_display;
 
 use super::formatter::{
     append_file_payload_info, append_removed_recipients, append_signer_info, append_wrap_item,
@@ -68,8 +69,9 @@ fn build_file_enc_signature_section(doc: &FileEncDocument) -> InspectSection {
             push_line(out, format!("Created:  {}", doc.protected.created_at));
             push_line(out, format!("Updated:  {}", doc.protected.updated_at));
             let sig = &doc.signature;
+            let kid_display = build_kid_display(&sig.kid).unwrap_or_else(|_| sig.kid.clone());
             push_line(out, format!("  alg:    {}", sig.alg));
-            push_line(out, format!("  kid:    {}", sig.kid));
+            push_line(out, format!("  kid:    {}", kid_display));
             append_signer_info(sig.signer_pub.as_ref(), out);
             push_line(
                 out,

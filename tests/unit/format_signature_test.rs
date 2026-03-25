@@ -21,7 +21,7 @@ fn create_test_file_enc_document_protected() -> FileEncDocumentProtected {
         sid,
         wrap: vec![WrapItem {
             rid: "alice@example.com".to_string(),
-            kid: "01HY0G8N3P5X7QRSTV0WXYZ123".to_string(),
+            kid: "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD".to_string(),
             alg: hpke::ALG_HPKE_32_1_3.to_string(),
             enc: "enc_base64url".to_string(),
             ct: "ct_base64url".to_string(),
@@ -63,13 +63,14 @@ fn test_sign_file_document_returns_valid_structure() {
 
     let doc = create_test_file_enc_document_protected();
 
-    let sig = sign_file_document(&doc, &sk, "01HY0G8N3P5X7QRSTV0WXYZ123", None, false).unwrap();
+    let sig =
+        sign_file_document(&doc, &sk, "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD", None, false).unwrap();
 
     assert_eq!(
         sig.alg,
         secretenv::model::identifiers::alg::SIGNATURE_ED25519
     );
-    assert_eq!(sig.kid, "01HY0G8N3P5X7QRSTV0WXYZ123");
+    assert_eq!(sig.kid, "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD");
     assert!(sig.signer_pub.is_none());
     assert!(!sig.sig.is_empty());
 }
@@ -82,7 +83,8 @@ fn test_verify_file_enc_signature_accepts_valid_signature() {
 
     let doc = create_test_file_enc_document_protected();
 
-    let sig = sign_file_document(&doc, &sk, "01HY0G8N3P5X7QRSTV0WXYZ123", None, false).unwrap();
+    let sig =
+        sign_file_document(&doc, &sk, "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD", None, false).unwrap();
     verify_file_signature(&doc, &vk, &sig, false).unwrap();
 }
 
@@ -94,7 +96,8 @@ fn test_verify_file_enc_signature_rejects_tampered_document() {
 
     let doc = create_test_file_enc_document_protected();
 
-    let sig = sign_file_document(&doc, &sk, "01HY0G8N3P5X7QRSTV0WXYZ123", None, false).unwrap();
+    let sig =
+        sign_file_document(&doc, &sk, "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD", None, false).unwrap();
 
     // Tamper document
     let mut tampered = doc.clone();
@@ -115,8 +118,10 @@ fn test_sign_file_document_deterministic() {
 
     let doc = create_test_file_enc_document_protected();
 
-    let sig1 = sign_file_document(&doc, &sk, "01HY0G8N3P5X7QRSTV0WXYZ123", None, false).unwrap();
-    let sig2 = sign_file_document(&doc, &sk, "01HY0G8N3P5X7QRSTV0WXYZ123", None, false).unwrap();
+    let sig1 =
+        sign_file_document(&doc, &sk, "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD", None, false).unwrap();
+    let sig2 =
+        sign_file_document(&doc, &sk, "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD", None, false).unwrap();
 
     // Ed25519 signatures are deterministic per RFC 8032
     assert_eq!(sig1.sig, sig2.sig);

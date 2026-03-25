@@ -51,7 +51,7 @@ fn create_test_public_key(expires_at: &str) -> (PublicKey, String) {
     let (ssh_temp, ssh_priv, ssh_pub_content) = create_ssh_keypair();
     let ssh_context = build_test_ssh_context(&ssh_priv, &ssh_pub_content);
 
-    let (kid, _kem_sk, kem_pk, sig_sk, sig_pk) = generate_keypairs().unwrap();
+    let (_kem_sk, kem_pk, sig_sk, sig_pk) = generate_keypairs().unwrap();
     let identity_keys = build_identity_keys(&kem_pk, &sig_pk).unwrap();
     let attestation = build_attestation(&ssh_context, &identity_keys).unwrap();
     let identity = Identity {
@@ -60,7 +60,6 @@ fn create_test_public_key(expires_at: &str) -> (PublicKey, String) {
     };
     let params = PublicKeyBuildParams {
         member_id: "test@example.com",
-        kid: &kid,
         identity,
         created_at: "2026-01-01T00:00:00Z",
         expires_at,
@@ -71,6 +70,7 @@ fn create_test_public_key(expires_at: &str) -> (PublicKey, String) {
     let public_key = build_public_key(&params).unwrap();
     // Keep ssh_temp alive until public_key is built
     drop(ssh_temp);
+    let kid = public_key.protected.kid.clone();
     (public_key, kid)
 }
 

@@ -3,7 +3,10 @@
 
 use crate::feature::context::crypto::validate_private_key_material;
 use crate::feature::key::protection::encryption::decrypt_private_key;
+use crate::feature::verify::private_key::verify_private_key_matches_public_key;
+use crate::feature::verify::public_key::verify_public_key_with_attestation;
 use crate::io::keystore::storage::load_private_key;
+use crate::io::keystore::storage::load_public_key;
 use crate::io::ssh::backend::SignatureBackend;
 use crate::model::private_key::PrivateKeyPlaintext;
 use crate::Result;
@@ -31,6 +34,12 @@ pub fn load_and_decrypt_private_key(
     let keystore_root = resolve_keystore_root(home)?;
     let kid = resolve_active_kid(&keystore_root, &member_id, kid)?;
     let encrypted = load_private_key(&keystore_root, &member_id, &kid)?;
+
+    // Verify the corresponding public.json in the same key directory.
+    let public_key = load_public_key(&keystore_root, &member_id, &kid)?;
+    let verified_public_key = verify_public_key_with_attestation(&public_key, debug)?;
+    verify_private_key_matches_public_key(&encrypted, verified_public_key.document())?;
+
     let plaintext = decrypt_private_key(&encrypted, backend, ssh_pubkey, debug)?;
     validate_private_key_material(&plaintext)?;
 

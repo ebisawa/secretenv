@@ -10,7 +10,7 @@ fn build_test_public_key_json(member_id: &str, kid: &str) -> String {
     format!(
         r#"{{
   "protected": {{
-    "format": "secretenv.public.key@3",
+    "format": "secretenv.public.key@4",
     "member_id": "{}",
     "kid": "{}",
     "identity": {{
@@ -46,7 +46,7 @@ fn test_workspace_public_key_source_load_public_key() {
     let workspace_path = temp_dir.path();
 
     let member_id = "alice@example.com";
-    let kid = "01HY0G8N3P5X7QRSTV0WXYZ123";
+    let kid = "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD";
     setup_workspace_member(workspace_path, member_id, kid);
 
     let source = WorkspacePublicKeySource::new(workspace_path.to_path_buf());
@@ -86,7 +86,7 @@ fn test_workspace_public_key_source_rejects_incoming_member() {
     setup_incoming_member(
         workspace_path,
         "pending@example.com",
-        "01HY0G8N3P5X7QRSTV0WXYZ124",
+        "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GE",
     );
 
     let source = WorkspacePublicKeySource::new(workspace_path.to_path_buf());
@@ -109,13 +109,13 @@ fn test_workspace_public_key_source_bulk_rejects_incoming_member() {
     setup_workspace_member(
         workspace_path,
         "alice@example.com",
-        "01HY0G8N3P5X7QRSTV0WXYZ123",
+        "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD",
     );
     // Incoming member
     setup_incoming_member(
         workspace_path,
         "pending@example.com",
-        "01HY0G8N3P5X7QRSTV0WXYZ124",
+        "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GE",
     );
 
     let source = WorkspacePublicKeySource::new(workspace_path.to_path_buf());
@@ -136,9 +136,9 @@ fn test_workspace_public_key_source_load_multiple() {
     let workspace_path = temp_dir.path();
 
     let members = vec![
-        ("alice@example.com", "01HY0G8N3P5X7QRSTV0WXYZ123"),
-        ("bob@example.com", "01HY0G8N3P5X7QRSTV0WXYZ124"),
-        ("charlie@example.com", "01HY0G8N3P5X7QRSTV0WXYZ125"),
+        ("alice@example.com", "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD"),
+        ("bob@example.com", "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GE"),
+        ("charlie@example.com", "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GF"),
     ];
 
     for (member_id, kid) in &members {

@@ -6,6 +6,7 @@
 pub mod base64url;
 pub mod fs;
 pub mod json_limits;
+pub mod kid;
 pub mod limits;
 pub mod path;
 pub mod runtime;

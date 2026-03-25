@@ -70,7 +70,7 @@ pub(super) fn recipients_and_members(
 pub(super) fn create_test_public_key(member_id: &str, kid: &str, kem_pub: &str) -> PublicKey {
     PublicKey {
         protected: PublicKeyProtected {
-            format: secretenv::model::identifiers::format::PUBLIC_KEY_V3.to_string(),
+            format: secretenv::model::identifiers::format::PUBLIC_KEY_V4.to_string(),
             member_id: member_id.to_string(),
             kid: kid.to_string(),
             identity: Identity {

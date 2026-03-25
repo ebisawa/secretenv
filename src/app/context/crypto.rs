@@ -10,15 +10,18 @@ use crate::feature::context::crypto::{
 };
 use crate::feature::context::env_key;
 use crate::feature::key::protection::encryption::decrypt_private_key;
+use crate::feature::verify::private_key::verify_private_key_matches_public_key;
+use crate::feature::verify::public_key::verify_public_key_with_attestation;
 use crate::io::config::paths::get_base_dir;
 use crate::io::keystore::helpers::resolve_kid;
 use crate::io::keystore::paths::get_keystore_root_from_base;
 use crate::io::keystore::public_key_source::{
     KeystorePublicKeySource, PublicKeySource, WorkspacePublicKeySource,
 };
-use crate::io::keystore::storage::load_private_key;
+use crate::io::keystore::storage::{load_private_key, load_public_key};
 use crate::io::ssh::backend::SignatureBackend;
 use crate::model::private_key::PrivateKeyAlgorithm;
+use crate::support::kid::build_kid_display;
 use crate::{Error, Result};
 
 pub fn is_env_key_mode() -> bool {
@@ -51,10 +54,18 @@ pub fn load_crypto_context(
     };
     let kid = resolve_kid(&keystore_root, member_id, explicit_kid)?;
     if debug_enabled {
-        debug!("[CRYPTO] load_crypto_context: resolved kid={}", kid);
+        let kid_display = build_kid_display(&kid).unwrap_or_else(|_| kid.clone());
+        debug!("[CRYPTO] load_crypto_context: resolved kid={}", kid_display);
     }
 
     let encrypted_private_key = load_private_key(&keystore_root, member_id, &kid)?;
+
+    // Keystore invariant: private/public pair under the same `<kid>/` directory should match.
+    // (env key mode intentionally skips this, but keystore mode can verify it.)
+    let public_key = load_public_key(&keystore_root, member_id, &kid)?;
+    let verified_public_key = verify_public_key_with_attestation(&public_key, debug_enabled)?;
+    verify_private_key_matches_public_key(&encrypted_private_key, verified_public_key.document())?;
+
     let private_key_plaintext =
         decrypt_private_key(&encrypted_private_key, backend, ssh_pubkey, debug_enabled)?;
 

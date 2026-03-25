@@ -236,7 +236,7 @@ fn test_ed25519_sign_verify_roundtrip() {
     let signature = sign_bytes(
         &canonical_bytes,
         &signing_key,
-        "01HTEST0000000000000000000",
+        "10HW16VD7ADNCXM1WN44J04QKANJ8XHG",
         None,
         SIGNATURE_ED25519,
     )
@@ -265,7 +265,7 @@ fn test_ed25519_wrong_key_error() {
     let signature = sign_bytes(
         &canonical_bytes,
         &alice_sk,
-        "01HTEST0000000000000000000",
+        "10HW16VD7ADNCXM1WN44J04QKANJ8XHG",
         None,
         SIGNATURE_ED25519,
     )
@@ -288,7 +288,7 @@ fn test_ed25519_tampered_document_error() {
     let signature = sign_bytes(
         &original_canonical,
         &signing_key,
-        "01HTEST0000000000000000000",
+        "10HW16VD7ADNCXM1WN44J04QKANJ8XHG",
         None,
         SIGNATURE_ED25519,
     )
@@ -325,7 +325,7 @@ fn test_ed25519_signature_structure() {
     let signature = sign_bytes(
         &canonical_bytes,
         &signing_key,
-        "01HTEST0000000000000000000",
+        "10HW16VD7ADNCXM1WN44J04QKANJ8XHG",
         None,
         SIGNATURE_ED25519,
     )
@@ -351,7 +351,7 @@ fn test_ed25519_payload_hash_verification() {
     let signature = sign_bytes(
         &canonical_bytes,
         &signing_key,
-        "01HTEST0000000000000000000",
+        "10HW16VD7ADNCXM1WN44J04QKANJ8XHG",
         None,
         SIGNATURE_ED25519,
     )
@@ -380,7 +380,7 @@ fn test_ed25519_deterministic_signing() {
     let sig1 = sign_bytes(
         &canonical_bytes,
         &signing_key,
-        "01HTEST0000000000000000000",
+        "10HW16VD7ADNCXM1WN44J04QKANJ8XHG",
         None,
         SIGNATURE_ED25519,
     )
@@ -388,7 +388,7 @@ fn test_ed25519_deterministic_signing() {
     let sig2 = sign_bytes(
         &canonical_bytes,
         &signing_key,
-        "01HTEST0000000000000000000",
+        "10HW16VD7ADNCXM1WN44J04QKANJ8XHG",
         None,
         SIGNATURE_ED25519,
     )
@@ -412,7 +412,7 @@ fn test_ed25519_jcs_normalization_applied() {
     let signature = sign_bytes(
         &canonical_bytes,
         &signing_key,
-        "01HTEST0000000000000000000",
+        "10HW16VD7ADNCXM1WN44J04QKANJ8XHG",
         None,
         SIGNATURE_ED25519,
     )

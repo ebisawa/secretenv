@@ -16,7 +16,7 @@ pub struct WrapItem {
     /// Recipient member_id
     pub rid: String,
 
-    /// Key ID (ULID, 26 characters) of the recipient's key used for wrapping
+    /// Recipient key statement ID in canonical Crockford Base32 form
     pub kid: String,
 
     /// HPKE algorithm identifier (e.g., "hpke-32-1-2")
@@ -38,7 +38,7 @@ pub struct RemovedRecipient {
     /// Recipient member_id that was removed
     pub rid: String,
 
-    /// Key ID (ULID) of the recipient's key used for wrapping (wrap_item.kid)
+    /// Recipient key statement ID copied from `wrap_item.kid`
     pub kid: String,
 
     /// Timestamp when the recipient was removed (RFC 3339)

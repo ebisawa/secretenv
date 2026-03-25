@@ -117,11 +117,13 @@ The command examples in this guide assume that **the current directory is inside
 
 `member_id` is an ASCII identifier. It must start with an alphanumeric character (`A-Za-z0-9`), may contain only `A-Za-z0-9._@+-`, and its length is 1 to 254 characters (pattern: `^[A-Za-z0-9][A-Za-z0-9._@+-]{0,253}$`). It resembles an email address, but `@` is not required. No actual email is sent or received; it simply serves as a unique identifier within the team.
 
-### kid (Key Generation ID)
+### kid (Key Statement ID)
 
-A ULID-format identifier such as `01HY0G8N3P5X7QRSTV0WXYZ123` that represents the version of a key.
+`kid` identifies a self-signed key statement. The canonical stored form is a 32-character Crockford Base32 string without hyphens, for example `7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD`.
 
-A single member can have multiple kids (for example, an old kid and a new kid coexisting after annual rotation). The encrypted file records which kid was used for encryption, so decryption always uses the appropriate key.
+CLI output, logs, and review screens usually show a dashed display form such as `7M2Q-9D4R-1H8V-W6PK-T3XN-C5JY-2F9A-R8GD`. Input is case-insensitive and hyphen-agnostic, so both forms refer to the same key statement.
+
+A single member can have multiple kids. Encrypted files record which kid was used, local keystore paths and JSON documents use the canonical no-dash form, and human-facing output uses the dashed display form.
 
 ### kv-enc (KV Encrypted Format)
 
@@ -185,7 +187,7 @@ secretenv verifies "is this public key really from this person?" through multipl
 | Repository tamperer | Can modify files in `.secretenv/` | Tampering detected by signature verification |
 | Malicious insider | Retains decrypted content as a legitimate member | Tracked via disclosure history (recovery impossible) |
 | Public key substitution attack | Forges a member's public key file | Defended by self-signature, attestation, and online verification |
-| Key rotation attack | Attempts to reuse wraps from older key generations | kid is included in HPKE info, key generation mismatch is detected |
+| Key rotation attack | Attempts to reuse wraps bound to older key statements | kid is included in HPKE info, so statement mismatch is detected |
 
 **Assumption**: This defense model assumes that write access to the repository is properly managed. On GitHub, changes to `members/active/` are verified through PR review.
 
@@ -312,7 +314,7 @@ Creating workspace .secretenv/
 Using SSH key: SHA256:xxxxx... (from ~/.ssh/id_ed25519)
 SSH signature determinism: OK
 Generated and activated key for 'alice@example.com':
-  Key ID:   01HY0G8N3P5X7QRSTV0WXYZ123
+  Key ID:   7M2Q-9D4R-1H8V-W6PK-T3XN-C5JY-2F9A-R8GD
   Expires:  2027-03-19T00:00:00Z
 Added 'alice@example.com' to members/active/
 ```
@@ -320,7 +322,7 @@ Added 'alice@example.com' to members/active/
 `init` automatically:
 
 - Creates the `.secretenv/` directory structure
-- Generates an HPKE key pair locally (`~/.config/secretenv/keys/alice@example.com/`)
+- Generates an HPKE key pair locally (`~/.config/secretenv/keys/alice@example.com/<canonical-kid>/`)
 - Registers your public key at `members/active/alice@example.com.json`
 
 ### Step 3: Add your first secrets
@@ -373,7 +375,7 @@ Output:
 ```
 Using SSH key: SHA256:xxxxx... (from ~/.ssh/id_ed25519)
 Generated and activated key for 'bob@example.com':
-  Key ID:   01HWXXXXXXXXXXXXXXXXXXXXX
+  Key ID:   9N4R-1H8V-W6PK-T3XN-C5JY-2F9A-R8GD-7M2Q
   Expires:  2027-03-19T00:00:00Z
 Added 'bob@example.com' to members/incoming/
 
@@ -662,6 +664,8 @@ secretenv rewrap --clear-disclosure-history
 ```bash
 secretenv key list
 ```
+
+The CLI displays kids in dashed display form. Local keystore paths and JSON documents use the canonical no-dash form. Commands such as `key activate`, `key remove`, and `key export` accept either form, and `key list` is ordered by `created_at` descending with canonical `kid` as the tiebreaker.
 
 ### Regular Rotation
 

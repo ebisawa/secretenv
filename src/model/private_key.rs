@@ -1,14 +1,14 @@
 // Copyright 2026 Satoshi Ebisawa
 // SPDX-License-Identifier: Apache-2.0
 
-//! PrivateKey v3 model.
+//! PrivateKey v4 model.
 //!
 //! SSH Ed25519 encrypted private key storage for secretenv.
 
 use serde::{Deserialize, Serialize};
 use zeroize::Zeroize;
 
-/// PrivateKey v3 document (SSH encrypted).
+/// PrivateKey v4 document (SSH encrypted).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct PrivateKey {
@@ -23,13 +23,13 @@ pub struct PrivateKey {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct PrivateKeyProtected {
-    /// Format identifier: "secretenv.private.key@3"
+    /// Format identifier: "secretenv.private.key@4"
     pub format: String,
 
     /// Member ID (RFC 5322 email format)
     pub member_id: String,
 
-    /// Key ID (ULID, 26 characters)
+    /// Statement ID (canonical Crockford Base32, 32 characters)
     pub kid: String,
 
     /// Algorithm configuration

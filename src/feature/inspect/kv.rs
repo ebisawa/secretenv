@@ -8,6 +8,7 @@ use crate::model::kv_enc::document::{KvEncDocument, KvFileSignature};
 use crate::model::kv_enc::entry::KvEntryValue;
 use crate::model::kv_enc::header::{KvHeader, KvWrap};
 use crate::model::kv_enc::line::KvEncLine;
+use crate::support::kid::build_kid_display;
 use crate::Result;
 
 use super::formatter::{
@@ -90,11 +91,13 @@ fn build_kv_enc_entries_section(data: &KvEncInspectionData) -> InspectSection {
 
 fn build_kv_enc_signature_section(data: &KvEncInspectionData) -> Option<InspectSection> {
     data.signature.as_ref().map(|(signature, _token)| {
+        let kid_display =
+            build_kid_display(&signature.kid).unwrap_or_else(|_| signature.kid.clone());
         build_section(
             "Signature",
             build_section_lines(|out| {
                 push_line(out, format!("Algorithm:  {}", signature.alg));
-                push_line(out, format!("Kid:        {}", signature.kid));
+                push_line(out, format!("Kid:        {}", kid_display));
                 append_signer_info(signature.signer_pub.as_ref(), out);
                 push_line(
                     out,

@@ -21,6 +21,8 @@ pub mod cli_common;
 
 #[path = "unit/app_context_env_dispatch_test.rs"]
 pub mod app_context_env_dispatch_test;
+#[path = "unit/app_context_ssh_member_id_test.rs"]
+pub mod app_context_ssh_member_id_test;
 #[path = "unit/app_identity_test.rs"]
 pub mod app_identity_test;
 #[path = "unit/app_key_github_test.rs"]
@@ -29,6 +31,8 @@ pub mod app_key_github_test;
 pub mod app_registration_test;
 #[path = "unit/cli_identity_prompt_test.rs"]
 pub mod cli_identity_prompt_test;
+#[path = "unit/cli_set_member_id_test.rs"]
+pub mod cli_set_member_id_test;
 #[path = "unit/config_resolution_ssh_signer_test.rs"]
 pub mod config_resolution_ssh_signer_test;
 #[path = "unit/config_resolution_test.rs"]
@@ -227,6 +231,8 @@ pub mod support_fs_atomic_test;
 pub mod support_fs_lock_test;
 #[path = "unit/support_fs_test.rs"]
 pub mod support_fs_test;
+#[path = "unit/support_kid_test.rs"]
+pub mod support_kid_test;
 #[path = "unit/support_time_test.rs"]
 pub mod support_time_test;
 #[path = "unit/support_validation_test.rs"]

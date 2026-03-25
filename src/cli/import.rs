@@ -38,7 +38,7 @@ pub struct ImportArgs {
 pub fn run(args: ImportArgs) -> Result<()> {
     let content = load_text(std::path::Path::new(&args.filename))?;
     let options = CommonCommandOptions::from(&args.common);
-    let ssh_ctx = resolve_ssh_context_optional(&options)?;
+    let ssh_ctx = resolve_ssh_context_optional(&options, args.member_id.clone())?;
     let (outcome, entry_count) = import_kv_command(
         options,
         args.member_id.clone(),

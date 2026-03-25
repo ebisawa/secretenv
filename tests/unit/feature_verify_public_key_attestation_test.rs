@@ -2,13 +2,18 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::test_utils::create_temp_ssh_keypair_in_dir;
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use base64::Engine;
 use secretenv::app::context::ssh::{
     build_ssh_signing_context_with_params, resolve_ssh_key_candidates_with_params, SshSigningParams,
 };
 use secretenv::config::types::SshSigner;
+use secretenv::crypto::sign::sign_bytes;
 use secretenv::feature::key::generate::{generate_key, KeyGenerationOptions};
 use secretenv::feature::verify::public_key::verify_public_key_with_attestation;
+use secretenv::format::jcs;
 use secretenv::io::keystore::storage::load_public_key;
+use secretenv::model::identifiers::alg;
 use serial_test::serial;
 use tempfile::TempDir;
 
@@ -66,4 +71,40 @@ fn generated_public_key_verifies_with_attestation_repeatedly() {
         let public_key = generate_real_ssh_attested_public_key(&temp_dir);
         verify_public_key_with_attestation(&public_key, false).unwrap();
     }
+}
+
+#[test]
+fn public_key_with_resigned_but_mismatched_kid_fails_verification() {
+    let temp_dir = TempDir::new().unwrap();
+    let (ssh_priv, _ssh_pub, ssh_pub_content) = create_temp_ssh_keypair_in_dir(&temp_dir);
+    let (private_key_plaintext, mut public_key) =
+        crate::test_utils::keygen_test("attestation-test@example.com", &ssh_priv, &ssh_pub_content)
+            .unwrap();
+
+    let signing_key_bytes: [u8; 32] = URL_SAFE_NO_PAD
+        .decode(&private_key_plaintext.keys.sig.d)
+        .unwrap()
+        .try_into()
+        .unwrap();
+    let signing_key = ed25519_dalek::SigningKey::from_bytes(&signing_key_bytes);
+
+    public_key.protected.kid = "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GE".to_string();
+    let protected_jcs = jcs::normalize(&public_key.protected).unwrap();
+    public_key.signature = sign_bytes(
+        &protected_jcs,
+        &signing_key,
+        &public_key.protected.kid,
+        None,
+        alg::SIGNATURE_ED25519,
+    )
+    .unwrap()
+    .sig;
+
+    let error = verify_public_key_with_attestation(&public_key, false)
+        .unwrap_err()
+        .to_string();
+    assert!(
+        error.contains("V-KID-DERIVED") || error.contains("derived kid"),
+        "unexpected error: {error}"
+    );
 }

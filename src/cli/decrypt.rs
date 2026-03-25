@@ -48,7 +48,7 @@ pub fn run(args: DecryptArgs) -> Result<()> {
     })?;
 
     let options = CommonCommandOptions::from(&args.common);
-    let ssh_ctx = resolve_ssh_context_optional(&options)?;
+    let ssh_ctx = resolve_ssh_context_optional(&options, args.member_id.clone())?;
     let plaintext_bytes = decrypt_file_command(
         &options,
         args.member_id.clone(),

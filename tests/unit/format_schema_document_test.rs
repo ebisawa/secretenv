@@ -18,9 +18,9 @@ use uuid::Uuid;
 fn test_parse_public_key_str_with_schema() {
     let public_key = serde_json::json!({
         "protected": {
-            "format": format::PUBLIC_KEY_V3,
+            "format": format::PUBLIC_KEY_V4,
             "member_id": "alice@example.com",
-            "kid": "01HY0G8N3P5X7QRSTV0WXYZ123",
+            "kid": "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD",
             "identity": {
                 "keys": {
                     "kem": {
@@ -53,9 +53,9 @@ fn test_parse_public_key_str_with_schema() {
 fn test_parse_private_key_bytes_rejects_legacy_argon2_fields_error() {
     let private_key = serde_json::json!({
         "protected": {
-            "format": format::PRIVATE_KEY_V3,
+            "format": format::PRIVATE_KEY_V4,
             "member_id": "alice@example.com",
-            "kid": "01HY0G8N3P5X7QRSTV0WXYZ123",
+            "kid": "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD",
             "alg": {
                 "kdf": private_key::PROTECTION_METHOD_ARGON2ID_HKDF_SHA256,
                 "salt": "AAAAAAAAAAAAAAAAAAAAAA",
@@ -96,7 +96,7 @@ fn test_parse_file_enc_str_with_schema() {
             },
             "wrap": [{
                 "rid": "alice@example.com",
-                "kid": "01HY0G8N3P5X7QRSTV0WXYZ123",
+                "kid": "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD",
                 "alg": hpke::ALG_HPKE_32_1_3,
                 "enc": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
                 "ct": "AAAAAAAAAAAAAAAA"
@@ -106,7 +106,7 @@ fn test_parse_file_enc_str_with_schema() {
         },
         "signature": {
             "alg": alg::SIGNATURE_ED25519,
-            "kid": "01HY0G8N3P5X7QRSTV0WXYZ123",
+            "kid": "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD",
             "sig": "QUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQQ"
         }
     });
@@ -125,7 +125,7 @@ fn test_parse_kv_tokens_with_schema() {
     let wrap = KvWrap {
         wrap: vec![WrapItem {
             rid: "alice@example.com".to_string(),
-            kid: "01HY0G8N3P5X7QRSTV0WXYZ123".to_string(),
+            kid: "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD".to_string(),
             alg: hpke::ALG_HPKE_32_1_3.to_string(),
             enc: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".to_string(),
             ct: "AAAAAAAAAAAAAAAA".to_string(),
@@ -142,7 +142,7 @@ fn test_parse_kv_tokens_with_schema() {
     };
     let signature = Signature {
         alg: alg::SIGNATURE_ED25519.to_string(),
-        kid: "01HY0G8N3P5X7QRSTV0WXYZ123".to_string(),
+        kid: "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD".to_string(),
         signer_pub: None,
         sig:
             "QUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQQ"
@@ -169,7 +169,7 @@ fn test_parse_kv_signature_token_rejects_unknown_field_error() {
         TokenCodec::JsonJcs,
         &serde_json::json!({
             "alg": alg::SIGNATURE_ED25519,
-            "kid": "01HY0G8N3P5X7QRSTV0WXYZ123",
+            "kid": "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD",
             "sig": "QUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQQ",
             "unexpected": true
         }),
@@ -185,7 +185,7 @@ fn test_parse_file_enc_str_rejects_wrap_count_over_limit() {
     let sid = "123e4567-e89b-12d3-a456-426614174000";
     let wrap_item = serde_json::json!({
         "rid": "alice@example.com",
-        "kid": "01HY0G8N3P5X7QRSTV0WXYZ123",
+        "kid": "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD",
         "alg": hpke::ALG_HPKE_32_1_3,
         "enc": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
         "ct": "AAAAAAAAAAAAAAAA"
@@ -212,7 +212,7 @@ fn test_parse_file_enc_str_rejects_wrap_count_over_limit() {
         },
         "signature": {
             "alg": alg::SIGNATURE_ED25519,
-            "kid": "01HY0G8N3P5X7QRSTV0WXYZ123",
+            "kid": "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD",
             "sig": "QUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQQ"
         }
     });
@@ -227,7 +227,7 @@ fn test_parse_file_enc_str_rejects_wrap_count_over_limit() {
 fn test_parse_kv_wrap_token_rejects_wrap_count_over_limit() {
     let wrap_item = WrapItem {
         rid: "alice@example.com".to_string(),
-        kid: "01HY0G8N3P5X7QRSTV0WXYZ123".to_string(),
+        kid: "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD".to_string(),
         alg: hpke::ALG_HPKE_32_1_3.to_string(),
         enc: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".to_string(),
         ct: "AAAAAAAAAAAAAAAA".to_string(),

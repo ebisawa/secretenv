@@ -8,6 +8,7 @@ use crate::model::public_key::PublicKey;
 use crate::model::signature::Signature;
 use crate::model::verification::VerifyingKeySource;
 use crate::support::base64url::b64_decode_array;
+use crate::support::kid::kid_display_lossy;
 use crate::{Error, Result};
 use ed25519_dalek::VerifyingKey;
 
@@ -54,7 +55,10 @@ pub fn find_public_key_by_kid(
     }
 
     Err(Error::Crypto {
-        message: format!("Cannot find public key with kid '{}' in workspace", kid),
+        message: format!(
+            "Cannot find public key with kid '{}' in workspace",
+            kid_display_lossy(kid)
+        ),
         source: None,
     })
 }
@@ -113,7 +117,10 @@ fn verify_kid_in_active_members(workspace_path: Option<&std::path::Path>, kid: &
     let found = find_active_member_by_kid(ws_path, kid)?;
     if found.is_none() {
         return Err(Error::Crypto {
-            message: format!("Signer key '{}' not found in active members", kid),
+            message: format!(
+                "Signer key '{}' not found in active members",
+                kid_display_lossy(kid)
+            ),
             source: None,
         });
     }
@@ -151,7 +158,8 @@ fn build_loaded_verifying_key(
         return Err(Error::Crypto {
             message: format!(
                 "kid mismatch: signature.kid '{}' != signer_pub.protected.kid '{}'",
-                expected_kid, doc.protected.kid
+                kid_display_lossy(expected_kid),
+                kid_display_lossy(&doc.protected.kid)
             ),
             source: None,
         });

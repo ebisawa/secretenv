@@ -39,7 +39,7 @@ pub struct UnsetArgs {
 
 pub fn run(args: UnsetArgs) -> Result<()> {
     let options = CommonCommandOptions::from(&args.common);
-    let ssh_ctx = resolve_ssh_context_optional(&options)?;
+    let ssh_ctx = resolve_ssh_context_optional(&options, args.member_id.clone())?;
     let outcome = unset_kv_command(
         options,
         args.member_id.clone(),

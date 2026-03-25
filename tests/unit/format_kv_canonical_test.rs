@@ -43,14 +43,14 @@ fn test_extract_recipients_from_wrap() {
         wrap: vec![
             WrapItem {
                 rid: "alice@example.com".to_string(),
-                kid: "01HY0G8N3P5X7QRSTV0WXYZ123".to_string(),
+                kid: "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD".to_string(),
                 alg: hpke::ALG_HPKE_32_1_3.to_string(),
                 enc: "dummy".to_string(),
                 ct: "dummy".to_string(),
             },
             WrapItem {
                 rid: "bob@example.com".to_string(),
-                kid: "01HY0G8N3P5X7QRSTV0WXYZ456".to_string(),
+                kid: "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GH".to_string(),
                 alg: hpke::ALG_HPKE_32_1_3.to_string(),
                 enc: "dummy".to_string(),
                 ct: "dummy".to_string(),

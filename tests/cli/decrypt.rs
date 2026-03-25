@@ -27,7 +27,7 @@ fn create_test_keystore(temp_dir: &TempDir, member_id: &str, kid: &str) -> std::
     // Create a dummy private.json (minimal structure for testing)
     let private_json = format!(
         r#"{{
-    "format": "secretenv.private.key@3",
+    "format": "secretenv.private.key@4",
     "member_id": "{}",
     "kid": "{}",
     "protection": {{
@@ -75,7 +75,7 @@ fn create_test_encrypted_file(path: &std::path::Path) {
   },
   "signature": {
     "alg": "eddsa-ed25519",
-    "kid": "01HTEST0000000000000000000",
+    "kid": "10HW16VD7ADNCXM1WN44J04QKANJ8XHG",
     "sig": "dGVzdA"
   }
 }"#;
@@ -106,7 +106,11 @@ fn test_decrypt_missing_input() {
 #[test]
 fn test_decrypt_with_explicit_member_id() {
     let temp_dir = TempDir::new().unwrap();
-    create_test_keystore(&temp_dir, ALICE_MEMBER_ID, "01HTEST0000000000000000000");
+    create_test_keystore(
+        &temp_dir,
+        ALICE_MEMBER_ID,
+        "10HW16VD7ADNCXM1WN44J04QKANJ8XHG",
+    );
     let input_file = temp_dir.path().join("test.enc");
     create_test_encrypted_file(&input_file);
     let output_file = temp_dir.path().join("output.dat");
@@ -127,7 +131,7 @@ fn test_decrypt_with_explicit_member_id() {
 fn test_decrypt_with_member_id_from_env() {
     let temp_dir = TempDir::new().unwrap();
     let _keystore_root =
-        create_test_keystore(&temp_dir, BOB_MEMBER_ID, "01HTEST00000000000000000002");
+        create_test_keystore(&temp_dir, BOB_MEMBER_ID, "XXCXP9PZWD1FXT336XSBT9W1BR5EADN8");
     let input_file = temp_dir.path().join("test.enc");
     create_test_encrypted_file(&input_file);
     let output_file = temp_dir.path().join("output.dat");
@@ -150,8 +154,11 @@ fn test_decrypt_with_workspace_option() {
     fs::create_dir_all(workspace.join("members")).unwrap();
     fs::create_dir_all(workspace.join("secrets")).unwrap();
 
-    let _keystore_root =
-        create_test_keystore(&temp_dir, CAROL_MEMBER_ID, "01HTEST00000000000000000003");
+    let _keystore_root = create_test_keystore(
+        &temp_dir,
+        CAROL_MEMBER_ID,
+        "9N4R1H8VW6PKT3XNC5JY2F9AR8GD7M2Q",
+    );
     let input_file = temp_dir.path().join("test.enc");
     create_test_encrypted_file(&input_file);
     let output_file = temp_dir.path().join("output.dat");
@@ -173,8 +180,11 @@ fn test_decrypt_with_workspace_option() {
 #[test]
 fn test_decrypt_accepts_out_option_parsing() {
     let temp_dir = TempDir::new().unwrap();
-    let _keystore_root =
-        create_test_keystore(&temp_dir, DAVE_MEMBER_ID, "01HTEST00000000000000000004");
+    let _keystore_root = create_test_keystore(
+        &temp_dir,
+        DAVE_MEMBER_ID,
+        "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD",
+    );
     let input_file = temp_dir.path().join("test.enc");
     let output_file = temp_dir.path().join("output.env");
     create_test_encrypted_file(&input_file);
@@ -195,7 +205,7 @@ fn test_decrypt_accepts_out_option_parsing() {
 fn test_decrypt_with_kid_option() {
     let temp_dir = TempDir::new().unwrap();
     let _keystore_root =
-        create_test_keystore(&temp_dir, EVE_MEMBER_ID, "01HTEST00000000000000000005");
+        create_test_keystore(&temp_dir, EVE_MEMBER_ID, "5EADN8XXCXP9PZWD1FXT336XSBT9W1BR");
     let input_file = temp_dir.path().join("test.enc");
     create_test_encrypted_file(&input_file);
     let output_file = temp_dir.path().join("output.dat");
@@ -208,7 +218,7 @@ fn test_decrypt_with_kid_option() {
         .arg("--member-id")
         .arg(EVE_MEMBER_ID)
         .arg("--kid")
-        .arg("01HTEST00000000000000000005")
+        .arg("5EADN8XXCXP9PZWD1FXT336XSBT9W1BR")
         .env("SECRETENV_HOME", temp_dir.path())
         .assert()
         .failure(); // Will fail due to invalid test data, but should parse args correctly
@@ -217,8 +227,11 @@ fn test_decrypt_with_kid_option() {
 #[test]
 fn test_decrypt_with_ssh_key_option() {
     let temp_dir = TempDir::new().unwrap();
-    let _keystore_root =
-        create_test_keystore(&temp_dir, FRANK_MEMBER_ID, "01HTEST00000000000000000006");
+    let _keystore_root = create_test_keystore(
+        &temp_dir,
+        FRANK_MEMBER_ID,
+        "KANJ8XHG10HW16VD7ADNCXM1WN44J04Q",
+    );
     let input_file = temp_dir.path().join("test.enc");
     let ssh_key_file = temp_dir.path().join("test_key");
     fs::write(&ssh_key_file, "dummy ssh key").unwrap();
@@ -274,7 +287,11 @@ DATABASE_URL eyJ2IjozLCJrIjoiREFUQUJBU0VfVVJMIiwiZSI6ImR1bW15In0
 "#;
     fs::write(&encrypted_path, content).unwrap();
 
-    create_test_keystore(&temp_dir, ALICE_MEMBER_ID, "01HTEST0000000000000000000");
+    create_test_keystore(
+        &temp_dir,
+        ALICE_MEMBER_ID,
+        "10HW16VD7ADNCXM1WN44J04QKANJ8XHG",
+    );
 
     cmd()
         .arg("decrypt")
@@ -299,7 +316,11 @@ fn test_decrypt_detects_file_enc_format_version3() {
     let encrypted_path = test_dir.join("test.json");
     create_test_encrypted_file(&encrypted_path);
 
-    create_test_keystore(&temp_dir, ALICE_MEMBER_ID, "01HTEST0000000000000000000");
+    create_test_keystore(
+        &temp_dir,
+        ALICE_MEMBER_ID,
+        "10HW16VD7ADNCXM1WN44J04QKANJ8XHG",
+    );
 
     // Try to decrypt without --out - should fail with specific error
     cmd()
@@ -324,7 +345,11 @@ fn test_decrypt_rejects_plain_kv_format() {
     let content = "DATABASE_URL=postgres://localhost\nAPI_KEY=secret123\n";
     fs::write(&plain_path, content).unwrap();
 
-    create_test_keystore(&temp_dir, ALICE_MEMBER_ID, "01HTEST0000000000000000000");
+    create_test_keystore(
+        &temp_dir,
+        ALICE_MEMBER_ID,
+        "10HW16VD7ADNCXM1WN44J04QKANJ8XHG",
+    );
 
     // Try to decrypt plain file - should fail with specific error
     cmd()
@@ -349,7 +374,11 @@ fn test_decrypt_rejects_unknown_format() {
     let content = "This is just some random text that doesn't match any format\n";
     fs::write(&unknown_path, content).unwrap();
 
-    create_test_keystore(&temp_dir, ALICE_MEMBER_ID, "01HTEST0000000000000000000");
+    create_test_keystore(
+        &temp_dir,
+        ALICE_MEMBER_ID,
+        "10HW16VD7ADNCXM1WN44J04QKANJ8XHG",
+    );
 
     // Try to decrypt unknown file - should fail with specific error
     cmd()

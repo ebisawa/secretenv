@@ -14,6 +14,7 @@ use crate::model::identifiers::alg;
 use crate::model::kv_enc::document::KvEncDocument;
 use crate::model::public_key::PublicKey;
 use crate::model::signature::Signature;
+use crate::support::kid::build_kid_display;
 use crate::Result;
 use ed25519_dalek::{SigningKey, VerifyingKey};
 use tracing::debug;
@@ -51,7 +52,8 @@ pub fn sign_file_document(
     debug: bool,
 ) -> Result<Signature> {
     if debug {
-        debug!("[CRYPTO] Ed25519: sign_bytes (kid: {})", signer_kid);
+        let kid_display = build_kid_display(signer_kid).unwrap_or_else(|_| signer_kid.to_string());
+        debug!("[CRYPTO] Ed25519: sign_bytes (kid: {})", kid_display);
     }
     let canonical_bytes = build_file_signature_bytes(protected)?;
     sign_bytes(
@@ -70,7 +72,9 @@ pub fn verify_file_signature(
     debug: bool,
 ) -> Result<()> {
     if debug {
-        debug!("[VERIFY] Ed25519: verify_bytes (kid: {})", signature.kid);
+        let kid_display =
+            build_kid_display(&signature.kid).unwrap_or_else(|_| signature.kid.clone());
+        debug!("[VERIFY] Ed25519: verify_bytes (kid: {})", kid_display);
     }
     let canonical_bytes = build_file_signature_bytes(protected)?;
     verify_bytes(
@@ -108,7 +112,8 @@ pub(crate) fn sign_and_append_kv_sig(
     caller: &str,
 ) -> Result<String> {
     if debug {
-        debug!("[CRYPTO] Ed25519: sign_bytes (kid: {})", signer_kid);
+        let kid_display = build_kid_display(signer_kid).unwrap_or_else(|_| signer_kid.to_string());
+        debug!("[CRYPTO] Ed25519: sign_bytes (kid: {})", kid_display);
     }
     let signature = sign_bytes(
         unsigned.as_bytes(),
@@ -129,7 +134,9 @@ pub fn verify_kv_signature(
     debug: bool,
 ) -> Result<()> {
     if debug {
-        debug!("[VERIFY] Ed25519: verify_bytes (kid: {})", signature.kid);
+        let kid_display =
+            build_kid_display(&signature.kid).unwrap_or_else(|_| signature.kid.clone());
+        debug!("[VERIFY] Ed25519: verify_bytes (kid: {})", kid_display);
     }
     let canonical_bytes = build_canonical_bytes(document.lines());
     verify_bytes(

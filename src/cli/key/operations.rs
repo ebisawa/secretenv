@@ -9,6 +9,7 @@ use crate::app::key::manage::{
     save_exported_private_key,
 };
 use crate::cli::common::ssh::resolve_ssh_context_for_active_key;
+use crate::support::kid::build_kid_display;
 use crate::support::path::display_path_relative_to_cwd;
 use crate::Result;
 use std::io::IsTerminal;
@@ -21,8 +22,9 @@ use super::{ActivateArgs, ExportArgs, RemoveArgs};
 pub fn run_activate(args: ActivateArgs) -> Result<()> {
     let options = CommonCommandOptions::from(&args.common);
     let result = activate_key_command(&options, args.member_id.clone(), args.kid.clone())?;
+    let kid_display = build_kid_display(&result.kid).unwrap_or_else(|_| result.kid.clone());
     eprintln!("Activated key for '{}':", result.member_id);
-    eprintln!("  Kid: {}", result.kid);
+    eprintln!("  Kid: {}", kid_display);
     Ok(())
 }
 
@@ -35,8 +37,9 @@ pub fn run_remove(args: RemoveArgs) -> Result<()> {
         args.kid.clone(),
         args.force,
     )?;
+    let kid_display = build_kid_display(&result.kid).unwrap_or_else(|_| result.kid.clone());
     eprintln!("Removed key for '{}':", result.member_id);
-    eprintln!("  Kid: {}", result.kid);
+    eprintln!("  Kid: {}", kid_display);
     if result.was_active {
         eprintln!("  Note: This was the active key. No key is now active.");
     }
@@ -53,8 +56,9 @@ pub fn run_export(args: ExportArgs) -> Result<()> {
         })?;
     let options = CommonCommandOptions::from(&args.common);
     let result = export_key_command(&options, args.member_id.clone(), args.kid.clone(), out)?;
+    let kid_display = build_kid_display(&result.kid).unwrap_or_else(|_| result.kid.clone());
     eprintln!("Exported public key for '{}':", result.member_id);
-    eprintln!("  Kid:    {}", result.kid);
+    eprintln!("  Kid:    {}", kid_display);
     eprintln!("  Output: {}", display_path_relative_to_cwd(out));
 
     Ok(())
@@ -71,7 +75,7 @@ pub fn run_export_private(args: ExportArgs) -> Result<()> {
     let options = CommonCommandOptions::from(&args.common);
     let password = prompt_export_password()?;
 
-    let ssh_ctx = resolve_ssh_context_for_active_key(&options)?;
+    let ssh_ctx = resolve_ssh_context_for_active_key(&options, args.member_id.clone())?;
 
     let result = export_private_key_command(
         &options,
@@ -80,18 +84,19 @@ pub fn run_export_private(args: ExportArgs) -> Result<()> {
         password.as_str(),
         ssh_ctx,
     )?;
+    let kid_display = build_kid_display(&result.kid).unwrap_or_else(|_| result.kid.clone());
 
     if let Some(out) = args.out.as_ref() {
         save_exported_private_key(out, &result.encoded_key)?;
         eprintln!("Exported private key for '{}':", result.member_id);
-        eprintln!("  Kid:    {}", result.kid);
+        eprintln!("  Kid:    {}", kid_display);
         eprintln!("  Output: {}", display_path_relative_to_cwd(out));
     } else if args.stdout {
         eprintln!();
         println!("{}", result.encoded_key);
         eprintln!();
         eprintln!("Exported private key for '{}':", result.member_id);
-        eprintln!("  Kid: {}", result.kid);
+        eprintln!("  Kid: {}", kid_display);
     }
 
     Ok(())

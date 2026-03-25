@@ -13,21 +13,13 @@ use secretenv::model::public_key::{
     Attestation, Identity, IdentityKeys, JwkOkpPublicKey, PublicKey, PublicKeyProtected,
 };
 use tempfile::TempDir;
-use time::OffsetDateTime;
-use ulid::Ulid;
 
-fn dummy_public_key(member_id: &str) -> PublicKey {
-    let kid = Ulid::new().to_string();
-    let now = OffsetDateTime::now_utc();
-    let created_at = secretenv::support::time::build_timestamp_display(now).unwrap();
-    let expires_at =
-        secretenv::support::time::build_timestamp_display(now + time::Duration::days(365)).unwrap();
-
+fn dummy_public_key(member_id: &str, kid: &str, created_at: &str) -> PublicKey {
     PublicKey {
         protected: PublicKeyProtected {
-            format: secretenv::model::identifiers::format::PUBLIC_KEY_V3.to_string(),
+            format: secretenv::model::identifiers::format::PUBLIC_KEY_V4.to_string(),
             member_id: member_id.to_string(),
-            kid,
+            kid: kid.to_string(),
             identity: Identity {
                 keys: IdentityKeys {
                     kem: JwkOkpPublicKey {
@@ -49,8 +41,8 @@ fn dummy_public_key(member_id: &str) -> PublicKey {
                 },
             },
             binding_claims: None,
-            expires_at,
-            created_at: Some(created_at),
+            expires_at: "2027-03-01T00:00:00Z".to_string(),
+            created_at: Some(created_at.to_string()),
         },
         signature: "AA".to_string(),
     }
@@ -66,8 +58,16 @@ fn test_resolve_kid_with_override() {
     // Use unique member_id to avoid interference from other parallel tests
     let member_id = format!("alice-override-{}@example.com", uuid::Uuid::new_v4());
 
-    let pub1 = dummy_public_key(&member_id);
-    let pub2 = dummy_public_key(&member_id);
+    let pub1 = dummy_public_key(
+        &member_id,
+        "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD",
+        "2026-03-01T00:00:00Z",
+    );
+    let pub2 = dummy_public_key(
+        &member_id,
+        "9N4R1H8VW6PKT3XNC5JY2F9AR8GD7M2Q",
+        "2026-03-02T00:00:00Z",
+    );
 
     let base_dir = get_base_dir().unwrap();
     let keystore_root = get_keystore_root_from_base(&base_dir);
@@ -75,7 +75,12 @@ fn test_resolve_kid_with_override() {
     save_public_key(&keystore_root, &member_id, &pub2.protected.kid, &pub2).unwrap();
 
     // Override should work
-    let resolved = resolve_kid(&keystore_root, &member_id, Some(&pub1.protected.kid)).unwrap();
+    let resolved = resolve_kid(
+        &keystore_root,
+        &member_id,
+        Some("7m2q-9d4r-1h8v-w6pk-t3xn-c5jy-2f9a-r8gd"),
+    )
+    .unwrap();
     assert_eq!(resolved, pub1.protected.kid);
 
     // Invalid override should fail
@@ -93,8 +98,16 @@ fn test_resolve_kid_with_active() {
     // Use unique member_id to avoid interference from other parallel tests
     let member_id = format!("alice-active-{}@example.com", uuid::Uuid::new_v4());
 
-    let pub1 = dummy_public_key(&member_id);
-    let pub2 = dummy_public_key(&member_id);
+    let pub1 = dummy_public_key(
+        &member_id,
+        "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD",
+        "2026-03-01T00:00:00Z",
+    );
+    let pub2 = dummy_public_key(
+        &member_id,
+        "9N4R1H8VW6PKT3XNC5JY2F9AR8GD7M2Q",
+        "2026-03-02T00:00:00Z",
+    );
 
     let base_dir = get_base_dir().unwrap();
     let keystore_root = get_keystore_root_from_base(&base_dir);
@@ -119,25 +132,25 @@ fn test_resolve_kid_fallback_to_latest() {
     // Use unique member_id to avoid interference from other parallel tests
     let member_id = format!("alice-fallback-{}@example.com", uuid::Uuid::new_v4());
 
-    let pub1 = dummy_public_key(&member_id);
-    let pub2 = dummy_public_key(&member_id);
+    let pub1 = dummy_public_key(
+        &member_id,
+        "ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ",
+        "2026-03-01T00:00:00Z",
+    );
+    let pub2 = dummy_public_key(
+        &member_id,
+        "00000000000000000000000000000001",
+        "2026-03-02T00:00:00Z",
+    );
 
     let base_dir = get_base_dir().unwrap();
     let keystore_root = get_keystore_root_from_base(&base_dir);
     save_public_key(&keystore_root, &member_id, &pub1.protected.kid, &pub1).unwrap();
     save_public_key(&keystore_root, &member_id, &pub2.protected.kid, &pub2).unwrap();
 
-    // No active kid set, should use latest
+    // No active kid set, should use the newest key by created_at.
     let resolved = resolve_kid(&keystore_root, &member_id, None).unwrap();
-
-    // The resolved kid should be one of the two we saved
-    assert!(
-        resolved == pub1.protected.kid || resolved == pub2.protected.kid,
-        "Resolved kid '{}' should be one of the generated keys ('{}' or '{}')",
-        resolved,
-        pub1.protected.kid,
-        pub2.protected.kid
-    );
+    assert_eq!(resolved, pub2.protected.kid);
 }
 
 #[test]

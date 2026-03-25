@@ -21,7 +21,7 @@ fn build_protected_header(
     expires_at: &str,
 ) -> PrivateKeyProtected {
     PrivateKeyProtected {
-        format: format::PRIVATE_KEY_V3.to_string(),
+        format: format::PRIVATE_KEY_V4.to_string(),
         member_id: member_id.to_string(),
         kid: kid.to_string(),
         alg: PrivateKeyAlgorithm::Argon2id {

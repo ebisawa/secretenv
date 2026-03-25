@@ -18,7 +18,7 @@ use uuid::Uuid;
 fn test_wrap_item() -> WrapItem {
     WrapItem {
         rid: "alice@example.com".to_string(),
-        kid: "01HY0G8N3P5X7QRSTV0WXYZ123".to_string(),
+        kid: "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD".to_string(),
         alg: hpke::ALG_HPKE_32_1_3.to_string(),
         enc: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".to_string(),
         ct: "AAAAAAAAAAAAAAAA".to_string(),
@@ -52,7 +52,7 @@ fn test_verify_file_document_rejects_wrap_count_over_limit() {
         },
         signature: Signature {
             alg: alg::SIGNATURE_ED25519.to_string(),
-            kid: "01HY0G8N3P5X7QRSTV0WXYZ123".to_string(),
+            kid: "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD".to_string(),
             signer_pub: None,
             sig: "invalid".to_string(),
         },

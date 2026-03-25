@@ -49,7 +49,7 @@ fn test_debug_hpke_single_recipient() {
     println!("\nEncrypting...");
     println!("  recipients: {:?}", recipients);
 
-    let signer_kid = "01HY0G8N3P5X7QRSTV0WXYZ123";
+    let signer_kid = "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD";
     let kv_map = parse_dotenv(input).unwrap();
     let encrypted = encrypt_kv_document(
         &kv_map,

@@ -33,7 +33,7 @@ fn test_verified_new() {
         },
         signature: secretenv::model::signature::Signature {
             alg: "eddsa-ed25519".to_string(),
-            kid: "01HY0G8N3P5X7QRSTV0WXYZ123".to_string(),
+            kid: "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD".to_string(),
             signer_pub: None,
             sig: "test".to_string(),
         },
@@ -41,7 +41,7 @@ fn test_verified_new() {
 
     let proof = SignatureVerificationProof::new(
         "alice".to_string(),
-        "01HY0G8N3P5X7QRSTV0WXYZ123".to_string(),
+        "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD".to_string(),
         VerifyingKeySource::SignerPubEmbedded,
         Vec::new(),
     );
@@ -78,7 +78,7 @@ fn test_verified_map() {
         },
         signature: secretenv::model::signature::Signature {
             alg: "eddsa-ed25519".to_string(),
-            kid: "01HY0G8N3P5X7QRSTV0WXYZ123".to_string(),
+            kid: "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD".to_string(),
             signer_pub: None,
             sig: "test".to_string(),
         },
@@ -86,7 +86,7 @@ fn test_verified_map() {
 
     let proof = SignatureVerificationProof::new(
         "alice".to_string(),
-        "01HY0G8N3P5X7QRSTV0WXYZ123".to_string(),
+        "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD".to_string(),
         VerifyingKeySource::SignerPubEmbedded,
         Vec::new(),
     );
@@ -125,7 +125,7 @@ fn test_verified_into_inner() {
         },
         signature: secretenv::model::signature::Signature {
             alg: "eddsa-ed25519".to_string(),
-            kid: "01HY0G8N3P5X7QRSTV0WXYZ123".to_string(),
+            kid: "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD".to_string(),
             signer_pub: None,
             sig: "test".to_string(),
         },
@@ -133,7 +133,7 @@ fn test_verified_into_inner() {
 
     let proof = SignatureVerificationProof::new(
         "alice".to_string(),
-        "01HY0G8N3P5X7QRSTV0WXYZ123".to_string(),
+        "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD".to_string(),
         VerifyingKeySource::SignerPubEmbedded,
         Vec::new(),
     );

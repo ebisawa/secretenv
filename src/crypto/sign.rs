@@ -31,7 +31,7 @@ use ed25519_dalek::{Signer, SigningKey, Verifier, VerifyingKey};
 /// # Arguments
 /// * `canonical_bytes` - Pre-canonicalized bytes to sign
 /// * `signing_key` - Ed25519 signing key
-/// * `signer_kid` - Key ID (ULID) of the public key used for signing
+/// * `signer_kid` - Key ID of the public key statement used for signing
 /// * `signer_pub` - Optional PublicKey document to embed in signature
 /// * `signature_alg` - On-wire `signature.alg` value (caller supplies; v3 uses `crate::model::identifiers::alg::SIGNATURE_ED25519`)
 ///

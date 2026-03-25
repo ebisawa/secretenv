@@ -3,7 +3,7 @@
 
 use std::path::PathBuf;
 
-use crate::app::context::member::resolve_active_key_member_context;
+use crate::app::context::member::resolve_member_context;
 use crate::app::context::options::CommonCommandOptions;
 use crate::feature::context::ssh::backend::build_ssh_signing_context as feature_build_ssh_signing_context;
 use crate::feature::context::ssh::candidate::resolve_ssh_key_candidates as feature_resolve_ssh_key_candidates;
@@ -121,8 +121,9 @@ pub fn build_ssh_signing_context_with_params(
 
 pub fn resolve_ssh_context_by_active_key(
     options: &CommonCommandOptions,
+    member_id: Option<String>,
 ) -> Result<ResolvedSshSigner> {
-    let resolved = resolve_active_key_member_context(options)?;
+    let resolved = resolve_member_context(options, member_id)?;
     let fingerprint =
         resolve_active_key_ssh_fingerprint(&resolved.member_id, &resolved.paths.keystore_root)?;
     resolve_ssh_context_for_fingerprint(options, &fingerprint)

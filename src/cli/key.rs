@@ -91,7 +91,7 @@ pub struct ActivateArgs {
     #[arg(long, short = 'm')]
     pub member_id: Option<String>,
 
-    /// Key ID (ULID) to activate [default: latest]
+    /// Key ID to activate [default: newest valid key]
     pub kid: Option<String>,
 }
 
@@ -109,7 +109,7 @@ pub struct RemoveArgs {
     #[arg(long, short = 'm')]
     pub member_id: Option<String>,
 
-    /// Key ID (ULID) to remove
+    /// Key ID to remove
     pub kid: String,
 }
 
@@ -123,7 +123,7 @@ pub struct ExportArgs {
     #[arg(long, short = 'm')]
     pub member_id: Option<String>,
 
-    /// Key ID (ULID) to export [default: active key]
+    /// Key ID to export [default: active key]
     pub kid: Option<String>,
 
     /// Output file path

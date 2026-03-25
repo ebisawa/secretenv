@@ -3,6 +3,7 @@
 
 use crate::io::keystore::active::load_active_kid;
 use crate::io::keystore::resolver::KeystoreResolver;
+use crate::support::kid::normalize_kid;
 use crate::{Error, Result};
 use std::path::{Path, PathBuf};
 
@@ -16,7 +17,7 @@ pub(crate) fn resolve_active_kid(
     kid: Option<String>,
 ) -> Result<String> {
     match kid {
-        Some(kid) => Ok(kid),
+        Some(kid) => normalize_kid(&kid),
         None => load_active_kid(member_id, keystore_root)?.ok_or_else(|| Error::NotFound {
             message: format!("No active key for member: {}", member_id),
         }),
