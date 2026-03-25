@@ -142,7 +142,16 @@ GitHub API で SSH 公開鍵の登録を自動確認する。GitHub アカウン
 
 **署名検証で参照される公開鍵**
 
-署名検証時に参照される公開鍵（verification key）は、次のいずれかで決まる。`signature.kid` によって workspace `members/active/` から特定される PublicKey、または `signature.signer_pub` が埋め込まれている場合にその PublicKey である。`signer_pub` が埋め込まれている場合、その PublicKey は自己署名・有効期限・`kid` 一致に加えて attestation（`attestation.method`）の検証により確認される。さらに、PublicKey の検証では自己署名検証に先立って `protected_without_kid` から `kid` を再導出し、`protected.kid` と一致することを確認する。これにより `kid` は単なる参照ラベルではなく、「その自己署名済み鍵ステートメント内容に結びついた ID」として扱われる。ローカルキーストアは秘密鍵の保管に使用されるが、署名検証の公開鍵ソースとしては使用しない。また、workspace の `active` は「承認済み trust anchor」として他ユーザーへ信頼を提供するものではない。鍵の信頼性判断（どの人物に紐付く鍵として受け入れるか）は各ユーザーが自己の責任で行う。判断に必要な情報支援は SSH attestation と GitHub の binding_claims（online verify）などを通じて提供される。
+署名検証時に参照される公開鍵（verification key）は、次のいずれかで決まる。
+
+- `signature.signer_pub` が埋め込まれている場合: **その埋め込み PublicKey を検証鍵として使用する**
+- `signature.signer_pub` がない場合: `signature.kid` により workspace `members/active/` から PublicKey を検索して使用する
+
+`signer_pub` が埋め込まれている場合でも、署名者のメンバーシップ（「誰の鍵として受理するか」）は **workspace `members/active/` に `signature.kid` が存在すること**で確認する（ローカルキーストアは秘密鍵の保管に使用されるが、署名検証の公開鍵ソースとしては使用しない）。
+
+埋め込み `signer_pub` は、自己署名・有効期限・`kid` 一致に加えて attestation（`attestation.method`）の検証により検証される。さらに PublicKey の検証では自己署名検証に先立って `protected_without_kid` から `kid` を再導出し、`protected.kid` と一致することを確認する。これにより `kid` は単なる参照ラベルではなく、「その自己署名済み鍵ステートメント内容に結びついた ID」として扱われる（`kid` は PublicKey の内容から導出される）。
+
+重要: `signer_pub` 埋め込み時の membership 確認は `kid` の存在チェックであり、workspace 側の PublicKey 本体と「完全一致」を別途照合する要件とはしない（`kid` が PublicKey から導出されるため、`kid` が一致する限り同一の鍵ステートメントである、という前提に立つ）。一方で、workspace の `active` は「承認済み trust anchor」として他ユーザーへ信頼を提供するものではない。鍵の信頼性判断（どの人物に紐付く鍵として受け入れるか）は各ユーザーが自己の責任で行う。判断に必要な情報支援は SSH attestation と GitHub の binding_claims（online verify）などを通じて提供される。
 
 **`--force` のリスクと推奨運用**: `--force` は TOFU の対話的確認をスキップするため、公開鍵すり替え攻撃に対する最終防御層を弱める。ただし online 検証が利用可能な環境では、検証に失敗したメンバーの昇格は `--force` 使用時でも拒否される。CI/CD パイプラインなど非対話環境では `--force` 使用が誘導されるが、この場合は以下の運用を推奨する:
 - CI/CD 環境では事前に対話環境で `rewrap` を実行し、メンバー昇格を完了させてから CI/CD で `--force` を使用する
