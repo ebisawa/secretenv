@@ -47,9 +47,9 @@ pub fn verify_public_key(public_key: &PublicKey, debug: bool) -> Result<Verified
     let sig = ed25519_dalek::Signature::from_slice(&sig_bytes)
         .map_err(|e| Error::crypto_with_source("Invalid signature format", e))?;
 
-    verifying_key
-        .verify(&protected_jcs, &sig)
-        .map_err(|e| Error::crypto_with_source("PublicKey self-signature verification failed", e))?;
+    verifying_key.verify(&protected_jcs, &sig).map_err(|e| {
+        Error::crypto_with_source("PublicKey self-signature verification failed", e)
+    })?;
 
     if debug {
         debug!("[VERIFY] PublicKey self-signature verified");

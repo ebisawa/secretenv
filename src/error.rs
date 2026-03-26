@@ -209,21 +209,17 @@ impl From<base64::DecodeError> for Error {
 impl From<crate::crypto::CryptoError> for Error {
     fn from(err: crate::crypto::CryptoError) -> Self {
         match err {
-            crate::crypto::CryptoError::InvalidKey { message } => {
-                Error::Crypto {
-                    message,
-                    source: None,
-                }
-            }
+            crate::crypto::CryptoError::InvalidKey { message } => Error::Crypto {
+                message,
+                source: None,
+            },
             crate::crypto::CryptoError::OperationFailed { message, source } => {
                 Error::Crypto { message, source }
             }
-            crate::crypto::CryptoError::KeyDerivationFailed { message } => {
-                Error::Crypto {
-                    message,
-                    source: None,
-                }
-            }
+            crate::crypto::CryptoError::KeyDerivationFailed { message } => Error::Crypto {
+                message,
+                source: None,
+            },
         }
     }
 }
@@ -266,10 +262,7 @@ mod tests {
     #[test]
     fn test_user_message_crypto_returns_message_field() {
         let error = Error::crypto("Cannot find public key in workspace");
-        assert_eq!(
-            error.user_message(),
-            "Cannot find public key in workspace"
-        );
+        assert_eq!(error.user_message(), "Cannot find public key in workspace");
     }
 
     #[test]
@@ -315,9 +308,6 @@ mod tests {
         let crypto_err =
             crate::crypto::CryptoError::operation_failed("XChaCha20-Poly1305 decryption failed");
         let error = Error::from(crypto_err);
-        assert_eq!(
-            error.user_message(),
-            "XChaCha20-Poly1305 decryption failed"
-        );
+        assert_eq!(error.user_message(), "XChaCha20-Poly1305 decryption failed");
     }
 }
