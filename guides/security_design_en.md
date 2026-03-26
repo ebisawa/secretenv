@@ -257,28 +257,20 @@ hpke-32-1-3
 - Eliminates ambiguity in key ordering and number representation, ensuring consistency of signatures, AAD, and HPKE info
 - No ambiguity arises even when string fields like `sid` contain arbitrary characters
 
-### 3.7 Known Properties of the Standard Primitives Used Here
+### 3.7 Security Guarantees and Limits Inherited from Standard Cryptographic Primitives
 
-The security properties that SecretEnv relies on for each primitive are summarized below.
-
-| Primitive | Security Definition | Basis |
-|-----------|--------------------|----|
-| HPKE Base mode (RFC 9180) | Standardized mechanism for recipient-specific key delivery | Base mode does not provide sender authentication, so Ed25519 signatures are used as a separate check against insider attacks. |
-| XChaCha20-Poly1305 | Widely used authenticated encryption construction | Nonce uniqueness is an important precondition (see §3.8). |
-| Ed25519 (PureEdDSA) | Widely used standardized signature scheme | Used in SecretEnv for signing encrypted files and PublicKey documents. |
-| HKDF-SHA256 | PRF security | Per RFC 5869. When IKM has sufficient entropy, the output is pseudorandom. The IKM for CEK derivation (MK) is 32 bytes from CSPRNG. |
+| Primitive | Security property assumed in this section | Implication for SecretEnv |
+|-----------|-------------------------------------------|----------------------------|
+| HPKE Base mode (RFC 9180) | Provides confidentiality for recipient-specific key delivery, but does not provide sender authentication | Confidentiality of each recipient wrap depends on this, while producer authenticity and insider-attack resistance depend on Ed25519 signatures |
+| XChaCha20-Poly1305 | Provides confidentiality and tamper detection as an AEAD, assuming nonces are not reused | Security of payload, entry, and PrivateKey protection depends on nonce uniqueness and does not tolerate nonce reuse |
+| Ed25519 (PureEdDSA) | Provides unforgeability and tamper detection as long as the signing private key remains secret | Authenticity of encrypted files and PublicKey documents depends on this, and that guarantee collapses if the signing private key is compromised |
+| HKDF-SHA256 | Can derive pseudorandom, purpose-separated keys from input key material with sufficient entropy | Key separation for CEKs and `enc_key` depends on this, but HKDF does not turn low-entropy input into high-entropy key material |
 
 **Security dependency:**
 
-```
-Confidentiality ── HPKE confidentiality ─┐
-                                          ├─ Overall confidentiality
-payload AEAD confidentiality ────────────┘
-
-Signatures ── Ed25519 ── Tamper detection
-
-CEK independence ── HKDF PRF security ── Cryptographic independence between entries
-```
+- Overall confidentiality depends on both the confidentiality of HPKE for recipient-specific key delivery and the confidentiality of the AEAD that protects the payload itself. SecretEnv's overall confidentiality does not hold if either of these fails.
+- Tamper detection depends on Ed25519 signatures. HPKE Base mode does not provide sender authentication by itself, so signatures provide the check that encrypted files and PublicKey documents were produced by the expected signer and have not been modified.
+- Cryptographic independence between entries in kv-enc depends on the PRF security of HKDF-SHA256. In SecretEnv, a distinct CEK is derived for each entry from a high-entropy MK, so knowledge about one entry is not expected to directly reveal the CEK of another entry.
 
 **Preconditions and limitations:**
 - HPKE Base mode assumes confidentiality of the recipient's long-term private key. If the long-term key is compromised, all wraps for that recipient can be decrypted (see §12.1).
@@ -1253,10 +1245,12 @@ Compression before encryption is not performed. This is an intentional design de
 |--------------|---------|
 | RFC 9180 — Hybrid Public Key Encryption | HPKE (wrap/unwrap) |
 | RFC 8439 — ChaCha20 and Poly1305 | HPKE internal AEAD |
+| draft-irtf-cfrg-xchacha — XChaCha20 and AEAD_XChaCha20_Poly1305 | XChaCha20-Poly1305 construction (payload / entry / PrivateKey encryption) |
 | RFC 8032 — Edwards-Curve Digital Signature Algorithm (EdDSA) | Ed25519 signature (PureEdDSA) |
 | RFC 8037 — CFRG Elliptic Curve Diffie-Hellman (ECDH) and Signatures in JOSE | JWK OKP key representation |
 | RFC 7517 — JSON Web Key (JWK) | Key representation format |
 | RFC 5869 — HMAC-based Extract-and-Expand Key Derivation Function (HKDF) | Key derivation |
+| RFC 9106 — Argon2 Memory-Hard Function for Password Hashing and Proof-of-Work Applications | Password-based key protection (Argon2id) |
 | RFC 8785 — JSON Canonicalization Scheme (JCS) | Deterministic JSON canonicalization |
 | RFC 4648 — The Base16, Base32, and Base64 Data Encodings | base64url encoding |
 | RFC 2119 — Key words for use in RFCs to Indicate Requirement Levels | Requirement level keywords |
