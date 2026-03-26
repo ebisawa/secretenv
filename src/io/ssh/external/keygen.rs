@@ -43,7 +43,7 @@ impl SshKeygen for DefaultSshKeygen {
             .output()
             .map_err(|e| {
                 Error::from(SshError::operation_failed_with_source(
-                    format!("Failed to execute ssh-keygen: {}", e),
+                    "Failed to execute ssh-keygen",
                     e,
                 ))
             })?;
@@ -59,7 +59,7 @@ impl SshKeygen for DefaultSshKeygen {
             .map(|s| s.trim().to_string())
             .map_err(|e| {
                 Error::from(SshError::operation_failed_with_source(
-                    format!("Invalid UTF-8 in ssh-keygen output: {}", e),
+                    "Invalid UTF-8 in ssh-keygen output",
                     e,
                 ))
             })
@@ -115,7 +115,7 @@ impl SshKeygen for DefaultSshKeygen {
             .spawn()
             .map_err(|e| {
                 Error::from(SshError::operation_failed_with_source(
-                    format!("Failed to spawn ssh-keygen: {}", e),
+                    "Failed to spawn ssh-keygen",
                     e,
                 ))
             })?;
@@ -123,7 +123,7 @@ impl SshKeygen for DefaultSshKeygen {
         if let Some(mut stdin) = child.stdin.take() {
             stdin.write_all(message).map_err(|e| {
                 Error::from(SshError::operation_failed_with_source(
-                    format!("Failed to write to stdin: {}", e),
+                    "Failed to write to stdin",
                     e,
                 ))
             })?;
@@ -131,7 +131,7 @@ impl SshKeygen for DefaultSshKeygen {
 
         let output = child.wait_with_output().map_err(|e| {
             Error::from(SshError::operation_failed_with_source(
-                format!("Failed to wait for ssh-keygen: {}", e),
+                "Failed to wait for ssh-keygen",
                 e,
             ))
         })?;

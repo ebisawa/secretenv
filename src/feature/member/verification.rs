@@ -124,7 +124,7 @@ async fn verify_member_file_online(member_file: &Path, verbose: bool) -> Verific
             Err(e) => {
                 return VerificationResult::failed(
                     &fallback_member_id,
-                    format!("Offline verification failed: {e}"),
+                    format!("Offline verification failed: {}", e.user_message()),
                     None,
                 );
             }
@@ -134,7 +134,7 @@ async fn verify_member_file_online(member_file: &Path, verbose: bool) -> Verific
         Ok(result) => result,
         Err(e) => VerificationResult::failed(
             &verified.member_id,
-            format!("Online verification error: {e}"),
+            format!("Online verification error: {}", e.user_message()),
             None,
         ),
     };

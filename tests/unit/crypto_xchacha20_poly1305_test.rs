@@ -122,7 +122,7 @@ fn test_xchacha20_wrong_key_error_message_sanitized() {
 
     assert_eq!(
         err.to_string(),
-        "Cryptographic error: Operation failed: XChaCha20-Poly1305 decryption failed"
+        "Cryptographic error: XChaCha20-Poly1305 decryption failed"
     );
 }
 

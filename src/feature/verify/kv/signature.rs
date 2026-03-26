@@ -39,7 +39,7 @@ pub fn verify_kv_document_report(
         Ok(doc) => {
             let signature = match parse_kv_signature_token(&doc.signature_token) {
                 Ok(sig) => sig,
-                Err(e) => return build_error_report(format!("E_PARSE: {}", e)),
+                Err(e) => return build_error_report(e.user_message().to_string()),
             };
             match load_verifying_key_from_signature(&signature, workspace_path, debug) {
                 Ok(loaded) => {
@@ -50,13 +50,13 @@ pub fn verify_kv_document_report(
                             loaded.warnings,
                             loaded.public_key,
                         ),
-                        Err(e) => build_error_report(format!("{}", e)),
+                        Err(e) => build_error_report(e.user_message().to_string()),
                     }
                 }
-                Err(e) => build_error_report(format!("{}", e)),
+                Err(e) => build_error_report(e.user_message().to_string()),
             }
         }
-        Err(e) => build_error_report(format!("E_PARSE: {}", e)),
+        Err(e) => build_error_report(e.user_message().to_string()),
     }
 }
 

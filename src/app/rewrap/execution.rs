@@ -42,7 +42,7 @@ pub fn execute_rewrap_batch(
             }),
             Err(error) => failed_files.push(RewrapFileFailure {
                 output_path: file_path.clone(),
-                error_message: error.to_string(),
+                error_message: error.user_message().to_string(),
             }),
         }
     }

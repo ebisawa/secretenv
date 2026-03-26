@@ -33,35 +33,23 @@ pub struct VerifiedPublicKeyForVerification {
 pub fn verify_public_key(public_key: &PublicKey, debug: bool) -> Result<VerifiedPublicKey> {
     validate_derived_kid(public_key)?;
 
-    let protected_jcs = jcs::normalize(&public_key.protected).map_err(|e| Error::Crypto {
-        message: format!("Failed to normalize PublicKey protected: {}", e),
-        source: Some(Box::new(e)),
-    })?;
+    let protected_jcs = jcs::normalize(&public_key.protected)
+        .map_err(|e| Error::crypto_with_source("Failed to normalize PublicKey protected", e))?;
     let verifying_key_bytes: [u8; 32] = b64_decode_array(
         &public_key.protected.identity.keys.sig.x,
         "Ed25519 public key",
     )?;
-    let verifying_key =
-        VerifyingKey::from_bytes(&verifying_key_bytes).map_err(|e| Error::Crypto {
-            message: format!("Invalid Ed25519 public key: {}", e),
-            source: Some(Box::new(e)),
-        })?;
+    let verifying_key = VerifyingKey::from_bytes(&verifying_key_bytes)
+        .map_err(|e| Error::crypto_with_source("Invalid Ed25519 public key", e))?;
 
-    let sig_bytes = b64_decode(&public_key.signature, "signature").map_err(|e| Error::Crypto {
-        message: format!("Failed to decode PublicKey signature: {}", e),
-        source: Some(Box::new(e)),
-    })?;
-    let sig = ed25519_dalek::Signature::from_slice(&sig_bytes).map_err(|e| Error::Crypto {
-        message: format!("Invalid signature format: {}", e),
-        source: Some(Box::new(e)),
-    })?;
+    let sig_bytes = b64_decode(&public_key.signature, "signature")
+        .map_err(|e| Error::crypto_with_source("Failed to decode PublicKey signature", e))?;
+    let sig = ed25519_dalek::Signature::from_slice(&sig_bytes)
+        .map_err(|e| Error::crypto_with_source("Invalid signature format", e))?;
 
     verifying_key
         .verify(&protected_jcs, &sig)
-        .map_err(|e| Error::Crypto {
-            message: format!("PublicKey self-signature verification failed: {}", e),
-            source: Some(Box::new(e)),
-        })?;
+        .map_err(|e| Error::crypto_with_source("PublicKey self-signature verification failed", e))?;
 
     if debug {
         debug!("[VERIFY] PublicKey self-signature verified");
@@ -171,10 +159,7 @@ pub(crate) fn public_key_expiry_warning(doc: &PublicKey) -> Result<Option<String
         &doc.protected.expires_at,
         &time::format_description::well_known::Rfc3339,
     )
-    .map_err(|e| Error::Crypto {
-        message: format!("Invalid expires_at format in PublicKey: {}", e),
-        source: Some(Box::new(e)),
-    })?;
+    .map_err(|e| Error::crypto_with_source("Invalid expires_at format in PublicKey", e))?;
 
     if expires_at < time::OffsetDateTime::now_utc() {
         return Ok(Some(format!(

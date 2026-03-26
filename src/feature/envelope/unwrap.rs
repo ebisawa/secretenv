@@ -40,14 +40,9 @@ pub(crate) fn find_wrap_item_by_kid<'a>(
         .find(|w| w.kid == kid)
         .ok_or_else(|| Error::Crypto {
             message: format!(
-                "No wrap found for kid '{}' (member: {}). Available kids: {}",
+                "No wrap found for kid '{}' (member: {})",
                 kid_display_lossy(kid),
-                member_id,
-                wrap_items
-                    .iter()
-                    .map(|w| kid_display_lossy(&w.kid))
-                    .collect::<Vec<_>>()
-                    .join(", ")
+                member_id
             ),
             source: None,
         })?;
