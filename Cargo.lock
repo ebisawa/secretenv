@@ -2333,7 +2333,7 @@ dependencies = [
 
 [[package]]
 name = "secretenv"
-version = "0.3.2-alpha"
+version = "0.3.3-alpha"
 dependencies = [
  "argon2",
  "assert_cmd",
