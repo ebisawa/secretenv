@@ -14,19 +14,19 @@ use crate::model::verified::VerifiedPrivateKey;
 use crate::support::base64url::{b64_decode, b64_decode_ciphertext};
 use crate::support::kid::kid_display_lossy;
 use crate::{Error, Result};
-use tracing::{debug, warn};
+use tracing::debug;
 use uuid::Uuid;
 use zeroize::Zeroizing;
 
 /// Find a wrap item by key ID in a slice of WrapItems.
 ///
 /// Searches by `kid` (cryptographically bound) rather than `rid` (informational only).
-/// If `rid` does not match `member_id`, a warning is printed to stderr.
+/// If `rid` does not match `member_id`, unwrapping fails with an error.
 ///
 /// # Arguments
 /// * `wrap_items` - Slice of WrapItems to search
 /// * `kid` - Key ID to find
-/// * `member_id` - Member ID for error messages and rid-mismatch warning
+/// * `member_id` - Member ID for error messages and rid-mismatch validation
 ///
 /// # Returns
 /// Reference to the matching WrapItem, or an error if not found
@@ -47,14 +47,18 @@ pub(crate) fn find_wrap_item_by_kid<'a>(
             source: None,
         })?;
 
-    // Warn if rid doesn't match (informational inconsistency, but not a failure)
+    // Treat rid mismatch as a hard failure for defence-in-depth, even though
+    // cryptographic binding is still anchored on kid.
     if wrap_item.rid != member_id {
-        warn!(
-            "[CRYPTO] Warning: wrap_item.rid '{}' does not match member_id '{}' (using kid '{}' for unwrap)",
-            wrap_item.rid,
-            member_id,
-            kid_display_lossy(kid)
-        );
+        return Err(Error::Crypto {
+            message: format!(
+                "wrap_item.rid '{}' does not match member_id '{}' for kid '{}'",
+                wrap_item.rid,
+                member_id,
+                kid_display_lossy(kid)
+            ),
+            source: None,
+        });
     }
 
     Ok(wrap_item)
@@ -138,10 +142,10 @@ pub fn unwrap_master_key(
 /// This is useful for rewrap operations where you need to get the content key
 /// without decrypting the entire payload.
 ///
-/// **Note**: This function selects wrap_item by `kid` (key ID) rather than `rid` (recipient ID).
-/// The `kid` parameter is used to find a matching wrap_item.
-/// This approach is more robust against `rid` mismatches and aligns with the cryptographic
-/// binding (HPKE info includes `kid`).
+/// **Note**: This function selects wrap_item by `kid` (key ID) rather than `rid` (recipient ID),
+/// then validates that the located wrap_item carries the expected `member_id`.
+/// This preserves the cryptographic binding on `kid` (HPKE info includes `kid`) while
+/// rejecting inconsistent recipient metadata.
 pub fn unwrap_master_key_for_file(
     verified: &VerifiedFileEncDocument,
     member_id: &str,

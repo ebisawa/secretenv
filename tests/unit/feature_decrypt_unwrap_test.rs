@@ -185,14 +185,12 @@ fn test_find_wrap_item_by_kid_not_found() {
     );
 }
 
-/// Test that kid matches but rid doesn't match member_id -- still succeeds.
-/// (find_wrap_item_by_kid selects by kid, not rid; rid mismatch only prints a warning.)
+/// Test that kid matches but rid doesn't match member_id -- decryption fails.
 #[test]
-fn test_find_wrap_item_by_kid_rid_mismatch_still_succeeds() {
+fn test_find_wrap_item_by_kid_rid_mismatch_fails() {
     let (verified_doc, key_ctx, kid, _temp_dir) = encrypt_file_for_test(b"rid mismatch test");
 
     // Use a different member_id (not matching rid in wrap item) but correct kid and private key.
-    // The function should still succeed because selection is by kid, not rid.
     let different_member_id = "different@example.com";
     let result = decrypt_file_document(
         &verified_doc,
@@ -203,11 +201,21 @@ fn test_find_wrap_item_by_kid_rid_mismatch_still_succeeds() {
     );
 
     assert!(
-        result.is_ok(),
-        "Decryption should succeed even when member_id doesn't match rid: {:?}",
-        result.err()
+        result.is_err(),
+        "Decryption should fail when member_id doesn't match rid"
     );
-    assert_eq!(result.unwrap().as_ref() as &[u8], b"rid mismatch test");
+    let err_msg = format!("{}", result.unwrap_err());
+    assert!(
+        err_msg.contains("does not match member_id"),
+        "Error should mention rid mismatch, got: {}",
+        err_msg
+    );
+    assert!(
+        err_msg.contains(different_member_id),
+        "Error should mention requested member_id '{}', got: {}",
+        different_member_id,
+        err_msg
+    );
 }
 
 // ============================================================================
@@ -258,6 +266,39 @@ fn test_decrypt_kv_document_roundtrip() {
     assert_eq!(
         String::from_utf8(value.to_vec()).unwrap(),
         "my-secret-value"
+    );
+}
+
+/// Test that kv decryption fails when the located wrap's rid does not match member_id.
+#[test]
+fn test_decrypt_kv_document_rid_mismatch_fails() {
+    let dotenv = "SECRET_KEY=my-secret-value\n";
+    let (verified_doc, key_ctx, kid, _temp_dir) = encrypt_kv_for_test(dotenv);
+
+    let different_member_id = "different@example.com";
+    let result = decrypt_kv_document(
+        &verified_doc,
+        different_member_id,
+        &kid,
+        &key_ctx.private_key,
+        false,
+    );
+
+    assert!(
+        result.is_err(),
+        "KV decryption should fail when member_id doesn't match rid"
+    );
+    let err_msg = format!("{}", result.unwrap_err());
+    assert!(
+        err_msg.contains("does not match member_id"),
+        "Error should mention rid mismatch, got: {}",
+        err_msg
+    );
+    assert!(
+        err_msg.contains(different_member_id),
+        "Error should mention requested member_id '{}', got: {}",
+        different_member_id,
+        err_msg
     );
 }
 
