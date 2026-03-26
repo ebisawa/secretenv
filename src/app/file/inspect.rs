@@ -93,7 +93,7 @@ pub(crate) fn inspect_file_command(
                         Ok(r) => r,
                         Err(e) => OnlineVerificationResult::failed(
                             &public_key.protected.member_id,
-                            e.to_string(),
+                            e.user_message().to_string(),
                             None,
                         ),
                     };

@@ -188,7 +188,7 @@ fn test_hpke_open_error_message_sanitized() {
     let err = open_base(&sk, &enc_obj, &info2, &aad, &ct_obj).unwrap_err();
     assert_eq!(
         err.to_string(),
-        "Cryptographic error: Operation failed: HPKE open failed (wrong key/info/AAD or tampered data)"
+        "Cryptographic error: HPKE open failed (wrong key/info/AAD or tampered data)"
     );
 }
 
@@ -207,7 +207,7 @@ fn test_hpke_invalid_enc_error_message_sanitized() {
     let err = open_base(&sk, &enc, &info, &aad, &ciphertext).unwrap_err();
     assert_eq!(
         err.to_string(),
-        "Cryptographic error: Operation failed: Invalid encapsulated key"
+        "Cryptographic error: Invalid encapsulated key"
     );
 }
 

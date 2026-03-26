@@ -94,7 +94,7 @@ fn test_verify_bytes_rejects_tampered_bytes() {
     assert!(result.is_err());
     assert_eq!(
         result.unwrap_err().to_string(),
-        "Cryptographic error: Operation failed: Signature verification failed"
+        "Cryptographic error: Signature verification failed"
     );
 }
 
@@ -189,7 +189,7 @@ fn test_verify_kv_rejects_tampered_content() {
     assert!(result.is_err());
     assert_eq!(
         result.unwrap_err().to_string(),
-        "Cryptographic error: Operation failed: Signature verification failed"
+        "Cryptographic error: Signature verification failed"
     );
 }
 
@@ -211,7 +211,7 @@ fn test_verify_bytes_invalid_base64_error_message_sanitized() {
     assert!(result.is_err());
     assert_eq!(
         result.unwrap_err().to_string(),
-        "Cryptographic error: Operation failed: Invalid signature Base64"
+        "Cryptographic error: Invalid signature Base64"
     );
 }
 

@@ -36,7 +36,7 @@ pub fn verify_file_content_report(
             signer_member_id: None,
             source: None,
             warnings: Vec::new(),
-            message: e.to_string(),
+            message: e.user_message().to_string(),
             signer_public_key: None,
         },
     }
@@ -70,10 +70,10 @@ pub fn verify_file_document_report(
                     loaded.warnings,
                     loaded.public_key,
                 ),
-                Err(e) => build_error_report(format!("{}", e)),
+                Err(e) => build_error_report(e.user_message().to_string()),
             }
         }
-        Err(e) => build_error_report(format!("{}", e)),
+        Err(e) => build_error_report(e.user_message().to_string()),
     }
 }
 

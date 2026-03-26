@@ -144,14 +144,12 @@ fn build_loaded_verifying_key(
     source_label: &str,
     debug: bool,
 ) -> Result<LoadedVerifyingKey> {
-    let verified =
-        verify_public_key_for_verification(public_key, debug).map_err(|e| Error::Crypto {
-            message: format!(
-                "PublicKey document verification failed ({}): {}",
-                source_label, e
-            ),
-            source: Some(Box::new(e)),
-        })?;
+    let verified = verify_public_key_for_verification(public_key, debug).map_err(|e| {
+        Error::crypto_with_source(
+            format!("PublicKey document verification failed ({})", source_label),
+            e,
+        )
+    })?;
 
     let doc = verified.verified_public_key.document();
     if expected_kid != doc.protected.kid {
@@ -178,10 +176,8 @@ fn build_loaded_verifying_key(
 fn extract_verifying_key(doc: &PublicKey) -> Result<VerifyingKey> {
     let verifying_key_bytes: [u8; 32] =
         b64_decode_array(&doc.protected.identity.keys.sig.x, "Ed25519 public key")?;
-    VerifyingKey::from_bytes(&verifying_key_bytes).map_err(|e| Error::Crypto {
-        message: format!("Invalid Ed25519 public key: {}", e),
-        source: Some(Box::new(e)),
-    })
+    VerifyingKey::from_bytes(&verifying_key_bytes)
+        .map_err(|e| Error::crypto_with_source("Invalid Ed25519 public key", e))
 }
 
 #[cfg(test)]
