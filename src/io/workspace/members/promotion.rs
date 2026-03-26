@@ -61,12 +61,11 @@ fn build_promotion_plan(
                     .file_stem()
                     .and_then(|s| s.to_str())
                     .map(String::from)
-                    .ok_or_else(|| Error::Io {
-                        message: format!(
+                    .ok_or_else(|| {
+                        Error::io(format!(
                             "Invalid file name: {}",
                             display_path_relative_to_cwd(&source)
-                        ),
-                        source: None,
+                        ))
                     })?;
 
                 let destination = active_dir.join(format!("{}.json", member_id));
@@ -99,9 +98,11 @@ fn execute_promotion_plan(workspace_path: &Path, plans: &[PromotionPlan]) -> Res
     ensure_members_dir(workspace_path, MemberStatus::Active)?;
 
     for plan in plans {
-        fs::rename(&plan.source, &plan.destination).map_err(|e| Error::Io {
-            message: format!("Failed to promote member '{}': {}", plan.member_id, e),
-            source: Some(e),
+        fs::rename(&plan.source, &plan.destination).map_err(|e| {
+            Error::io_with_source(
+                format!("Failed to promote member '{}': {}", plan.member_id, e),
+                e,
+            )
         })?;
     }
 

@@ -66,7 +66,7 @@ fn test_plaintext_to_master_key_wrong_length() {
 
 /// Test that `plaintext_to_master_key` succeeds with correct 32-byte data.
 #[test]
-fn test_plaintext_to_master_key_success() {
+fn test_plaintext_to_master_key() {
     let key_bytes = [0x42u8; 32];
     let plaintext = Zeroizing::new(Plaintext::new(key_bytes.to_vec()));
 

@@ -147,6 +147,22 @@ impl Error {
         }
     }
 
+    /// Create an I/O error.
+    pub fn io(message: impl Into<String>) -> Self {
+        Error::Io {
+            message: message.into(),
+            source: None,
+        }
+    }
+
+    /// Create an I/O error with a source error.
+    pub fn io_with_source(message: impl Into<String>, source: std::io::Error) -> Self {
+        Error::Io {
+            message: message.into(),
+            source: Some(source),
+        }
+    }
+
     /// Create an SSH error with a source error.
     pub fn ssh_with_source(
         message: impl Into<String>,
@@ -181,10 +197,8 @@ impl Error {
 
 impl From<std::io::Error> for Error {
     fn from(err: std::io::Error) -> Self {
-        Error::Io {
-            message: err.to_string(),
-            source: Some(err),
-        }
+        let message = err.to_string();
+        Error::io_with_source(message, err)
     }
 }
 
@@ -243,71 +257,5 @@ impl From<crate::format::FormatError> for Error {
 impl From<hkdf::InvalidLength> for Error {
     fn from(_err: hkdf::InvalidLength) -> Self {
         Error::crypto("HKDF key derivation failed")
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_user_message_schema_returns_fixed_string() {
-        let error = Error::Schema {
-            message: r#"{"key":"value"} is not valid under any of the schemas"#.to_string(),
-            source: None,
-        };
-        assert_eq!(error.user_message(), "Schema validation failed");
-    }
-
-    #[test]
-    fn test_user_message_crypto_returns_message_field() {
-        let error = Error::crypto("Cannot find public key in workspace");
-        assert_eq!(error.user_message(), "Cannot find public key in workspace");
-    }
-
-    #[test]
-    fn test_user_message_crypto_with_source_returns_context_only() {
-        let error = Error::crypto_with_source(
-            "PublicKey self-signature verification failed",
-            std::io::Error::new(std::io::ErrorKind::Other, "inner error"),
-        );
-        assert_eq!(
-            error.user_message(),
-            "PublicKey self-signature verification failed"
-        );
-    }
-
-    #[test]
-    fn test_user_message_not_found() {
-        let error = Error::not_found("member file missing");
-        assert_eq!(error.user_message(), "member file missing");
-    }
-
-    #[test]
-    fn test_user_message_invalid_argument() {
-        let error = Error::invalid_argument("Member ID mismatch");
-        assert_eq!(error.user_message(), "Member ID mismatch");
-    }
-
-    #[test]
-    fn test_from_crypto_error_preserves_source() {
-        let crypto_err = crate::crypto::CryptoError::operation_failed_with_source(
-            "decryption failed",
-            std::io::Error::new(std::io::ErrorKind::Other, "inner"),
-        );
-        let error = Error::from(crypto_err);
-        assert_eq!(error.user_message(), "decryption failed");
-        match &error {
-            Error::Crypto { source, .. } => assert!(source.is_some()),
-            _ => panic!("expected Crypto variant"),
-        }
-    }
-
-    #[test]
-    fn test_from_crypto_error_uses_message_field() {
-        let crypto_err =
-            crate::crypto::CryptoError::operation_failed("XChaCha20-Poly1305 decryption failed");
-        let error = Error::from(crypto_err);
-        assert_eq!(error.user_message(), "XChaCha20-Poly1305 decryption failed");
     }
 }

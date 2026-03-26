@@ -54,7 +54,7 @@ fn test_validate_okp_key_wrong_x_length() {
 }
 
 #[test]
-fn test_validate_okp_key_success() {
+fn test_validate_okp_key() {
     let signing_key = SigningKey::from_bytes(&[42u8; 32]);
     let verifying_key = signing_key.verifying_key();
     let d = b64_encode(signing_key.as_bytes());
@@ -83,7 +83,7 @@ fn test_validate_ed25519_consistency_mismatch() {
 }
 
 #[test]
-fn test_validate_ed25519_consistency_success() {
+fn test_validate_ed25519_consistency() {
     let signing_key = SigningKey::from_bytes(&[42u8; 32]);
     let verifying_key = signing_key.verifying_key();
     let d_bytes = signing_key.as_bytes();

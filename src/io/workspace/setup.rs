@@ -10,13 +10,15 @@ use crate::{Error, Result};
 use std::path::Path;
 
 fn save_gitkeep(dir: &Path) -> Result<()> {
-    std::fs::write(dir.join(".gitkeep"), "").map_err(|e| Error::Io {
-        message: format!(
-            "Failed to create .gitkeep in {}: {}",
-            display_path_relative_to_cwd(dir),
-            e
-        ),
-        source: Some(e),
+    std::fs::write(dir.join(".gitkeep"), "").map_err(|e| {
+        Error::io_with_source(
+            format!(
+                "Failed to create .gitkeep in {}: {}",
+                display_path_relative_to_cwd(dir),
+                e
+            ),
+            e,
+        )
     })
 }
 

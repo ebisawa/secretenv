@@ -83,7 +83,10 @@ impl ExecutionContext {
             options,
             "environment variable key loading (CI mode)",
         )?;
-        let workspace_root = resolved.workspace_root.expect("workspace required");
+        let workspace_root = resolved.workspace_root.ok_or_else(|| Error::Config {
+            message: "Workspace is required for environment variable key loading (CI mode)"
+                .to_string(),
+        })?;
         let keystore_root = resolved.keystore_root;
         let key_ctx =
             load_crypto_context_from_env(workspace_root.root_path.clone(), options.verbose)?;

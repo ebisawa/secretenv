@@ -59,10 +59,7 @@ pub fn confirm_member_overwrite(member_id: &str) -> Result<bool> {
         ))
         .default(false)
         .interact()
-        .map_err(|e| Error::Io {
-            message: format!("Failed to read confirmation: {}", e),
-            source: None,
-        })
+        .map_err(|e| Error::io(format!("Failed to read confirmation: {}", e)))
 }
 
 /// Select a key from candidates.

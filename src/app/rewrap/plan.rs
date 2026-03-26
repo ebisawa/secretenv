@@ -36,10 +36,8 @@ pub fn build_rewrap_batch_plan(options: &CommonCommandOptions) -> Result<RewrapB
 
 fn find_encrypted_files_in_workspace(workspace_root: &Path) -> Result<Vec<PathBuf>> {
     let secrets_dir = workspace_root.join("secrets");
-    let entries = list_dir(&secrets_dir).map_err(|e| Error::Io {
-        message: format!("Failed to read secrets directory: {}", e),
-        source: None,
-    })?;
+    let entries = list_dir(&secrets_dir)
+        .map_err(|e| Error::io(format!("Failed to read secrets directory: {}", e)))?;
 
     let mut files: Vec<PathBuf> = entries
         .filter_map(|entry| entry.ok())

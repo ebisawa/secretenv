@@ -1,3 +1,6 @@
+// Copyright 2026 Satoshi Ebisawa
+// SPDX-License-Identifier: Apache-2.0
+
 use super::*;
 
 fn dummy_bindings() -> crate::model::public_key::VerifiedBindingClaims {

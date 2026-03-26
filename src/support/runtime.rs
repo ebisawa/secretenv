@@ -14,7 +14,7 @@ pub fn new_blocking_runtime() -> Result<tokio::runtime::Runtime> {
 }
 
 /// Run an async operation on a temporary blocking runtime.
-pub fn run_blocking<F, T>(future: F) -> Result<T>
+pub fn block_on<F, T>(future: F) -> Result<T>
 where
     F: Future<Output = T>,
 {
@@ -23,7 +23,7 @@ where
 }
 
 /// Run an async operation that returns `Result<T>` on a temporary blocking runtime.
-pub fn run_blocking_result<F, T>(future: F) -> Result<T>
+pub fn block_on_result<F, T>(future: F) -> Result<T>
 where
     F: Future<Output = Result<T>>,
 {

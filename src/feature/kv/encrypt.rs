@@ -16,6 +16,7 @@ use rand::rngs::OsRng;
 use rand::RngCore;
 use std::collections::HashMap;
 use uuid::Uuid;
+use zeroize::Zeroizing;
 
 /// Build KV encryption context: generate master key, create HEAD/WRAP structures
 pub(crate) fn build_kv_encryption(
@@ -24,9 +25,9 @@ pub(crate) fn build_kv_encryption(
     timestamp: &str,
 ) -> Result<(MasterKey, KvHeader, KvWrap)> {
     // Generate master key
-    let mut master_key_bytes = [0u8; 32];
-    OsRng.fill_bytes(&mut master_key_bytes);
-    let master_key = MasterKey::new(master_key_bytes);
+    let mut master_key_bytes = Zeroizing::new([0u8; 32]);
+    OsRng.fill_bytes(master_key_bytes.as_mut());
+    let master_key = MasterKey::new(*master_key_bytes);
 
     // Create HEAD token
     let head_data = KvHeader {

@@ -2360,6 +2360,7 @@ dependencies = [
  "shellexpand",
  "ssh-agent-client-rs",
  "ssh-key",
+ "subtle",
  "temp-env",
  "tempfile",
  "thiserror 2.0.18",

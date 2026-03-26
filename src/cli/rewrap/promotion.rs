@@ -135,9 +135,8 @@ fn prompt_tofu_confirmation(
     eprint!("  Accept? [y/N] ");
 
     let mut line = String::new();
-    input.read_line(&mut line).map_err(|e| Error::Io {
-        message: format!("Failed to read user input: {}", e),
-        source: Some(e),
-    })?;
+    input
+        .read_line(&mut line)
+        .map_err(|e| Error::io_with_source(format!("Failed to read user input: {}", e), e))?;
     Ok(line.trim().eq_ignore_ascii_case("y"))
 }

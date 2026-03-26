@@ -16,6 +16,7 @@ use crate::model::file_enc::VerifiedFileEncDocument;
 use crate::Result;
 use rand::rngs::OsRng;
 use rand::RngCore;
+use zeroize::Zeroizing;
 
 /// Rotate content key for file-enc content.
 pub fn rotate_file_key(
@@ -38,9 +39,9 @@ pub fn rotate_file_key(
     let plaintext_obj = Plaintext::from(plaintext_bytes.as_slice());
 
     // Generate new content key and re-encrypt
-    let mut new_content_key_bytes = [0u8; 32];
-    OsRng.fill_bytes(&mut new_content_key_bytes);
-    let new_content_key = MasterKey::new(new_content_key_bytes);
+    let mut new_content_key_bytes = Zeroizing::new([0u8; 32]);
+    OsRng.fill_bytes(new_content_key_bytes.as_mut());
+    let new_content_key = MasterKey::new(*new_content_key_bytes);
     let new_xchacha_key = XChaChaKey::from_slice(new_content_key.as_bytes())?;
     protected.payload.encrypted = encrypt_file_payload_content(
         &plaintext_obj,

@@ -83,5 +83,5 @@ pub(crate) fn decrypt_entry(
     let plaintext = xchacha_decrypt(&cek_key, &nonce, &aad, &ciphertext)?;
 
     // Convert Zeroizing<Plaintext> to Zeroizing<Vec<u8>>
-    Ok(Zeroizing::new(plaintext.to_vec()))
+    Ok(plaintext.to_zeroizing_vec())
 }

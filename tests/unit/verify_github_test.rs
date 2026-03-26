@@ -107,7 +107,7 @@ async fn test_resolve_github_id_by_username_with_fake_api() {
 }
 
 #[tokio::test]
-async fn test_verify_github_account_with_fake_api_success() {
+async fn test_verify_github_account_with_fake_api() {
     let public_key = sample_public_key();
     let api = FakeGitHubApi {
         user_result: Ok((42, "alice".to_string())),

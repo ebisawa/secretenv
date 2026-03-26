@@ -10,7 +10,7 @@ use crate::feature::member::promotion::{
 };
 use crate::feature::member::verification::{verify_member, verify_member_files};
 use crate::io::workspace::members::list_incoming_member_paths;
-use crate::support::runtime::{run_blocking, run_blocking_result};
+use crate::support::runtime::{block_on, block_on_result};
 use crate::Result;
 
 use super::types::MemberVerificationResult;
@@ -22,7 +22,7 @@ pub fn verify_members(
     verbose: bool,
 ) -> Result<Vec<MemberVerificationResult>> {
     let workspace = require_workspace(options, "member verify")?;
-    let results = run_blocking_result(verify_member(&workspace.root_path, member_ids, verbose))?;
+    let results = block_on_result(verify_member(&workspace.root_path, member_ids, verbose))?;
     Ok(results
         .into_iter()
         .map(build_member_verification_result)
@@ -38,6 +38,6 @@ pub fn verify_incoming_members_for_promotion(
         return Ok(None);
     }
 
-    let results = run_blocking(verify_member_files(&incoming_member_files, verbose))?;
+    let results = block_on(verify_member_files(&incoming_member_files, verbose))?;
     Ok(Some(build_incoming_verification_report(&results)))
 }

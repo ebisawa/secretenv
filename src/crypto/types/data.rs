@@ -47,6 +47,11 @@ impl Plaintext {
     pub fn to_vec(&self) -> Vec<u8> {
         self.0.clone()
     }
+
+    /// Convert to a zeroizing vector of bytes
+    pub fn to_zeroizing_vec(&self) -> Zeroizing<Vec<u8>> {
+        Zeroizing::new(self.0.clone())
+    }
 }
 
 impl From<Vec<u8>> for Plaintext {

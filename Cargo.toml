@@ -58,6 +58,7 @@ argon2 = { version = "0.5", features = ["alloc"] }
 
 # Secure memory handling
 zeroize = { version = "1", features = ["zeroize_derive"] }
+subtle = "2"
 
 # .env file parsing
 dotenvy = "0.15"

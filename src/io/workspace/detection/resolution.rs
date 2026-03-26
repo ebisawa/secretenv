@@ -79,10 +79,8 @@ pub fn resolve_workspace_creation_path(workspace_opt: Option<PathBuf>) -> Result
         return Ok(path);
     }
 
-    let current_dir = env::current_dir().map_err(|e| Error::Io {
-        message: format!("Failed to get current directory: {}", e),
-        source: Some(e),
-    })?;
+    let current_dir = env::current_dir()
+        .map_err(|e| Error::io_with_source(format!("Failed to get current directory: {}", e), e))?;
 
     find_git_root(&current_dir).map(|root| root.join(".secretenv")).ok_or_else(|| Error::Config {
         message:

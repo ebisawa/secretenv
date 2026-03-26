@@ -1,3 +1,6 @@
+// Copyright 2026 Satoshi Ebisawa
+// SPDX-License-Identifier: Apache-2.0
+
 use super::KvDocumentBuilder;
 use crate::feature::kv::document::{KvDocumentEntry, WrapSource};
 use crate::format::schema::document::parse_kv_entry_token;

@@ -31,13 +31,15 @@ pub(super) fn load_json_files_in_dir(dir: &Path) -> Result<Vec<PathBuf>> {
 
     let mut paths: Vec<PathBuf> = entries
         .map(|entry| -> Result<Option<PathBuf>> {
-            let entry = entry.map_err(|e| Error::Io {
-                message: format!(
-                    "Failed to read directory entry in {}: {}",
-                    display_path_relative_to_cwd(dir),
-                    e
-                ),
-                source: Some(e),
+            let entry = entry.map_err(|e| {
+                Error::io_with_source(
+                    format!(
+                        "Failed to read directory entry in {}: {}",
+                        display_path_relative_to_cwd(dir),
+                        e
+                    ),
+                    e,
+                )
             })?;
             let path = entry.path();
             Ok(
@@ -67,13 +69,15 @@ fn load_sorted_members_from_dir(dir: &Path) -> Result<Vec<PublicKey>> {
 }
 
 fn save_member_file(path: &Path, content: &str) -> Result<()> {
-    fs::write(path, content).map_err(|e| Error::Io {
-        message: format!(
-            "Failed to write {}: {}",
-            display_path_relative_to_cwd(path),
-            e
-        ),
-        source: Some(e),
+    fs::write(path, content).map_err(|e| {
+        Error::io_with_source(
+            format!(
+                "Failed to write {}: {}",
+                display_path_relative_to_cwd(path),
+                e
+            ),
+            e,
+        )
     })
 }
 
@@ -289,9 +293,8 @@ pub fn delete_member(workspace_path: &Path, member_id: &str) -> Result<()> {
         });
     }
 
-    fs::remove_file(&active_path).map_err(|e| Error::Io {
-        message: format!("Failed to delete member '{}': {}", member_id, e),
-        source: Some(e),
+    fs::remove_file(&active_path).map_err(|e| {
+        Error::io_with_source(format!("Failed to delete member '{}': {}", member_id, e), e)
     })?;
 
     Ok(())

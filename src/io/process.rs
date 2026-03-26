@@ -39,9 +39,8 @@ pub fn execute_command_with_env(
         .collect();
     configure_child_env_os(&mut command, &env_vars);
 
-    let status = command.status().map_err(|e| Error::Io {
-        message: format!("Failed to execute command '{}': {}", cmd, e),
-        source: Some(e),
+    let status = command.status().map_err(|e| {
+        Error::io_with_source(format!("Failed to execute command '{}': {}", cmd, e), e)
     })?;
 
     Ok(status.code().unwrap_or(1))

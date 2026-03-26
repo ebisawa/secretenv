@@ -87,7 +87,7 @@ pub(crate) fn decrypt_file_payload(
     let plaintext = xchacha_decrypt(&xchacha_key, &nonce, &aad, &ciphertext)?;
 
     // Convert Zeroizing<Plaintext> to Zeroizing<Vec<u8>>
-    Ok(Zeroizing::new(plaintext.to_vec()))
+    Ok(plaintext.to_zeroizing_vec())
 }
 
 /// Decrypt file-enc v3 format (value-based)

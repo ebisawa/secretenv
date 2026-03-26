@@ -46,7 +46,7 @@ fn test_account() -> GithubAccount {
 }
 
 #[tokio::test]
-async fn test_verify_ssh_key_on_github_success() {
+async fn test_verify_ssh_key_on_github() {
     let api = FakeGitHubApi {
         keys_result: Ok(vec![GitHubKeyRecord {
             id: 100,

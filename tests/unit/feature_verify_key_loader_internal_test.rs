@@ -1,3 +1,6 @@
+// Copyright 2026 Satoshi Ebisawa
+// SPDX-License-Identifier: Apache-2.0
+
 use super::*;
 use crate::feature::key::material::{build_identity_keys, generate_keypairs};
 use crate::feature::key::public_key_document::{
