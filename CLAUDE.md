@@ -35,12 +35,14 @@ crypto -> model | support
 config -> io | support
 ```
 
-- `cli` は `feature` / `io` に直接依存しない
+- `cli` は `feature` / `io` に直接依存しない（`app` 経由で利用）
 - `feature` は `cli` / `app` に依存しない
 - `app` は `cli` に依存しない
 - `io` は `feature` / `app` / `cli` に依存しない
 - `format` は `feature` に依存しない
-- `crypto` は `app` / `cli` に依存しない
+- `crypto` は `app` / `cli` / `feature` / `io` に依存しない
+- `model` は `cli` / `app` / `feature` に依存しない
+- `config/types.rs` は `io` / `feature` に依存しない
 
 ### レイヤー責務
 
@@ -96,7 +98,7 @@ KV 暗号化: KV マップ → エントリごとに CEK で暗号化 → トー
 - 検証済み型は `Verified*` プレフィックス、証明型は `*Proof` サフィックス
 - テスト関数名: `test_<対象>_<シナリオ>[_fails|_error|_roundtrip]`
 - テストファイル名: `<module_path>_test.rs`（例: `feature/encrypt/wrap.rs` → `feature_encrypt_wrap_test.rs`）
-- 動詞規則: `build_*`（組み立て）、`load_*`（読み込み）、`save_*`（書き込み）、`resolve_*`（動的解決）。`create_*`, `prepare_*`, `read_*`, `write_*` は使用禁止
+- 動詞規則: `build_*`（組み立て）、`load_*`（読み込み）、`save_*`（書き込み）、`resolve_*`（動的解決）、`encrypt_*`/`decrypt_*`、`sign_*`/`verify_*`、`wrap_*`/`unwrap_*`。`create_*`, `prepare_*`, `read_*`, `write_*` は使用禁止
 - CLI 専用動詞: `setup_*`（実行前準備）、`run_*`（エントリポイント）、`print_*`（表示）— `cli/` 以外での使用禁止
 
 ## Subagent Review Rules
