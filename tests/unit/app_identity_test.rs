@@ -59,7 +59,7 @@ fn test_resolve_member_id_from_cli_argument() {
 
 #[test]
 #[serial]
-fn test_resolve_member_id_cli_invalid_returns_error() {
+fn test_resolve_member_id_cli_invalid_error() {
     let _guard = EnvGuard::new(&["SECRETENV_HOME", "SECRETENV_MEMBER_ID"]);
     let temp_dir = TempDir::new().unwrap();
     let temp_home = TempDir::new().unwrap();
@@ -95,7 +95,7 @@ fn test_resolve_member_id_from_env_var() {
 
 #[test]
 #[serial]
-fn test_resolve_member_id_env_invalid_returns_error() {
+fn test_resolve_member_id_env_invalid_error() {
     let _guard = EnvGuard::new(&["SECRETENV_HOME", "SECRETENV_MEMBER_ID"]);
     let temp_dir = TempDir::new().unwrap();
     let temp_home = TempDir::new().unwrap();
@@ -128,7 +128,7 @@ fn test_resolve_member_id_from_global_config() {
 
 #[test]
 #[serial]
-fn test_resolve_member_id_config_invalid_returns_error() {
+fn test_resolve_member_id_config_invalid_error() {
     let _guard = EnvGuard::new(&["SECRETENV_HOME", "SECRETENV_MEMBER_ID"]);
     let temp_dir = TempDir::new().unwrap();
     let temp_home = TempDir::new().unwrap();

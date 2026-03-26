@@ -55,60 +55,79 @@ pub fn load_private_key_from_env(debug: bool) -> Result<EnvKeyLoadResult> {
     // be called from the main thread only. The env vars cannot be
     // recovered after removal, so retries require re-setting them.
     let _cleanup = EnvKeyCleanupGuard;
+    let encoded = load_env_private_key()?;
+    let password = load_env_key_password()?;
+    let json_bytes = decode_private_key_env(&encoded)?;
+    let private_key = parse_password_protected_private_key(&json_bytes)?;
+    build_env_key_load_result(&private_key, &password, debug)
+}
 
-    let encoded = Zeroizing::new(std::env::var(ENV_PRIVATE_KEY).map_err(|e| match e {
-        std::env::VarError::NotPresent => Error::Config {
-            message: format!("{} environment variable is not set", ENV_PRIVATE_KEY),
-        },
-        std::env::VarError::NotUnicode(_) => Error::Config {
-            message: format!(
-                "{} environment variable contains invalid UTF-8",
-                ENV_PRIVATE_KEY
-            ),
-        },
-    })?);
-
-    let password = Zeroizing::new(std::env::var(ENV_KEY_PASSWORD).map_err(|e| match e {
-        std::env::VarError::NotPresent => Error::Config {
-            message: format!(
-                "{} environment variable is required when {} is set",
-                ENV_KEY_PASSWORD, ENV_PRIVATE_KEY
-            ),
-        },
-        std::env::VarError::NotUnicode(_) => Error::Config {
-            message: format!(
-                "{} environment variable contains invalid UTF-8",
-                ENV_KEY_PASSWORD
-            ),
-        },
-    })?);
-
-    let json_bytes =
-        Zeroizing::new(URL_SAFE_NO_PAD.decode(&encoded).map_err(|e| Error::Parse {
-            message: format!("Failed to decode {} as Base64url: {}", ENV_PRIVATE_KEY, e),
-            source: Some(Box::new(e)),
-        })?);
-
-    let private_key: PrivateKey = parse_private_key_bytes(&json_bytes, ENV_PRIVATE_KEY)?;
-
-    // Verify algorithm is Argon2id (password-based)
-    match &private_key.protected.alg {
-        PrivateKeyAlgorithm::Argon2id { .. } => {}
-        _ => {
-            return Err(Error::Config {
+fn load_env_private_key() -> Result<Zeroizing<String>> {
+    Ok(Zeroizing::new(std::env::var(ENV_PRIVATE_KEY).map_err(
+        |e| match e {
+            std::env::VarError::NotPresent => Error::Config {
+                message: format!("{} environment variable is not set", ENV_PRIVATE_KEY),
+            },
+            std::env::VarError::NotUnicode(_) => Error::Config {
                 message: format!(
-                    "{} must contain a password-protected key (argon2id-hkdf-sha256)",
+                    "{} environment variable contains invalid UTF-8",
                     ENV_PRIVATE_KEY
                 ),
-            });
-        }
-    }
+            },
+        },
+    )?))
+}
 
+fn load_env_key_password() -> Result<Zeroizing<String>> {
+    Ok(Zeroizing::new(std::env::var(ENV_KEY_PASSWORD).map_err(
+        |e| match e {
+            std::env::VarError::NotPresent => Error::Config {
+                message: format!(
+                    "{} environment variable is required when {} is set",
+                    ENV_KEY_PASSWORD, ENV_PRIVATE_KEY
+                ),
+            },
+            std::env::VarError::NotUnicode(_) => Error::Config {
+                message: format!(
+                    "{} environment variable contains invalid UTF-8",
+                    ENV_KEY_PASSWORD
+                ),
+            },
+        },
+    )?))
+}
+
+fn decode_private_key_env(encoded: &str) -> Result<Zeroizing<Vec<u8>>> {
+    Ok(Zeroizing::new(URL_SAFE_NO_PAD.decode(encoded).map_err(
+        |e| Error::Parse {
+            message: format!("Failed to decode {} as Base64url: {}", ENV_PRIVATE_KEY, e),
+            source: Some(Box::new(e)),
+        },
+    )?))
+}
+
+fn parse_password_protected_private_key(json_bytes: &[u8]) -> Result<PrivateKey> {
+    let private_key: PrivateKey = parse_private_key_bytes(json_bytes, ENV_PRIVATE_KEY)?;
+    match &private_key.protected.alg {
+        PrivateKeyAlgorithm::Argon2id { .. } => Ok(private_key),
+        _ => Err(Error::Config {
+            message: format!(
+                "{} must contain a password-protected key (argon2id-hkdf-sha256)",
+                ENV_PRIVATE_KEY
+            ),
+        }),
+    }
+}
+
+fn build_env_key_load_result(
+    private_key: &PrivateKey,
+    password: &str,
+    debug: bool,
+) -> Result<EnvKeyLoadResult> {
     let member_id = private_key.protected.member_id.clone();
     let kid = private_key.protected.kid.clone();
     let expires_at = private_key.protected.expires_at.clone();
-
-    let plaintext = decrypt_private_key_with_password(&private_key, &password, debug)?;
+    let plaintext = decrypt_private_key_with_password(private_key, password, debug)?;
     let verified_key = validate_and_wrap_private_key_password(plaintext, &member_id, &kid)?;
 
     Ok(EnvKeyLoadResult {

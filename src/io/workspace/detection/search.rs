@@ -49,10 +49,9 @@ pub(super) fn validate_workspace_path(path: &Path) -> Result<WorkspaceRoot> {
 }
 
 pub fn detect_workspace_root(start_path: &Path) -> Result<WorkspaceRoot> {
-    let mut current = start_path.canonicalize().map_err(|e| Error::Io {
-        message: format!("Failed to canonicalize path: {}", e),
-        source: Some(e),
-    })?;
+    let mut current = start_path
+        .canonicalize()
+        .map_err(|e| Error::io_with_source(format!("Failed to canonicalize path: {}", e), e))?;
     let git_root = find_git_root(&current).ok_or_else(|| Error::NotFound {
         message: format!(
             "No git repository found from '{}'. \

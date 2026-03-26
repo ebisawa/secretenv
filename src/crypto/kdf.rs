@@ -10,6 +10,7 @@ use crate::crypto::types::primitives::Salt;
 use crate::Result;
 use hkdf::Hkdf;
 use sha2::Sha256;
+use zeroize::Zeroizing;
 
 /// Internal helper function for HKDF expansion
 fn expand_internal(ikm: &Ikm, salt: Option<&Salt>, info: &Info, output: &mut [u8]) -> Result<()> {
@@ -28,10 +29,15 @@ fn expand_internal(ikm: &Ikm, salt: Option<&Salt>, info: &Info, output: &mut [u8
 ///
 /// # Returns
 /// Derived key material
-pub fn expand(ikm: &Ikm, salt: Option<&Salt>, info: &Info, length: usize) -> Result<Vec<u8>> {
+pub fn expand(
+    ikm: &Ikm,
+    salt: Option<&Salt>,
+    info: &Info,
+    length: usize,
+) -> Result<Zeroizing<Vec<u8>>> {
     let mut okm = vec![0u8; length];
     expand_internal(ikm, salt, info, &mut okm)?;
-    Ok(okm)
+    Ok(Zeroizing::new(okm))
 }
 
 /// Expand HKDF-SHA256 to fixed-size array
@@ -44,7 +50,7 @@ pub fn expand(ikm: &Ikm, salt: Option<&Salt>, info: &Info, length: usize) -> Res
 /// # Returns
 /// Derived key material (32 bytes) as CEK
 pub fn expand_to_array(ikm: &Ikm, salt: Option<&Salt>, info: &Info) -> Result<Cek> {
-    let mut okm = [0u8; 32];
-    expand_internal(ikm, salt, info, &mut okm)?;
-    Ok(Cek::new(okm))
+    let mut okm = Zeroizing::new([0u8; 32]);
+    expand_internal(ikm, salt, info, okm.as_mut())?;
+    Ok(Cek::new(*okm))
 }

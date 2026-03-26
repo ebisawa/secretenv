@@ -1,3 +1,6 @@
+// Copyright 2026 Satoshi Ebisawa
+// SPDX-License-Identifier: Apache-2.0
+
 use super::*;
 use crate::support::limits::{MAX_KV_ENC_FILE_SIZE, MAX_KV_KEY_LINES};
 

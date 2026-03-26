@@ -20,8 +20,17 @@ use zeroize::Zeroizing;
 ///
 /// This is wrapped in Zeroizing for secure memory clearing, as it is used as
 /// input keying material for key derivation and contains sensitive cryptographic data.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct Ed25519RawSignature(Zeroizing<[u8; 64]>);
+
+impl PartialEq for Ed25519RawSignature {
+    fn eq(&self, other: &Self) -> bool {
+        use subtle::ConstantTimeEq;
+        self.0.as_ref().ct_eq(other.0.as_ref()).into()
+    }
+}
+
+impl Eq for Ed25519RawSignature {}
 
 impl Ed25519RawSignature {
     /// Create a new Ed25519RawSignature from 64 bytes

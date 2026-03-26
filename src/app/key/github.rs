@@ -5,7 +5,7 @@ use crate::io::verify_online::github::preflight::verify_ssh_key_on_github;
 use crate::io::verify_online::github::resolve_github_id_by_username;
 use crate::io::verify_online::VerificationStatus;
 use crate::model::public_key::GithubAccount;
-use crate::support::runtime::run_blocking_result;
+use crate::support::runtime::block_on_result;
 use crate::Result;
 
 pub(crate) fn resolve_github_account(
@@ -16,7 +16,7 @@ pub(crate) fn resolve_github_account(
         return Ok(None);
     };
 
-    let (id, login) = run_blocking_result(resolve_github_id_by_username(&login, verbose))?;
+    let (id, login) = block_on_result(resolve_github_id_by_username(&login, verbose))?;
     Ok(Some(GithubAccount { id, login }))
 }
 
@@ -26,6 +26,6 @@ pub(crate) fn verify_preflight_github_binding(
     account: &GithubAccount,
     verbose: bool,
 ) -> Result<VerificationStatus> {
-    let status = run_blocking_result(verify_ssh_key_on_github(ssh_pub_key, account, verbose))?;
+    let status = block_on_result(verify_ssh_key_on_github(ssh_pub_key, account, verbose))?;
     Ok(status)
 }

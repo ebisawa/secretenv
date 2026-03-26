@@ -67,14 +67,16 @@ pub fn save_key_pair_atomic(
     save_key_pair_to_tmp(&tmp_dir, private_key, public_key)?;
 
     let final_dir = member_dir.join(kid);
-    fs::rename(&tmp_dir, &final_dir).map_err(|e| Error::Io {
-        message: format!(
-            "Failed to rename {} to {}: {}",
-            display_path_relative_to_cwd(&tmp_dir),
-            display_path_relative_to_cwd(&final_dir),
-            e
-        ),
-        source: Some(e),
+    fs::rename(&tmp_dir, &final_dir).map_err(|e| {
+        Error::io_with_source(
+            format!(
+                "Failed to rename {} to {}: {}",
+                display_path_relative_to_cwd(&tmp_dir),
+                display_path_relative_to_cwd(&final_dir),
+                e
+            ),
+            e,
+        )
     })?;
 
     Ok(())
@@ -84,10 +86,7 @@ pub fn save_key_pair_atomic(
 pub fn load_private_key(keystore_root: &Path, member_id: &str, kid: &str) -> Result<PrivateKey> {
     let path = key_dir(keystore_root, member_id, kid).join("private.json");
     if let Some(msg) = check_permission(&path) {
-        return Err(Error::Io {
-            message: msg,
-            source: None,
-        });
+        return Err(Error::io(msg));
     }
     parse_private_key_file(&path)
 }

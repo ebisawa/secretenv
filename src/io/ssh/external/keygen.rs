@@ -79,7 +79,8 @@ impl SshKeygen for DefaultSshKeygen {
         })?;
 
         let msg_file = temp_file::save_temp_bytes(data)?;
-        let output = run_sign_command(&self.ssh_keygen_path, key_path_str, namespace, &msg_file)?;
+        let output =
+            execute_sign_command(&self.ssh_keygen_path, key_path_str, namespace, &msg_file)?;
         check_sign_output(&output, is_public_key)?;
         load_signature_file(&msg_file)
     }
@@ -140,7 +141,7 @@ impl SshKeygen for DefaultSshKeygen {
     }
 }
 
-fn run_sign_command(
+fn execute_sign_command(
     ssh_keygen_path: &str,
     key_path_str: &str,
     namespace: &str,

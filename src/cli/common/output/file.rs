@@ -31,16 +31,14 @@ pub fn resolve_encrypted_output_path(
         });
     }
 
-    let current_dir = std::env::current_dir().map_err(|e| Error::Io {
-        message: format!("Failed to get current directory: {}", e),
-        source: Some(e),
-    })?;
+    let current_dir = std::env::current_dir()
+        .map_err(|e| Error::io_with_source(format!("Failed to get current directory: {}", e), e))?;
     Ok(Some(
         current_dir.join(format!("{}.encrypted", input_filename)),
     ))
 }
 
-pub fn write_encrypted_output(
+pub fn save_encrypted_output(
     output_path: Option<&PathBuf>,
     content: &str,
     quiet: bool,
@@ -55,7 +53,7 @@ pub fn write_encrypted_output(
     Ok(())
 }
 
-pub fn write_decrypted_output(
+pub fn save_decrypted_output(
     output_path: &Path,
     plaintext_bytes: &[u8],
     quiet: bool,

@@ -114,7 +114,10 @@ fn run_all(result: &KvReadResult, args: &GetArgs) -> Result<()> {
 }
 
 fn run_single(result: &KvReadResult, args: &GetArgs) -> Result<()> {
-    let key = args.key.as_deref().unwrap();
+    let key = args
+        .key
+        .as_deref()
+        .ok_or_else(|| crate::Error::invalid_operation("KEY argument is required"))?;
     let value = result.values.get(key).cloned().unwrap_or_default();
 
     if result

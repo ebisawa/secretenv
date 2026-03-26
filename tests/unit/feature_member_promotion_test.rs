@@ -1,3 +1,6 @@
+// Copyright 2026 Satoshi Ebisawa
+// SPDX-License-Identifier: Apache-2.0
+
 use super::*;
 use crate::io::verify_online::VerificationResult;
 use crate::model::public_key::{BindingClaims, VerifiedBindingClaims};

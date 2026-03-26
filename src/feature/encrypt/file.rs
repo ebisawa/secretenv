@@ -27,9 +27,9 @@ use zeroize::Zeroizing;
 /// Returns plaintext wrapped in Zeroizing to ensure it's zeroed after encryption.
 fn build_encrypt_context(content: &[u8]) -> Result<(MasterKey, Zeroizing<Vec<u8>>, XChaChaKey)> {
     // Generate content key (32 bytes random)
-    let mut content_key_bytes = [0u8; 32];
-    OsRng.fill_bytes(&mut content_key_bytes);
-    let content_key = MasterKey::new(content_key_bytes);
+    let mut content_key_bytes = Zeroizing::new([0u8; 32]);
+    OsRng.fill_bytes(content_key_bytes.as_mut());
+    let content_key = MasterKey::new(*content_key_bytes);
     let xchacha_key = XChaChaKey::from_slice(content_key.as_bytes())?;
 
     // Wrap plaintext in Zeroizing to ensure it's zeroed after use

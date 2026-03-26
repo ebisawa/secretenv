@@ -45,13 +45,12 @@ pub fn find_identity_agent() -> Result<Option<PathBuf>> {
         return Ok(None);
     }
 
-    let content = load_text(&config_path).map_err(|e| Error::Io {
-        message: format!(
+    let content = load_text(&config_path).map_err(|e| {
+        Error::io(format!(
             "Failed to read SSH config file {}: {}",
             display_path_relative_to_cwd(&config_path),
             e
-        ),
-        source: None,
+        ))
     })?;
 
     parse_identity_agent(&content)

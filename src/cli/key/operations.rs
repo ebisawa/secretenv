@@ -108,10 +108,7 @@ fn prompt_export_password() -> Result<Zeroizing<String>> {
             .with_prompt("Enter password for key export")
             .with_confirmation("Confirm password", "Passwords do not match")
             .interact()
-            .map_err(|e| crate::Error::Io {
-                message: format!("Failed to read password: {}", e),
-                source: None,
-            })?;
+            .map_err(|e| crate::Error::io(format!("Failed to read password: {}", e)))?;
         return Ok(Zeroizing::new(password));
     }
 
@@ -122,16 +119,10 @@ fn prompt_export_password() -> Result<Zeroizing<String>> {
 
     reader
         .read_line(&mut password)
-        .map_err(|e| crate::Error::Io {
-            message: format!("Failed to read password: {}", e),
-            source: None,
-        })?;
+        .map_err(|e| crate::Error::io(format!("Failed to read password: {}", e)))?;
     reader
         .read_line(&mut confirmation)
-        .map_err(|e| crate::Error::Io {
-            message: format!("Failed to read password confirmation: {}", e),
-            source: None,
-        })?;
+        .map_err(|e| crate::Error::io(format!("Failed to read password confirmation: {}", e)))?;
 
     trim_line_ending(&mut password);
     trim_line_ending(&mut confirmation);

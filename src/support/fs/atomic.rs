@@ -15,13 +15,15 @@ use tempfile::NamedTempFile;
 /// Ensure parent directory exists
 fn ensure_parent_dir(path: &Path) -> Result<()> {
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(|e| Error::Io {
-            message: format!(
-                "Failed to create directory {}: {}",
-                display_path_relative_to_cwd(parent),
-                e
-            ),
-            source: Some(e),
+        fs::create_dir_all(parent).map_err(|e| {
+            Error::io_with_source(
+                format!(
+                    "Failed to create directory {}: {}",
+                    display_path_relative_to_cwd(parent),
+                    e
+                ),
+                e,
+            )
         })?;
     }
     Ok(())
@@ -70,28 +72,24 @@ pub fn save_text_restricted(path: &Path, content: &str) -> Result<()> {
 /// Save bytes atomically
 pub fn save_bytes(path: &Path, data: &[u8]) -> Result<()> {
     let parent = path.parent().unwrap_or_else(|| Path::new("."));
-    let mut temp = NamedTempFile::new_in(parent).map_err(|e| Error::Io {
-        message: format!("Failed to create temp file: {}", e),
-        source: Some(e),
-    })?;
+    let mut temp = NamedTempFile::new_in(parent)
+        .map_err(|e| Error::io_with_source(format!("Failed to create temp file: {}", e), e))?;
 
-    temp.write_all(data).map_err(|e| Error::Io {
-        message: format!("Write failed: {}", e),
-        source: Some(e),
-    })?;
+    temp.write_all(data)
+        .map_err(|e| Error::io_with_source(format!("Write failed: {}", e), e))?;
 
-    temp.flush().map_err(|e| Error::Io {
-        message: format!("Flush failed: {}", e),
-        source: Some(e),
-    })?;
+    temp.flush()
+        .map_err(|e| Error::io_with_source(format!("Flush failed: {}", e), e))?;
 
-    temp.persist(path).map_err(|e| Error::Io {
-        message: format!(
-            "Persist to {} failed: {}",
-            display_path_relative_to_cwd(path),
-            e.error
-        ),
-        source: Some(e.error),
+    temp.persist(path).map_err(|e| {
+        Error::io_with_source(
+            format!(
+                "Persist to {} failed: {}",
+                display_path_relative_to_cwd(path),
+                e.error
+            ),
+            e.error,
+        )
     })?;
 
     Ok(())

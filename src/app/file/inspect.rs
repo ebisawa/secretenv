@@ -19,7 +19,7 @@ use crate::io::verify_online::VerificationResult as OnlineVerificationResult;
 use crate::io::workspace::detection::WorkspaceRoot;
 use crate::support::fs::load_text;
 use crate::support::path::display_path_relative_to_cwd;
-use crate::support::runtime::run_blocking_result;
+use crate::support::runtime::block_on_result;
 use crate::Result;
 
 /// Inspect command inputs resolved at the application layer.
@@ -85,7 +85,7 @@ pub(crate) fn inspect_file_command(
         if let Some(ref public_key) = report.signer_public_key {
             if let Some(ref binding_claims) = public_key.protected.binding_claims {
                 if let Some(github) = binding_claims.github_account.as_ref() {
-                    let result = match run_blocking_result(verify_github_account(
+                    let result = match block_on_result(verify_github_account(
                         public_key,
                         options.verbose,
                         None,

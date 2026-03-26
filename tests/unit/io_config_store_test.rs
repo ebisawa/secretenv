@@ -125,7 +125,7 @@ fn test_set_config_value_update_existing() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn test_unset_config_value_success() {
+fn test_unset_config_value() {
     let tmp = TempDir::new().unwrap();
     let path = tmp.path().join("config.toml");
     fs::write(

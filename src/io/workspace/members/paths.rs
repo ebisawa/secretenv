@@ -30,13 +30,12 @@ pub(super) fn member_file_path(
 
 pub(super) fn ensure_members_dir(workspace_path: &Path, status: MemberStatus) -> Result<PathBuf> {
     let dir = members_dir(workspace_path, status);
-    ensure_dir(&dir).map_err(|e| Error::Io {
-        message: format!(
+    ensure_dir(&dir).map_err(|e| {
+        Error::io(format!(
             "Failed to create {} directory: {}",
             display_path_relative_to_cwd(&dir),
             e
-        ),
-        source: None,
+        ))
     })?;
     Ok(dir)
 }

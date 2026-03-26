@@ -45,6 +45,8 @@ pub mod crypto_sign_ed25519_test;
 pub mod crypto_test;
 #[path = "unit/crypto_xchacha20_poly1305_test.rs"]
 pub mod crypto_xchacha20_poly1305_test;
+#[path = "unit/error_test.rs"]
+pub mod error_test;
 #[path = "unit/feature_config_test.rs"]
 pub mod feature_config_test;
 #[path = "unit/feature_context_crypto_test.rs"]

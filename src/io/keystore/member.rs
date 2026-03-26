@@ -97,13 +97,15 @@ pub fn select_latest_valid_kid(keystore_root: &Path, member_id: &str) -> Result<
 /// Remove a key directory from the keystore.
 pub fn remove_key_directory(keystore_root: &Path, member_id: &str, kid: &str) -> Result<()> {
     let key_dir = keystore_root.join(member_id).join(kid);
-    std::fs::remove_dir_all(&key_dir).map_err(|e| Error::Io {
-        message: format!(
-            "Failed to remove key directory {}: {}",
-            display_path_relative_to_cwd(&key_dir),
-            e
-        ),
-        source: Some(e),
+    std::fs::remove_dir_all(&key_dir).map_err(|e| {
+        Error::io_with_source(
+            format!(
+                "Failed to remove key directory {}: {}",
+                display_path_relative_to_cwd(&key_dir),
+                e
+            ),
+            e,
+        )
     })
 }
 

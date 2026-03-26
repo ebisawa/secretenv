@@ -53,9 +53,8 @@ pub fn clear_active_kid(member_id: &str, keystore_root: &Path) -> Result<(), Err
     let active_path = keystore_root.join(member_id).join("active");
 
     if active_path.exists() {
-        fs::remove_file(&active_path).map_err(|e| Error::Io {
-            message: format!("Failed to remove active file: {}", e),
-            source: Some(e),
+        fs::remove_file(&active_path).map_err(|e| {
+            Error::io_with_source(format!("Failed to remove active file: {}", e), e)
         })?;
     }
 

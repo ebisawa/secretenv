@@ -14,49 +14,57 @@ use std::path::Path;
 
 /// Read a file as bytes with consistent path-aware error messages.
 pub fn load_bytes(path: &Path) -> Result<Vec<u8>> {
-    fs::read(path).map_err(|e| Error::Io {
-        message: format!(
-            "Failed to read file {}: {}",
-            display_path_relative_to_cwd(path),
-            e
-        ),
-        source: Some(e),
+    fs::read(path).map_err(|e| {
+        Error::io_with_source(
+            format!(
+                "Failed to read file {}: {}",
+                display_path_relative_to_cwd(path),
+                e
+            ),
+            e,
+        )
     })
 }
 
 /// Read a UTF-8 text file with consistent path-aware error messages.
 pub fn load_text(path: &Path) -> Result<String> {
-    fs::read_to_string(path).map_err(|e| Error::Io {
-        message: format!(
-            "Failed to read file {}: {}",
-            display_path_relative_to_cwd(path),
-            e
-        ),
-        source: Some(e),
+    fs::read_to_string(path).map_err(|e| {
+        Error::io_with_source(
+            format!(
+                "Failed to read file {}: {}",
+                display_path_relative_to_cwd(path),
+                e
+            ),
+            e,
+        )
     })
 }
 
 /// List directory entries with consistent path-aware error messages.
 pub fn list_dir(path: &Path) -> Result<ReadDir> {
-    fs::read_dir(path).map_err(|e| Error::Io {
-        message: format!(
-            "Failed to read directory {}: {}",
-            display_path_relative_to_cwd(path),
-            e
-        ),
-        source: Some(e),
+    fs::read_dir(path).map_err(|e| {
+        Error::io_with_source(
+            format!(
+                "Failed to read directory {}: {}",
+                display_path_relative_to_cwd(path),
+                e
+            ),
+            e,
+        )
     })
 }
 
 /// Ensure a directory exists with consistent path-aware error messages.
 pub fn ensure_dir(path: &Path) -> Result<()> {
-    fs::create_dir_all(path).map_err(|e| Error::Io {
-        message: format!(
-            "Failed to create directory {}: {}",
-            display_path_relative_to_cwd(path),
-            e
-        ),
-        source: Some(e),
+    fs::create_dir_all(path).map_err(|e| {
+        Error::io_with_source(
+            format!(
+                "Failed to create directory {}: {}",
+                display_path_relative_to_cwd(path),
+                e
+            ),
+            e,
+        )
     })
 }
 
@@ -73,22 +81,26 @@ pub fn ensure_dir_restricted(path: &Path) -> Result<()> {
         .recursive(true)
         .mode(0o700)
         .create(path)
-        .map_err(|e| Error::Io {
-            message: format!(
-                "Failed to create directory {}: {}",
+        .map_err(|e| {
+            Error::io_with_source(
+                format!(
+                    "Failed to create directory {}: {}",
+                    display_path_relative_to_cwd(path),
+                    e
+                ),
+                e,
+            )
+        })?;
+
+    fs::set_permissions(path, Permissions::from_mode(0o700)).map_err(|e| {
+        Error::io_with_source(
+            format!(
+                "Failed to set permissions on {}: {}",
                 display_path_relative_to_cwd(path),
                 e
             ),
-            source: Some(e),
-        })?;
-
-    fs::set_permissions(path, Permissions::from_mode(0o700)).map_err(|e| Error::Io {
-        message: format!(
-            "Failed to set permissions on {}: {}",
-            display_path_relative_to_cwd(path),
-            e
-        ),
-        source: Some(e),
+            e,
+        )
     })
 }
 

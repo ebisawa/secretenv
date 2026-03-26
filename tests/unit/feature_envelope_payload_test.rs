@@ -1,3 +1,6 @@
+// Copyright 2026 Satoshi Ebisawa
+// SPDX-License-Identifier: Apache-2.0
+
 use super::*;
 use crate::crypto::types::keys::XChaChaKey;
 use crate::model::file_enc::{FileEncAlgorithm, FilePayloadHeader};
