@@ -150,11 +150,9 @@ The operation that updates recipient information in all encrypted files after me
 - Synchronizes the active member list with recipients in all encrypted files
 - For kv-enc, regenerates the content key (MK) and re-encrypts all entries when a member is removed
 
-### TOFU (Trust On First Use)
+### Interactive Promotion Confirmation (visual check during promotion)
 
-TOFU stands for "Trust On First Use."
-
-When promoting an incoming member to active via `rewrap`, secretenv interactively asks "is this public key really from the requester?" The screen displays the GitHub login name, user ID, and SSH key fingerprint, and the operator approves with `y` / `N`.
+When promoting an incoming member to active via `rewrap`, secretenv performs an interactive confirmation. The screen displays the GitHub login name, user ID, and SSH key fingerprint, and the operator approves with `y` / `N` based on whether to accept the key as belonging to that person (this is not a cryptographic identity proof).
 
 ```
 Member bob@example.com
@@ -163,7 +161,7 @@ Member bob@example.com
 Approve? [y/N]:
 ```
 
-This confirmation is important because if a malicious third party submits a PR impersonating a real member, "an unfamiliar GitHub account or SSH key will appear," enabling detection. Using `--force` skips the TOFU check, disabling this safeguard.
+This confirmation is important because if a malicious third party submits a PR impersonating a real member, "an unfamiliar GitHub account or SSH key will appear," enabling detection. Using `--force` skips the promotion confirmation, disabling this safeguard.
 
 ---
 
@@ -177,7 +175,7 @@ secretenv verifies "is this public key really from this person?" through multipl
 |-------|-----------|---------------|------------|
 | Layer 1 | Self-signature | The private key holder created this public key | Does not prove identity |
 | Layer 2 | SSH attestation | Links the secretenv key to an SSH key | Cannot identify who owns the SSH key |
-| Layer 3 | TOFU confirmation | Links the key to a person (visual confirmation) | Skipped when `--force` is used |
+| Layer 3 | Interactive promotion confirmation | Evidence for key-to-person association (visual confirmation) | Skipped when `--force` is used |
 | Layer 4 | Online verify | Cross-checks with GitHub (supplementary evidence) | Invalid if GitHub account is compromised |
 
 ### Threat Model
@@ -573,10 +571,10 @@ git pull
 
 # 2. Run rewrap
 #    - Automatically runs online verification (GitHub API lookup)
-#    - TOFU confirmation (visually verify the displayed key information)
+#    - Interactive promotion confirmation (visually verify the displayed key information)
 secretenv rewrap
 
-# TOFU confirmation example (the confirmation prompt described in Chapter 3):
+# Promotion confirmation example (the confirmation prompt described in Chapter 3):
 # Member bob@example.com
 #   GitHub login: bob-gh (id: 12345678)
 #   SSH key fingerprint: SHA256:xxxxx...
@@ -734,7 +732,7 @@ secretenv supports CI/CD environments through portable private key export and en
 
 ### Overview
 
-In CI mode, secretenv reads the private key and password from environment variables instead of the local keystore. Environment variable-based key loading guarantees read-only commands: `run`, `decrypt`, `get`, and `list` are supported.
+In CI environments, secretenv reads the private key and password from environment variables instead of the local keystore. Environment variable-based key loading guarantees read-only commands: `run`, `decrypt`, `get`, and `list` are supported.
 
 This still matters because the workspace checkout remains input to signature verification. Environment variable-based key loading must therefore be limited to **trusted workflow / trusted ref / trusted runner** contexts.
 
@@ -811,7 +809,7 @@ After registering, securely delete the `ci-key.txt` file. Do not relay the priva
 
 #### Step 5: Use in CI Jobs
 
-CI jobs can use only the secret-operation commands that already support environment-variable key mode. The `member_id` is automatically determined from the private key.
+CI jobs can use only the secret-operation commands that already support environment variable-based key loading. The `member_id` is automatically determined from the private key.
 
 ### Example: GitHub Actions
 
@@ -846,7 +844,7 @@ This example assumes a **trusted post-merge workflow on a protected branch**. Do
 export SECRETENV_PRIVATE_KEY="<registered secret>"
 export SECRETENV_KEY_PASSWORD="<registered secret>"
 
-# Only env-mode-supported commands work
+# Only commands supporting environment variable-based key loading work
 secretenv get DATABASE_URL
 secretenv run -- ./my-app
 secretenv decrypt ca.pem.encrypted --out ca.pem
@@ -854,12 +852,12 @@ secretenv decrypt ca.pem.encrypted --out ca.pem
 
 ### Supported Operations
 
-Environment variable mode guarantees only the secret-operation commands currently implemented for env dispatch:
+Environment variable-based key loading guarantees only the secret-operation commands currently implemented for env dispatch:
 
 - **Decryption** (`run`, `decrypt`, `get`): uses the KEM private key from the environment variable
 - **Listing** (`list`): shows kv-enc key names as metadata only
 
-All other commands remain unavailable in CI environment-variable mode:
+All other commands remain unavailable when loading keys via environment variables:
 
 - **Secret mutation / re-signing** (`encrypt`, `set`, `unset`, `import`, `rewrap`)
 - **Key lifecycle** (`key new`, `key list`, `key activate`, `key remove`, `key export`, `key export --private`)
@@ -894,19 +892,17 @@ All other commands remain unavailable in CI environment-variable mode:
 
 For true security, always rotate any values that departing or removed members may have known.
 
-### Using `--force` in CI/CD and Its Risks
+### Using `--force` in Automation Scripts and Its Risks
 
-For setting up secretenv in CI/CD environments, see [Chapter 12: CI/CD Integration](#12-cicd-integration). The recommended approach uses environment variable-based key loading, which does not require `--force` for normal operations.
+If `--force` is necessary for running commands like `rewrap` in non-interactive environments such as automation scripts, note the following risks. (Note: The recommended environment variable-based key loading for CI/CD environments does not support update commands like `rewrap` in the first place. See [Chapter 12: CI/CD Integration](#12-cicd-integration) for details.)
 
-If `--force` is still needed (e.g., for `rewrap` in CI), note the following risks.
+**Risk of `--force`**: As explained in Chapter 3, the promotion confirmation is the "last line of defense" against public key substitution attacks. Skipping it with `--force` means a fraudulent public key could go undetected.
 
-**Risk of `--force`**: As explained in Chapter 3, the TOFU check is the "last line of defense" against public key substitution attacks. Skipping it with `--force` means a fraudulent public key could go undetected.
+Rules for safe use of `--force` in non-interactive environments:
 
-Rules for safe use of `--force` in CI/CD:
-
-1. **Complete new member approvals in an interactive environment first**: Before running CI/CD, run `rewrap` interactively to promote incoming members to active. CI/CD should only be used for accessing already-active members.
+1. **Complete new member approvals in an interactive environment first**: Whenever possible, run `rewrap` interactively to promote incoming members to active beforehand.
 2. **Perform post-hoc verification after `--force`**: Run `secretenv member verify` to cross-check all members against GitHub.
-3. **Limit `--force` usage**: Use `--force` only in limited contexts like CI/CD pipelines, not in day-to-day interactive use.
+3. **Limit `--force` usage**: Use `--force` only in limited contexts like automation pipelines, not in day-to-day interactive use.
 
 Note: Members who explicitly fail online verification are still rejected for promotion even when `--force` is used.
 
