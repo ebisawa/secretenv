@@ -2,11 +2,13 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use super::*;
+use crate::feature::context::expiry::enforce_recipient_key_not_expired;
 use crate::feature::key::material::{build_identity_keys, generate_keypairs};
 use crate::feature::key::public_key_document::{
     build_attestation, build_public_key, PublicKeyBuildParams,
 };
 use crate::feature::key::ssh_binding::SshBindingContext;
+use crate::feature::verify::public_key::{public_key_expiry_warning, verify_recipient_public_keys};
 use crate::io::ssh::backend::ssh_keygen::SshKeygenBackend;
 use crate::io::ssh::backend::SignatureBackend;
 use crate::io::ssh::external::keygen::DefaultSshKeygen;
@@ -31,8 +33,8 @@ fn build_test_ssh_context(ssh_key_path: &Path, ssh_pubkey: &str) -> SshBindingCo
     }
 }
 
-/// Create a temp SSH keypair and return (private_key_path, public_key_content)
-fn create_ssh_keypair() -> (tempfile::TempDir, std::path::PathBuf, String) {
+/// Generate a temp SSH keypair and return (temp_dir, private_key_path, public_key_content)
+fn generate_ssh_keypair() -> (tempfile::TempDir, std::path::PathBuf, String) {
     let temp_dir = tempfile::TempDir::new().unwrap();
     let ssh_dir = temp_dir.path().join(".ssh");
     std::fs::create_dir_all(&ssh_dir).unwrap();
@@ -50,8 +52,8 @@ fn create_ssh_keypair() -> (tempfile::TempDir, std::path::PathBuf, String) {
     (temp_dir, private_key_path, public_key_content)
 }
 
-fn create_test_public_key(expires_at: &str) -> (PublicKey, String) {
-    let (ssh_temp, ssh_priv, ssh_pub_content) = create_ssh_keypair();
+fn build_test_public_key(expires_at: &str) -> (PublicKey, String) {
+    let (ssh_temp, ssh_priv, ssh_pub_content) = generate_ssh_keypair();
     let ssh_context = build_test_ssh_context(&ssh_priv, &ssh_pub_content);
 
     let (_kem_sk, kem_pk, sig_sk, sig_pk) = generate_keypairs().unwrap();
@@ -78,9 +80,9 @@ fn create_test_public_key(expires_at: &str) -> (PublicKey, String) {
 }
 
 #[test]
-fn expired_key_returns_error_for_signing() {
-    let (public_key, _kid) = create_test_public_key("2020-01-01T00:00:00Z");
-    let result = check_key_expiry_for_signing(&public_key);
+fn test_enforce_recipient_key_not_expired_expired_fails() {
+    let (public_key, _kid) = build_test_public_key("2020-01-01T00:00:00Z");
+    let result = enforce_recipient_key_not_expired(&public_key);
     assert!(result.is_err());
     let err_msg = result.unwrap_err().to_string();
     assert!(
@@ -91,35 +93,31 @@ fn expired_key_returns_error_for_signing() {
 }
 
 #[test]
-fn expired_key_returns_warning_for_verification() {
-    let (public_key, _kid) = create_test_public_key("2020-01-01T00:00:00Z");
-    let result = check_key_expiry_for_verification(&public_key).unwrap();
+fn test_public_key_expiry_warning_expired() {
+    let (public_key, _kid) = build_test_public_key("2020-01-01T00:00:00Z");
+    let result = public_key_expiry_warning(&public_key).unwrap();
     assert!(result.is_some(), "Should return a warning for expired key");
     assert!(result.unwrap().contains("expired"));
 }
 
 #[test]
-fn valid_key_passes_expiry_check() {
-    let (public_key, _kid) = create_test_public_key("2099-12-31T23:59:59Z");
-    assert!(check_key_expiry_for_signing(&public_key).is_ok());
-    assert!(check_key_expiry_for_verification(&public_key)
-        .unwrap()
-        .is_none());
+fn test_enforce_recipient_key_not_expired_valid() {
+    let (public_key, _kid) = build_test_public_key("2099-12-31T23:59:59Z");
+    assert!(enforce_recipient_key_not_expired(&public_key).is_ok());
+    assert!(public_key_expiry_warning(&public_key).unwrap().is_none());
 }
 
 #[test]
-fn empty_expires_at_passes() {
-    let (mut public_key, _kid) = create_test_public_key("2099-12-31T23:59:59Z");
+fn test_enforce_recipient_key_not_expired_empty_expires_at() {
+    let (mut public_key, _kid) = build_test_public_key("2099-12-31T23:59:59Z");
     public_key.protected.expires_at = String::new();
-    assert!(check_key_expiry_for_signing(&public_key).is_ok());
-    assert!(check_key_expiry_for_verification(&public_key)
-        .unwrap()
-        .is_none());
+    assert!(enforce_recipient_key_not_expired(&public_key).is_ok());
+    assert!(public_key_expiry_warning(&public_key).unwrap().is_none());
 }
 
 #[test]
-fn valid_key_with_test_attestation_passes_verification() {
-    let (public_key, kid) = create_test_public_key("2099-12-31T23:59:59Z");
+fn test_build_loaded_verifying_key_valid() {
+    let (public_key, kid) = build_test_public_key("2099-12-31T23:59:59Z");
     let result = build_loaded_verifying_key(
         &public_key,
         &kid,
@@ -133,8 +131,8 @@ fn valid_key_with_test_attestation_passes_verification() {
 }
 
 #[test]
-fn expired_key_with_test_attestation_returns_warning() {
-    let (public_key, kid) = create_test_public_key("2020-01-01T00:00:00Z");
+fn test_build_loaded_verifying_key_expired_warning() {
+    let (public_key, kid) = build_test_public_key("2020-01-01T00:00:00Z");
     let result = build_loaded_verifying_key(
         &public_key,
         &kid,
@@ -146,4 +144,48 @@ fn expired_key_with_test_attestation_returns_warning() {
     let loaded = result.unwrap();
     assert!(!loaded.warnings.is_empty());
     assert!(loaded.warnings[0].contains("expired"));
+}
+
+#[test]
+fn test_verify_recipient_public_keys_expired_fails() {
+    let (public_key, _kid) = build_test_public_key("2020-01-01T00:00:00Z");
+    let result = verify_recipient_public_keys(&[public_key], false);
+    assert!(result.is_err());
+    let err_msg = result.unwrap_err().to_string();
+    assert!(
+        err_msg.contains("expired"),
+        "Error should mention expiry: {}",
+        err_msg
+    );
+}
+
+#[test]
+fn test_verify_recipient_public_keys_valid() {
+    let (public_key, _kid) = build_test_public_key("2099-12-31T23:59:59Z");
+    let result = verify_recipient_public_keys(&[public_key], false);
+    assert!(result.is_ok());
+}
+
+#[test]
+fn test_enforce_recipient_key_not_expired_empty_via_verify() {
+    let (mut public_key, _kid) = build_test_public_key("2099-12-31T23:59:59Z");
+    public_key.protected.expires_at = String::new();
+    assert!(enforce_recipient_key_not_expired(&public_key).is_ok());
+}
+
+#[test]
+fn test_public_key_expiry_warning_expiring_soon() {
+    let now = time::OffsetDateTime::now_utc();
+    let future = now + time::Duration::days(15);
+    let expires_at = future
+        .format(&time::format_description::well_known::Rfc3339)
+        .unwrap();
+    let (public_key, _kid) = build_test_public_key(&expires_at);
+    let warning = public_key_expiry_warning(&public_key).unwrap();
+    assert!(warning.is_some(), "Should warn about expiring soon");
+    assert!(
+        warning.as_ref().unwrap().contains("expires in"),
+        "Warning should mention 'expires in': {}",
+        warning.unwrap()
+    );
 }

@@ -6,7 +6,7 @@
 //! Tests for wrap item creation.
 
 use crate::cli_common::ALICE_MEMBER_ID;
-use crate::keygen_helpers::make_attested_public_key;
+use crate::keygen_helpers::make_recipient_key;
 use crate::test_utils::{create_temp_ssh_keypair_in_dir, keygen_test};
 use secretenv::crypto::types::keys::MasterKey;
 use secretenv::feature::envelope::wrap::WrapFormat;
@@ -31,7 +31,7 @@ fn test_build_wrap_item_for_file() {
     let sid = Uuid::new_v4();
     let master_key = create_test_master_key();
     let kid = public_key.protected.kid.clone();
-    let attested_pubkey = make_attested_public_key(public_key);
+    let attested_pubkey = make_recipient_key(public_key);
 
     let wrap_item = build_wrap_item_for_file(&attested_pubkey, &sid, &master_key, false).unwrap();
 
@@ -50,7 +50,7 @@ fn test_build_wrap_item_for_kv() {
     let sid = Uuid::new_v4();
     let master_key = create_test_master_key();
     let kid = public_key.protected.kid.clone();
-    let attested_pubkey = make_attested_public_key(public_key);
+    let attested_pubkey = make_recipient_key(public_key);
 
     let wrap_item = build_wrap_item_for_kv(&sid, &attested_pubkey, &master_key, false).unwrap();
 
@@ -70,8 +70,8 @@ fn test_build_wraps_for_recipients_file() {
         keygen_test("bob@example.com", &ssh_priv, &ssh_pub_content).unwrap();
     let sid = Uuid::new_v4();
     let attested_members = vec![
-        make_attested_public_key(public_key1.clone()),
-        make_attested_public_key(public_key2.clone()),
+        make_recipient_key(public_key1.clone()),
+        make_recipient_key(public_key2.clone()),
     ];
     let master_key = create_test_master_key();
 
@@ -99,8 +99,8 @@ fn test_build_wraps_for_recipients_kv() {
         keygen_test("bob@example.com", &ssh_priv, &ssh_pub_content).unwrap();
     let sid = Uuid::new_v4();
     let attested_members = vec![
-        make_attested_public_key(public_key1.clone()),
-        make_attested_public_key(public_key2.clone()),
+        make_recipient_key(public_key1.clone()),
+        make_recipient_key(public_key2.clone()),
     ];
     let master_key = create_test_master_key();
 
@@ -120,7 +120,7 @@ fn test_build_wraps_for_recipients_rejects_count_over_limit() {
     let (_private_key, public_key) =
         keygen_test(ALICE_MEMBER_ID, &ssh_priv, &ssh_pub_content).unwrap();
     let sid = Uuid::new_v4();
-    let attested_member = make_attested_public_key(public_key);
+    let attested_member = make_recipient_key(public_key);
     let attested_members = vec![attested_member; MAX_WRAP_ITEMS + 1];
     let master_key = create_test_master_key();
 

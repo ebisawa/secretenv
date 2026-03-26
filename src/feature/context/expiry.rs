@@ -1,14 +1,15 @@
 // Copyright 2026 Satoshi Ebisawa
 // SPDX-License-Identifier: Apache-2.0
 
-//! Key expiration checking for private key operations.
+//! Key expiration checking.
 //!
-//! Provides functions to check key expiry status and enforce PRD §11.3.3:
+//! Provides functions to check key expiry status and enforce the rule that
 //! expired keys must not be used for encryption (wrap) or signing.
 
 use time::OffsetDateTime;
 use tracing::warn;
 
+use crate::model::public_key::PublicKey;
 use crate::{Error, Result};
 
 const EXPIRY_WARNING_DAYS: i64 = 30;
@@ -96,6 +97,37 @@ pub fn build_key_expiry_warning(expires_at: &str) -> Result<Option<String>> {
             "Private key has expired (expires_at: {})",
             expires_at
         ))),
+    }
+}
+
+/// Enforce that a recipient public key is not expired for wrap operations.
+///
+/// Returns `Err` if the key has expired. Logs a warning if expiring soon.
+/// Keys with empty `expires_at` are considered valid (no expiry set).
+pub fn enforce_recipient_key_not_expired(doc: &PublicKey) -> Result<()> {
+    if doc.protected.expires_at.is_empty() {
+        return Ok(());
+    }
+    match check_key_expiry(&doc.protected.expires_at, OffsetDateTime::now_utc())? {
+        KeyExpiryStatus::Valid => Ok(()),
+        KeyExpiryStatus::ExpiringSoon {
+            expires_at,
+            days_remaining,
+        } => {
+            warn!(
+                "Recipient public key for '{}' expires in {} days (expires_at: {})",
+                doc.protected.member_id, days_remaining, expires_at
+            );
+            Ok(())
+        }
+        KeyExpiryStatus::Expired { expires_at } => Err(Error::Verify {
+            rule: "key-expiry".to_string(),
+            message: format!(
+                "Recipient public key for '{}' has expired (expires_at: {}). \
+                 Expired keys cannot be used as encryption recipients.",
+                doc.protected.member_id, expires_at
+            ),
+        }),
     }
 }
 

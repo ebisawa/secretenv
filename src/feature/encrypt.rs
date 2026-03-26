@@ -8,13 +8,13 @@ pub mod file;
 use crate::feature::encrypt::file::encrypt_file_document as encrypt_file_inner;
 use crate::feature::envelope::signature::SigningContext;
 use crate::model::common::normalize_recipients;
-use crate::model::public_key::VerifiedPublicKeyAttested;
+use crate::model::public_key::VerifiedRecipientKey;
 use crate::{Error, Result};
 
 /// Validate that recipients count matches public keys count.
 fn validate_recipients_and_keys(
     recipients: &[String],
-    members: &[VerifiedPublicKeyAttested],
+    members: &[VerifiedRecipientKey],
 ) -> Result<()> {
     if recipients.len() != members.len() {
         return Err(Error::InvalidArgument {
@@ -32,13 +32,13 @@ fn validate_recipients_and_keys(
 pub fn encrypt_file_document(
     content: &[u8],
     recipients: &[String],
-    members: &[VerifiedPublicKeyAttested],
+    members: &[VerifiedRecipientKey],
     signing: &SigningContext<'_>,
 ) -> Result<String> {
     validate_recipients_and_keys(recipients, members)?;
 
     let normalized_ids = normalize_recipients(recipients);
-    let members_ordered: Vec<VerifiedPublicKeyAttested> = normalized_ids
+    let members_ordered: Vec<VerifiedRecipientKey> = normalized_ids
         .iter()
         .map(|id| {
             members

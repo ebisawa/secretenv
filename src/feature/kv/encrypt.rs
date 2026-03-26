@@ -10,7 +10,7 @@ use crate::feature::envelope::wrap::{build_wraps_for_recipients, WrapFormat};
 use crate::format::token::TokenCodec;
 use crate::model::kv_enc::entry::KvEntryValue;
 use crate::model::kv_enc::header::{KvHeader, KvWrap};
-use crate::model::public_key::VerifiedPublicKeyAttested;
+use crate::model::public_key::VerifiedRecipientKey;
 use crate::Result;
 use rand::rngs::OsRng;
 use rand::RngCore;
@@ -20,7 +20,7 @@ use zeroize::Zeroizing;
 
 /// Build KV encryption context: generate master key, create HEAD/WRAP structures
 pub(crate) fn build_kv_encryption(
-    members: &[VerifiedPublicKeyAttested],
+    members: &[VerifiedRecipientKey],
     sid: &Uuid,
     timestamp: &str,
 ) -> Result<(MasterKey, KvHeader, KvWrap)> {
@@ -91,7 +91,7 @@ pub(crate) fn encrypt_kv_entries(
 pub fn encrypt_kv_document(
     kv_map: &HashMap<String, String>,
     _recipients: &[String],
-    members: &[VerifiedPublicKeyAttested],
+    members: &[VerifiedRecipientKey],
     signing: &SigningContext<'_>,
     token_codec: TokenCodec,
 ) -> Result<String> {
@@ -102,7 +102,7 @@ pub fn encrypt_kv_document(
 pub fn encrypt_kv_document_with_disclosed(
     kv_map: &HashMap<String, String>,
     _recipients: &[String],
-    members: &[VerifiedPublicKeyAttested],
+    members: &[VerifiedRecipientKey],
     signing: &SigningContext<'_>,
     token_codec: TokenCodec,
     disclosed: bool,

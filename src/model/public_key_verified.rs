@@ -4,7 +4,7 @@
 //! Verified wrappers for public-key-related domain models.
 
 use super::public_key::{BindingClaims, Identity, PublicKey};
-use super::verification::{BindingVerificationProof, SelfSignatureProof};
+use super::verification::{BindingVerificationProof, ExpiryProof, SelfSignatureProof};
 
 /// Binding claims that have been verified online (e.g. via member verify).
 #[derive(Debug, Clone)]
@@ -121,5 +121,37 @@ impl VerifiedPublicKeyAttested {
     /// Get a reference to the attestation-verified identity.
     pub fn identity(&self) -> &AttestedIdentity {
         &self.identity
+    }
+}
+
+/// Recipient public key verified for self-signature, attestation, and expiry.
+///
+/// Required for wrap (encryption) operations. Cannot be constructed without
+/// passing the expiry check, providing a compile-time guarantee that expired
+/// keys cannot be used as encryption recipients.
+#[derive(Debug, Clone)]
+pub struct VerifiedRecipientKey {
+    verified: VerifiedPublicKeyAttested,
+    #[allow(dead_code)]
+    expiry_proof: ExpiryProof,
+}
+
+impl VerifiedRecipientKey {
+    /// Construct from a verified-and-attested key plus expiry proof.
+    pub fn new(verified: VerifiedPublicKeyAttested, expiry_proof: ExpiryProof) -> Self {
+        Self {
+            verified,
+            expiry_proof,
+        }
+    }
+
+    /// Get a reference to the verified document.
+    pub fn document(&self) -> &PublicKey {
+        self.verified.document()
+    }
+
+    /// Get a reference to the attestation-verified identity.
+    pub fn identity(&self) -> &AttestedIdentity {
+        self.verified.identity()
     }
 }

@@ -15,7 +15,7 @@ use crate::format::kv::enc::canonical::parse_kv_wrap;
 use crate::format::token::TokenCodec;
 use crate::model::kv_enc::header::{KvHeader, KvWrap};
 use crate::model::kv_enc::verified::VerifiedKvEncDocument;
-use crate::model::public_key::VerifiedPublicKeyAttested;
+use crate::model::public_key::VerifiedRecipientKey;
 use crate::Result;
 use std::collections::HashMap;
 use uuid::Uuid;
@@ -151,7 +151,7 @@ pub(crate) fn unwrap_master_key_from_verified(
 
 pub(crate) fn encrypt_and_sign_kv_map<F>(
     kv_map: &HashMap<String, String>,
-    members: &[VerifiedPublicKeyAttested],
+    members: &[VerifiedRecipientKey],
     signing: &SigningContext<'_>,
     token_codec: TokenCodec,
     disclosed: bool,

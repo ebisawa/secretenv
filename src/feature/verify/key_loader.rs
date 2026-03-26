@@ -12,25 +12,7 @@ use crate::support::kid::kid_display_lossy;
 use crate::{Error, Result};
 use ed25519_dalek::VerifyingKey;
 
-use super::public_key::{public_key_expiry_warning, verify_public_key_for_verification};
-
-/// Check if a PublicKey has expired. Returns a warning message if expired.
-/// Used for verification where expired keys are allowed but warned about.
-#[cfg_attr(not(test), allow(dead_code))]
-fn check_key_expiry_for_verification(doc: &PublicKey) -> Result<Option<String>> {
-    public_key_expiry_warning(doc)
-}
-
-#[cfg(test)]
-fn check_key_expiry_for_signing(doc: &PublicKey) -> Result<()> {
-    if let Some(expired_msg) = check_key_expiry_for_verification(doc)? {
-        return Err(Error::Crypto {
-            message: expired_msg,
-            source: None,
-        });
-    }
-    Ok(())
-}
+use super::public_key::verify_public_key_for_verification;
 
 /// Find PublicKey by kid, searching workspace active members.
 ///
