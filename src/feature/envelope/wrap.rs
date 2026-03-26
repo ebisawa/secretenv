@@ -9,7 +9,7 @@ use crate::crypto::types::keys::MasterKey;
 use crate::feature::envelope::binding::{build_file_wrap_info, build_kv_wrap_info};
 use crate::model::common::WrapItem;
 use crate::model::identifiers::hpke;
-use crate::model::public_key::VerifiedPublicKeyAttested;
+use crate::model::public_key::VerifiedRecipientKey;
 use crate::support::base64url::{b64_decode_array, b64_encode};
 use crate::support::kid::kid_display_lossy;
 use crate::support::limits::validate_wrap_count;
@@ -34,14 +34,14 @@ pub enum WrapFormat {
 /// the specific HPKE info format (kv_file or file).
 ///
 /// # Arguments
-/// * `member` - VerifiedPublicKeyAttested for the recipient (must be verified with self-signature and SSH attestation)
+/// * `member` - VerifiedRecipientKey for the recipient (must be verified with self-signature and SSH attestation)
 /// * `sid` - Session ID (UUID)
 /// * `master_key` - Master key to wrap
 /// * `info_builder` - Function to build HPKE info
 /// * `debug` - Enable debug logging
 /// * `caller` - Caller function name for debug logging
 pub fn build_wrap_item(
-    member: &VerifiedPublicKeyAttested,
+    member: &VerifiedRecipientKey,
     sid: &Uuid,
     master_key: &MasterKey,
     info_builder: fn(&Uuid, &str) -> Result<Info>,
@@ -79,12 +79,12 @@ pub fn build_wrap_item(
 /// Build a WRAP item for file-enc format
 ///
 /// # Arguments
-/// * `member` - VerifiedPublicKeyAttested for the recipient
+/// * `member` - VerifiedRecipientKey for the recipient
 /// * `sid` - Session ID (UUID)
 /// * `content_key` - Content key to wrap
 /// * `debug` - Enable debug logging
 pub fn build_wrap_item_for_file(
-    member: &VerifiedPublicKeyAttested,
+    member: &VerifiedRecipientKey,
     sid: &Uuid,
     content_key: &MasterKey,
     debug: bool,
@@ -103,12 +103,12 @@ pub fn build_wrap_item_for_file(
 ///
 /// # Arguments
 /// * `sid` - Session ID (UUID)
-/// * `member` - VerifiedPublicKeyAttested for the recipient
+/// * `member` - VerifiedRecipientKey for the recipient
 /// * `master_key` - Master key to wrap
 /// * `debug` - Enable debug logging
 pub fn build_wrap_item_for_kv(
     sid: &Uuid,
-    member: &VerifiedPublicKeyAttested,
+    member: &VerifiedRecipientKey,
     master_key: &MasterKey,
     debug: bool,
 ) -> Result<WrapItem> {
@@ -129,7 +129,7 @@ pub fn build_wrap_item_for_kv(
 /// wrap item build function.
 ///
 /// # Arguments
-/// * `members` - List of VerifiedPublicKeyAttested for recipients (must be verified)
+/// * `members` - List of VerifiedRecipientKey for recipients (must be verified)
 /// * `sid` - Session ID (UUID)
 /// * `master_key` - Master key to wrap
 /// * `format` - Format type (File or Kv)
@@ -138,7 +138,7 @@ pub fn build_wrap_item_for_kv(
 /// # Returns
 /// Vector of WrapItem structures
 pub fn build_wraps_for_recipients(
-    members: &[VerifiedPublicKeyAttested],
+    members: &[VerifiedRecipientKey],
     sid: &Uuid,
     master_key: &MasterKey,
     format: WrapFormat,

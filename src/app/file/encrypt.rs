@@ -52,7 +52,7 @@ impl EncryptFileSession {
     fn verified_recipient_keys(
         &self,
         debug: bool,
-    ) -> Result<Vec<crate::model::public_key::VerifiedPublicKeyAttested>> {
+    ) -> Result<Vec<crate::model::public_key::VerifiedRecipientKey>> {
         let public_keys = load_member_files(&self.workspace_root.root_path, &self.member_ids)?;
         verify_recipient_public_keys(&public_keys, debug)
     }

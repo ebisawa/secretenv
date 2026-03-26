@@ -9,7 +9,7 @@
 use crate::feature::context::crypto::CryptoContext;
 use crate::feature::verify::public_key::verify_recipient_public_keys;
 use crate::model::common::RemovedRecipient;
-use crate::model::public_key::{PublicKey, VerifiedPublicKeyAttested};
+use crate::model::public_key::{PublicKey, VerifiedRecipientKey};
 use crate::support::time::current_timestamp;
 use crate::{Error, Result};
 use tracing::warn;
@@ -85,7 +85,7 @@ pub fn resolve_attested_recipients(
     new_recipients: &[String],
     current_recipients: &[String],
     debug: bool,
-) -> Result<Vec<VerifiedPublicKeyAttested>> {
+) -> Result<Vec<VerifiedRecipientKey>> {
     let (new_pubkeys, _) = build_new_recipients(key_ctx, new_recipients, current_recipients)?;
     verify_recipient_public_keys(&new_pubkeys, debug)
 }

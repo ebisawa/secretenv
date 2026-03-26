@@ -25,10 +25,10 @@ use secretenv::model::{
     private_key::{IdentityKeysPrivate, JwkOkpPrivateKey, PrivateKey, PrivateKeyPlaintext},
     public_key::{
         AttestationProof, AttestedIdentity, Identity, IdentityKeys, JwkOkpPublicKey, PublicKey,
-        VerifiedPublicKeyAttested,
+        VerifiedPublicKeyAttested, VerifiedRecipientKey,
     },
     ssh::SshDeterminismStatus,
-    verification::SelfSignatureProof,
+    verification::{ExpiryProof, SelfSignatureProof},
     verified::{DecryptionProof, VerifiedPrivateKey},
 };
 use secretenv::{Error, Result};
@@ -230,22 +230,29 @@ pub fn make_decrypted_private_key_plaintext(
     VerifiedPrivateKey::new(plaintext, proof)
 }
 
-/// Convert a slice of PublicKeys to VerifiedPublicKeyAttested (for testing only).
+/// Convert a slice of PublicKeys to VerifiedRecipientKey (for testing only).
 ///
 /// Used by tests that call encrypt_kv_document or similar with a list of keys.
 #[allow(dead_code)]
-pub fn make_verified_members(members: &[PublicKey]) -> Vec<VerifiedPublicKeyAttested> {
+pub fn make_verified_members(members: &[PublicKey]) -> Vec<VerifiedRecipientKey> {
     members
         .iter()
-        .map(|pk| make_attested_public_key(pk.clone()))
+        .map(|pk| make_recipient_key(pk.clone()))
         .collect()
 }
 
-/// Create a VerifiedPublicKeyAttested wrapper for PublicKey (for testing only)
+/// Build a VerifiedRecipientKey wrapper for PublicKey (for testing only).
 ///
-/// This function wraps a PublicKey in a VerifiedPublicKeyAttested type without
+/// This function wraps a PublicKey in a VerifiedRecipientKey type without
 /// performing full verification. It's intended for test code only.
 #[allow(dead_code)] // Used in unit tests via tests/unit.rs
+pub fn make_recipient_key(public_key: PublicKey) -> VerifiedRecipientKey {
+    let attested = make_attested_public_key(public_key);
+    VerifiedRecipientKey::new(attested, ExpiryProof::new())
+}
+
+/// Build a VerifiedPublicKeyAttested wrapper for PublicKey (for testing only).
+#[allow(dead_code)]
 pub fn make_attested_public_key(public_key: PublicKey) -> VerifiedPublicKeyAttested {
     let proof = AttestationProof {
         method: public_key.protected.identity.attestation.method.clone(),

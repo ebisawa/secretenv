@@ -14,7 +14,7 @@ use crate::model::file_enc::{
     FilePayloadCiphertext, FilePayloadHeader,
 };
 use crate::model::identifiers::{alg, format};
-use crate::model::public_key::VerifiedPublicKeyAttested;
+use crate::model::public_key::VerifiedRecipientKey;
 use crate::support::time::current_timestamp;
 use crate::Result;
 use rand::rngs::OsRng;
@@ -68,7 +68,7 @@ fn encrypt_payload(
 /// * `sid` - Session ID (UUID)
 /// * `content_key` - Master key to wrap
 fn build_recipient_wraps(
-    members: &[VerifiedPublicKeyAttested],
+    members: &[VerifiedRecipientKey],
     sid: &Uuid,
     content_key: &MasterKey,
     debug: bool,
@@ -107,7 +107,7 @@ fn build_file_enc_document_protected(
 pub fn encrypt_file_document(
     content: &[u8],
     _recipient_ids: &[String],
-    members: &[VerifiedPublicKeyAttested],
+    members: &[VerifiedRecipientKey],
     signing: &SigningContext<'_>,
 ) -> Result<FileEncDocument> {
     let sid = Uuid::new_v4();

@@ -1,7 +1,7 @@
 // Copyright 2026 Satoshi Ebisawa
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::keygen_helpers::{make_attested_public_key, make_decrypted_private_key_plaintext};
+use crate::keygen_helpers::{make_decrypted_private_key_plaintext, make_recipient_key};
 use ed25519_dalek::SigningKey;
 use secretenv::crypto::kem::{X25519PublicKey, X25519SecretKey};
 use secretenv::feature::decrypt::file::decrypt_file_document;
@@ -11,7 +11,7 @@ use secretenv::model::{
     private_key::{IdentityKeysPrivate, JwkOkpPrivateKey, PrivateKeyPlaintext},
     public_key::{
         Attestation, Identity, IdentityKeys, JwkOkpPublicKey, PublicKey, PublicKeyProtected,
-        VerifiedPublicKeyAttested,
+        VerifiedRecipientKey,
     },
 };
 
@@ -55,14 +55,14 @@ pub(super) fn generate_ed25519_keypair(seed: [u8; 32]) -> SigningKey {
 
 pub(super) fn recipients_and_members(
     recipients_with_keys: &[(String, PublicKey)],
-) -> (Vec<String>, Vec<VerifiedPublicKeyAttested>) {
+) -> (Vec<String>, Vec<VerifiedRecipientKey>) {
     let recipient_ids = recipients_with_keys
         .iter()
         .map(|(id, _)| id.clone())
         .collect();
     let members = recipients_with_keys
         .iter()
-        .map(|(_, pk)| make_attested_public_key(pk.clone()))
+        .map(|(_, pk)| make_recipient_key(pk.clone()))
         .collect();
     (recipient_ids, members)
 }

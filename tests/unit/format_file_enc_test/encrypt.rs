@@ -6,7 +6,7 @@ use super::helpers::{
     recipients_and_members,
 };
 use crate::cli_common::{ALICE_MEMBER_ID, BOB_MEMBER_ID};
-use crate::keygen_helpers::make_attested_public_key;
+use crate::keygen_helpers::make_recipient_key;
 use secretenv::feature::encrypt::file as file_enc;
 use secretenv::feature::envelope::signature::SigningContext;
 use uuid::Uuid;
@@ -27,7 +27,7 @@ fn test_encrypt_file_basic() {
         .collect();
     let members: Vec<_> = recipients_with_keys
         .iter()
-        .map(|(_, pk)| make_attested_public_key(pk.clone()))
+        .map(|(_, pk)| make_recipient_key(pk.clone()))
         .collect();
 
     let signer_kid = "7M2Q9D4R1H8VW6PKT3XNC5JY2F9AR8GD";
@@ -104,7 +104,7 @@ fn test_encrypt_file_multiple_recipients() {
         .collect();
     let members: Vec<_> = recipients_with_keys
         .iter()
-        .map(|(_, pk)| make_attested_public_key(pk.clone()))
+        .map(|(_, pk)| make_recipient_key(pk.clone()))
         .collect();
 
     let file_enc_doc = file_enc::encrypt_file_document(
@@ -160,7 +160,7 @@ fn test_encrypt_file_empty_content() {
         .collect();
     let members: Vec<_> = recipients_with_keys
         .iter()
-        .map(|(_, pk)| make_attested_public_key(pk.clone()))
+        .map(|(_, pk)| make_recipient_key(pk.clone()))
         .collect();
 
     let result = file_enc::encrypt_file_document(
@@ -194,7 +194,7 @@ fn test_encrypt_file_large_content() {
         .collect();
     let members: Vec<_> = recipients_with_keys
         .iter()
-        .map(|(_, pk)| make_attested_public_key(pk.clone()))
+        .map(|(_, pk)| make_recipient_key(pk.clone()))
         .collect();
 
     let result = file_enc::encrypt_file_document(
@@ -228,7 +228,7 @@ fn test_encrypt_file_name_is_set() {
         .collect();
     let members: Vec<_> = recipients_with_keys
         .iter()
-        .map(|(_, pk)| make_attested_public_key(pk.clone()))
+        .map(|(_, pk)| make_recipient_key(pk.clone()))
         .collect();
 
     let result = file_enc::encrypt_file_document(

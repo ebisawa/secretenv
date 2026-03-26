@@ -3,17 +3,23 @@
 
 //! Public key verification.
 
+use crate::feature::context::expiry::{
+    check_key_expiry, enforce_recipient_key_not_expired, KeyExpiryStatus,
+};
 use crate::format::jcs;
 use crate::format::kid::derive_public_key_kid;
 use crate::io::ssh::verify::verify_attestation;
 use crate::model::public_key::{
     AttestationProof, AttestedIdentity, PublicKey, VerifiedPublicKey, VerifiedPublicKeyAttested,
+    VerifiedRecipientKey,
 };
+use crate::model::verification::ExpiryProof;
 use crate::model::verification::SelfSignatureProof;
 use crate::support::base64url::{b64_decode, b64_decode_array};
 use crate::support::kid::kid_display_lossy;
 use crate::{Error, Result};
 use ed25519_dalek::{Verifier, VerifyingKey};
+use time::OffsetDateTime;
 use tracing::debug;
 
 #[derive(Debug, Clone)]
@@ -103,29 +109,32 @@ pub fn verify_public_key_for_verification(
     debug: bool,
 ) -> Result<VerifiedPublicKeyForVerification> {
     let verified_public_key = verify_public_key_with_attestation(public_key, debug)?;
-    let warnings = collect_public_key_verification_warnings(verified_public_key.document())?;
+    let mut warnings = Vec::new();
+    if let Some(warning) = public_key_expiry_warning(verified_public_key.document())? {
+        warnings.push(warning);
+    }
     Ok(VerifiedPublicKeyForVerification {
         verified_public_key,
         warnings,
     })
 }
 
-/// Verify multiple recipient public keys and return VerifiedPublicKeyAttested wrappers
+/// Verify multiple recipient public keys for wrap (encryption) operations.
+///
+/// Enforces that none of the recipient keys are expired.
+/// Returns `VerifiedRecipientKey` which is the only type accepted by wrap functions,
+/// providing a compile-time guarantee that expiry has been checked.
 pub fn verify_recipient_public_keys(
     keys: &[PublicKey],
     debug: bool,
-) -> Result<Vec<VerifiedPublicKeyAttested>> {
+) -> Result<Vec<VerifiedRecipientKey>> {
     keys.iter()
-        .map(|key| verify_public_key_with_attestation(key, debug))
+        .map(|key| {
+            enforce_recipient_key_not_expired(key)?;
+            let attested = verify_public_key_with_attestation(key, debug)?;
+            Ok(VerifiedRecipientKey::new(attested, ExpiryProof::new()))
+        })
         .collect()
-}
-
-fn collect_public_key_verification_warnings(doc: &PublicKey) -> Result<Vec<String>> {
-    let mut warnings = Vec::new();
-    if let Some(warning) = public_key_expiry_warning(doc)? {
-        warnings.push(warning);
-    }
-    Ok(warnings)
 }
 
 fn validate_derived_kid(public_key: &PublicKey) -> Result<()> {
@@ -154,19 +163,18 @@ pub(crate) fn public_key_expiry_warning(doc: &PublicKey) -> Result<Option<String
     if doc.protected.expires_at.is_empty() {
         return Ok(None);
     }
-
-    let expires_at = time::OffsetDateTime::parse(
-        &doc.protected.expires_at,
-        &time::format_description::well_known::Rfc3339,
-    )
-    .map_err(|e| Error::crypto_with_source("Invalid expires_at format in PublicKey", e))?;
-
-    if expires_at < time::OffsetDateTime::now_utc() {
-        return Ok(Some(format!(
-            "PublicKey has expired (expires_at: {})",
-            doc.protected.expires_at
-        )));
+    match check_key_expiry(&doc.protected.expires_at, OffsetDateTime::now_utc())? {
+        KeyExpiryStatus::Valid => Ok(None),
+        KeyExpiryStatus::ExpiringSoon {
+            expires_at,
+            days_remaining,
+        } => Ok(Some(format!(
+            "PublicKey for '{}' expires in {} days (expires_at: {})",
+            doc.protected.member_id, days_remaining, expires_at
+        ))),
+        KeyExpiryStatus::Expired { expires_at } => Ok(Some(format!(
+            "PublicKey for '{}' has expired (expires_at: {})",
+            doc.protected.member_id, expires_at
+        ))),
     }
-
-    Ok(None)
 }

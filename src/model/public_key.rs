@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 
 pub use super::public_key_verified::{
     AttestationProof, AttestedIdentity, VerifiedBindingClaims, VerifiedPublicKey,
-    VerifiedPublicKeyAttested,
+    VerifiedPublicKeyAttested, VerifiedRecipientKey,
 };
 
 /// PublicKey v4 document (signed container)

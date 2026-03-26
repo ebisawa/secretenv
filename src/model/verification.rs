@@ -26,6 +26,26 @@ impl Default for SelfSignatureProof {
     }
 }
 
+/// Proof that key expiration has been checked for write operations.
+///
+/// This proof indicates that the PublicKey's expiration date has been validated
+/// and the key is not expired. Used in `VerifiedRecipientKey`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExpiryProof {}
+
+impl ExpiryProof {
+    /// Create a new ExpiryProof
+    pub fn new() -> Self {
+        Self {}
+    }
+}
+
+impl Default for ExpiryProof {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Source of verifying key for signature verification
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum VerifyingKeySource {

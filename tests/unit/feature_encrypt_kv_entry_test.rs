@@ -13,7 +13,7 @@ use secretenv::format::schema::document::parse_kv_head_token;
 use secretenv::format::token::TokenCodec;
 use secretenv::model::kv_enc::document::KvEncDocument;
 use secretenv::model::kv_enc::header::KvHeader;
-use secretenv::model::public_key::VerifiedPublicKeyAttested;
+use secretenv::model::public_key::VerifiedRecipientKey;
 use std::collections::HashMap;
 
 fn make_signing_ctx_for_test() -> (SigningKey, String) {
@@ -23,14 +23,14 @@ fn make_signing_ctx_for_test() -> (SigningKey, String) {
     )
 }
 
-fn make_verified_member_for_test(signing_key: &SigningKey, kid: &str) -> VerifiedPublicKeyAttested {
+fn make_verified_member_for_test(signing_key: &SigningKey, kid: &str) -> VerifiedRecipientKey {
     use base64::Engine;
     use ed25519_dalek::Signer;
     use secretenv::model::public_key::{
         Attestation, AttestationProof, AttestedIdentity, Identity, IdentityKeys, JwkOkpPublicKey,
-        PublicKey, PublicKeyProtected,
+        PublicKey, PublicKeyProtected, VerifiedPublicKeyAttested,
     };
-    use secretenv::model::verification::SelfSignatureProof;
+    use secretenv::model::verification::{ExpiryProof, SelfSignatureProof};
 
     let b64url = |b: &[u8]| base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(b);
     let kem_sk = x25519_dalek::StaticSecret::random_from_rng(OsRng);
@@ -75,7 +75,8 @@ fn make_verified_member_for_test(signing_key: &SigningKey, kid: &str) -> Verifie
     };
     let attested = AttestedIdentity::new(test_pk.protected.identity.clone(), proof);
     let self_sig_proof = SelfSignatureProof::new();
-    VerifiedPublicKeyAttested::new(test_pk, self_sig_proof, attested)
+    let attested_key = VerifiedPublicKeyAttested::new(test_pk, self_sig_proof, attested);
+    VerifiedRecipientKey::new(attested_key, ExpiryProof::new())
 }
 
 fn make_kv_document(entries: &[(&str, &str)], signing_key: &SigningKey, kid: &str) -> String {

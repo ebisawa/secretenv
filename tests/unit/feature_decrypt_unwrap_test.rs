@@ -9,7 +9,7 @@
 
 use crate::cli_common::ALICE_MEMBER_ID;
 use crate::keygen_helpers::{
-    make_attested_public_key, make_decrypted_private_key_plaintext, make_verified_members,
+    make_decrypted_private_key_plaintext, make_recipient_key, make_verified_members,
 };
 use crate::test_utils::{setup_member_key_context, setup_test_keystore_from_fixtures};
 use ed25519_dalek::SigningKey;
@@ -594,7 +594,7 @@ fn test_unwrap_master_key_from_wrap_item() {
 
     // Extract kid from public key for kids list
     // Create wrap item (wrap in Attested for API)
-    let attested_pubkey = make_attested_public_key(public_key.clone());
+    let attested_pubkey = make_recipient_key(public_key.clone());
     let wrap_item = build_wrap_item_for_file(&attested_pubkey, &sid, &master_key, false).unwrap();
 
     // Unwrap master key using the same private key that matches the public key used to create wrap
@@ -646,7 +646,7 @@ fn test_hpke_aad_binding_defence_in_depth() {
     let master_key = create_test_master_key();
 
     // Create wrap item (uses aad=info) - wrap in Attested for API
-    let attested_pubkey = make_attested_public_key(public_key.clone());
+    let attested_pubkey = make_recipient_key(public_key.clone());
     let wrap_item = build_wrap_item_for_file(&attested_pubkey, &sid, &master_key, false).unwrap();
 
     // Try to unwrap with empty AAD (old behavior) - should fail
